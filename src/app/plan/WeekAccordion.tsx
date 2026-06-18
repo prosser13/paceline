@@ -37,6 +37,32 @@ interface CompletedData {
   tss: number | null;
 }
 
+function parseDurationMins(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const parts = str.split(':').map(Number);
+  if (parts.length !== 2 || parts.some(isNaN)) return null;
+  return parts[0] * 60 + parts[1];
+}
+
+function formatTssDelta(delta: number): string {
+  return delta >= 0 ? `+${delta}` : `−${Math.abs(delta)}`;
+}
+
+function formatDurationDelta(deltaMins: number): string {
+  const abs = Math.abs(Math.round(deltaMins));
+  const h = Math.floor(abs / 60);
+  const m = abs % 60;
+  const sign = deltaMins >= 0 ? '+' : '−';
+  return `⏱${sign}${h}:${String(m).padStart(2, '0')}`;
+}
+
+function deviationClass(pct: number): string {
+  const abs = Math.abs(pct);
+  if (abs < 0.10) return 'text-stone/60';
+  if (abs < 0.20) return 'text-ember';
+  return 'text-oxblood';
+}
+
 const PHASE_LABEL_CLASS: Record<string, string> = {
   Base:  'text-marine',
   Build: 'text-amber-dark',
@@ -141,6 +167,22 @@ export default function WeekAccordion({ week, sessions, thresholdPace, todayStr,
             const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
             const displayDuration = isDone && completed?.durationStr ? completed.durationStr : session.estimated_duration ?? null;
 
+            // Deltas — only when done and both planned values exist
+            const actualTss    = isDone ? completed?.tss ?? null : null;
+            const plannedTss   = session.estimated_tss ?? null;
+            const actualMins   = isDone ? parseDurationMins(completed?.durationStr) : null;
+            const plannedMins  = parseDurationMins(session.estimated_duration);
+
+            const tssDelta  = actualTss != null && plannedTss != null && plannedTss > 0
+              ? actualTss - plannedTss : null;
+            const tssPct    = tssDelta != null && plannedTss != null ? tssDelta / plannedTss : null;
+
+            const durDelta  = actualMins != null && plannedMins != null && plannedMins > 0
+              ? actualMins - plannedMins : null;
+            const durPct    = durDelta != null && plannedMins != null ? durDelta / plannedMins : null;
+
+            const showDelta = tssDelta != null && tssPct != null && durDelta != null && durPct != null;
+
             return (
               <div
                 key={session.id}
@@ -176,13 +218,22 @@ export default function WeekAccordion({ week, sessions, thresholdPace, todayStr,
                   size="sm"
                 />
 
-                {/* TSS pill — solid background + actual values when done */}
-                <TssPill
-                  tss={displayTss}
-                  duration={displayDuration}
-                  intensity={(session.intensity as Intensity | null) ?? 'easy'}
-                  estimated={!isDone}
-                />
+                {/* TSS pill + delta */}
+                <div className="flex flex-col items-center">
+                  <TssPill
+                    tss={displayTss}
+                    duration={displayDuration}
+                    intensity={(session.intensity as Intensity | null) ?? 'easy'}
+                    estimated={!isDone}
+                  />
+                  {showDelta && (
+                    <div className="font-mono text-[10px] mt-[4px] whitespace-nowrap flex items-center gap-[3px]">
+                      <span className={deviationClass(tssPct!)}>{formatTssDelta(tssDelta!)}</span>
+                      <span className="text-stone/30">·</span>
+                      <span className={deviationClass(durPct!)}>{formatDurationDelta(durDelta!)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
