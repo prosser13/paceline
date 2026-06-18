@@ -325,14 +325,12 @@ function SessionRow({ session, thresholdPace }: { session: PlanSession; threshol
   return (
     <div
       className={`grid items-center gap-4 border border-fog bg-paper rounded-[12px] p-[11px_16px] ${ROW_CLASS[status]} ${isRest ? 'bg-transparent' : ''}`}
-      style={{ gridTemplateColumns: '60px auto 1fr auto' }}
+      style={{ gridTemplateColumns: '60px 1fr auto auto' }}
     >
       <div className="flex flex-col">
         <span className="font-display font-semibold text-[15px]">{d.short}</span>
         <span className="font-mono text-[11px] text-stone">{d.date}</span>
       </div>
-
-      <ProfileChart bars={buildProfileBars(session, thresholdPace)} size="sm" />
 
       <div>
         <div className={`font-semibold text-[15px] mb-[2px] ${isRest ? 'font-medium text-stone' : ''}`}>
@@ -342,6 +340,8 @@ function SessionRow({ session, thresholdPace }: { session: PlanSession; threshol
           <div className="text-[13px] text-stone">{session.description}</div>
         )}
       </div>
+
+      <ProfileChart bars={buildProfileBars(session, thresholdPace)} size="sm" />
 
       <TssPill
         tss={session.estimated_tss ?? null}
