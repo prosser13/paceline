@@ -39,9 +39,10 @@ const PHASE_LABEL_CLASS: Record<string, string> = {
   Taper: 'text-fern',
 };
 
-function resolveStatus(session: PlanSession, todayStr: string): SessionStatus {
+function resolveStatus(session: PlanSession, todayStr: string, doneSet: Set<string>): SessionStatus {
+  if (doneSet.has(session.id)) return 'done';
   const db = session.status as SessionStatus | null;
-  if (db === 'rest' || db === 'done' || db === 'missed_injury' || db === 'skipped') return db;
+  if (db === 'rest' || db === 'missed_injury' || db === 'skipped') return db;
   if (session.scheduled_date === todayStr) return 'today';
   return 'planned';
 }
@@ -66,10 +67,12 @@ interface Props {
   thresholdPace: string;
   todayStr: string;
   defaultOpen: boolean;
+  doneIds: string[];
 }
 
-export default function WeekAccordion({ week, sessions, thresholdPace, todayStr, defaultOpen }: Props) {
+export default function WeekAccordion({ week, sessions, thresholdPace, todayStr, defaultOpen, doneIds }: Props) {
   const [open, setOpen] = useState(defaultOpen);
+  const doneSet = new Set(doneIds);
 
   const totalKm  = sessions.reduce((s, sess) => s + (Number(sess.distance_km) || 0), 0);
   const totalTss = sessions.reduce((s, sess) => s + (sess.estimated_tss ?? 0), 0);
@@ -120,7 +123,7 @@ export default function WeekAccordion({ week, sessions, thresholdPace, todayStr,
       {open && (
         <div className="border-t border-fog divide-y divide-fog/60">
           {sessions.map(session => {
-            const status = resolveStatus(session, todayStr);
+            const status = resolveStatus(session, todayStr, doneSet);
             const d      = formatDay(session.scheduled_date);
             const isRest = status === 'rest';
             const isRace = session.session_type === 'RACE';
