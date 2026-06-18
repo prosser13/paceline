@@ -17,7 +17,8 @@ interface PlanSession {
   estimated_tss?: number | null;
   estimated_duration?: string | null;
   target_pace?: string | null;
-  structure?: Array<{ phase: string; description: string; pace_per_km?: string; duration_mins?: number }> | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  structure?: any[] | null;
 }
 
 interface PlanWeek {
@@ -80,6 +81,14 @@ export default async function PlanPage() {
     }
     completedMap[cw.plan_session_id] = { durationStr: durationStr ?? '', tss };
   }
+
+  // First non-done, non-rest session in date order — used for next-up row highlight
+  const nextSessionId = allSessions.find(s => {
+    if (s.id in completedMap) return false;
+    const st = s.status;
+    if (st === 'rest' || st === 'skipped' || st === 'missed_injury') return false;
+    return true;
+  })?.id ?? null;
 
   const aRace = allSessions.find(s => s.session_type === 'RACE' && s.name === 'Dragon 50 Ultra');
 
@@ -207,6 +216,7 @@ export default async function PlanPage() {
               todayStr={todayStr}
               defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
               completedMap={completedMap}
+              nextSessionId={nextSessionId}
             />
           ))}
         </div>

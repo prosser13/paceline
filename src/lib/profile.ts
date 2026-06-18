@@ -49,7 +49,8 @@ function mergeConsecutive(bars: ProfileBar[]): ProfileBar[] {
 
 export function buildProfileBars(
   session: {
-    structure?:          Array<{ pace_per_km?: string; duration_mins?: number }> | null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    structure?:          any[] | null;
     intensity?:          string | null;
     estimated_duration?: string | null;
   },
