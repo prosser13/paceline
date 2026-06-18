@@ -149,16 +149,14 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       matched_at:      new Date().toISOString(),
     });
 
-    await supabaseAdmin.from('completed_workouts').upsert(
-      {
-        plan_session_id:    match.id,
-        completed_date:     activity.activity_date,
-        actual_distance_km: activity.distance_km,
-        strava_activity_id: activity.strava_activity_id,
-        source:             'strava',
-      },
-      { onConflict: 'plan_session_id' },
-    );
+    // Plain insert is safe — we already confirmed no session_match exists above
+    await supabaseAdmin.from('completed_workouts').insert({
+      plan_session_id:    match.id,
+      completed_date:     activity.activity_date,
+      actual_distance_km: activity.distance_km,
+      strava_activity_id: activity.strava_activity_id,
+      source:             'strava',
+    });
 
     matched++;
   }
