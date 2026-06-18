@@ -58,15 +58,23 @@ interface ProfileChartProps {
   size?: 'sm' | 'lg';
 }
 
+// lg (hero): always full width  sm: scales with duration so longer runs are visually wider
+const H_BY_SIZE  = { sm: 34,  lg: 54  } as const;
+const MAX_W      = { sm: 160, lg: 210 } as const;
+const MIN_W      = { sm: 36,  lg: 210 } as const;
+const PX_PER_MIN = { sm: 1.2, lg: 999 } as const; // lg: uncapped so it always hits MAX_W
+
 export default function ProfileChart({ bars, size = 'sm' }: ProfileChartProps) {
-  const W = size === 'lg' ? 210 : 120;
-  const H = size === 'lg' ? 54  : 34;
+  const H = H_BY_SIZE[size];
 
   if (!bars.length) {
-    return <span style={{ display: 'block', width: W, height: H }} />;
+    return <span style={{ display: 'block', width: MIN_W[size], height: H }} />;
   }
 
   const totalMins = bars.reduce((s, b) => s + b.minutes, 0);
+  const W = Math.round(
+    Math.max(MIN_W[size], Math.min(MAX_W[size], totalMins * PX_PER_MIN[size]))
+  );
 
   let x = 0;
   const rects = bars.map((bar, i) => {

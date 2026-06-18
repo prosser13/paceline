@@ -317,7 +317,7 @@ function SessionRow({ session }: { session: PlanSession }) {
   return (
     <div
       className={`grid items-center gap-4 border border-fog bg-paper rounded-[12px] p-[11px_16px] ${ROW_CLASS[status]} ${isRest ? 'bg-transparent' : ''}`}
-      style={{ gridTemplateColumns: '60px 124px 1fr auto' }}
+      style={{ gridTemplateColumns: '60px auto 1fr auto' }}
     >
       <div className="flex flex-col">
         <span className="font-display font-semibold text-[15px]">{d.short}</span>
