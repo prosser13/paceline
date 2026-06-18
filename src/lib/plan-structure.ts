@@ -26,13 +26,17 @@ export function secondsToPace(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
+// Representative pace for a zone: 3/4 of the way toward the slower end
+// (e.g. 4:00–5:00 → 4:45) — a more realistic estimate than the midpoint.
 export function zoneMidSeconds(zone: PaceZone): number | null {
   const a = paceToSeconds(zone.paceMin);
   const b = paceToSeconds(zone.paceMax);
   if (a == null && b == null) return null;
   if (a == null) return b;
   if (b == null) return a;
-  return (a + b) / 2;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  return lo + 0.75 * (hi - lo);
 }
 
 function zonesSorted(zones: ZoneMap): PaceZone[] {
@@ -108,13 +112,16 @@ function isNewFormat(s: any): boolean {
   return s != null && typeof s === 'object' && 'type' in s;
 }
 
+// 3/4 toward the slower end (matches zoneMidSeconds) for non-zone segments.
 function avgSeconds(a: string | null | undefined, b: string | null | undefined): number | null {
   const x = paceToSeconds(a);
   const y = paceToSeconds(b);
   if (x == null && y == null) return null;
   if (x == null) return y;
   if (y == null) return x;
-  return (x + y) / 2;
+  const lo = Math.min(x, y);
+  const hi = Math.max(x, y);
+  return lo + 0.75 * (hi - lo);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
