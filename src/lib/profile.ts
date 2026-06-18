@@ -1,3 +1,5 @@
+import { normalizeStructure, type ZoneMap, type NormSegment } from './plan-structure';
+
 export interface ProfileBar {
   effort: number;   // 0–100
   minutes: number;  // minimum 1
@@ -47,6 +49,49 @@ function mergeConsecutive(bars: ProfileBar[]): ProfileBar[] {
   }, []);
 }
 
+function secsToPace(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = Math.round(secs % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+// New structure format: a leg's effort comes from its mid-range pace,
+// its width (minutes) from distance × that pace.
+interface NewPhaseStep {
+  distance_km?: number | null;
+  pace_min?: string | null;
+  pace_max?: string | null;
+}
+
+function phaseToBar(p: NewPhaseStep, thresholdPace: string): ProfileBar {
+  const lo   = parsePaceSeconds(p.pace_min ?? '');
+  const hi   = parsePaceSeconds(p.pace_max ?? '');
+  const secs = lo && hi ? (lo + hi) / 2 : lo || hi;
+  const effort  = secs ? paceToEffort(secsToPace(secs), thresholdPace) : 40;
+  const minutes = Math.max(1, Math.round(((Number(p.distance_km) || 0) * secs) / 60));
+  return { effort, minutes };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function isNewStructure(structure: any[]): boolean {
+  return structure.length > 0 && typeof structure[0] === 'object' && 'type' in structure[0];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function flattenNewStructure(structure: any[], thresholdPace: string): ProfileBar[] {
+  const bars: ProfileBar[] = [];
+  for (const step of structure) {
+    if (step.type === 'repeat' && Array.isArray(step.steps)) {
+      for (let r = 0; r < (step.count || 1); r++) {
+        for (const sub of step.steps) bars.push(phaseToBar(sub, thresholdPace));
+      }
+    } else if (step.type === 'phase') {
+      bars.push(phaseToBar(step, thresholdPace));
+    }
+  }
+  return mergeConsecutive(bars);
+}
+
 export function buildProfileBars(
   session: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -55,9 +100,35 @@ export function buildProfileBars(
     estimated_duration?: string | null;
   },
   thresholdPace: string,
+  zones?: ZoneMap,
 ): ProfileBar[] {
   const structure = session.structure;
 
+  // Preferred: zone-derived bars (paces come from the Settings zones)
+  if (zones && structure?.length) {
+    const segToBar = (seg: NormSegment): ProfileBar => ({
+      effort:  seg.midSeconds ? paceToEffort(secsToPace(seg.midSeconds), thresholdPace) : 40,
+      minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
+    });
+    const bars: ProfileBar[] = [];
+    for (const step of normalizeStructure(structure, zones)) {
+      if (step.kind === 'repeat') {
+        for (let r = 0; r < step.count; r++) step.steps.forEach(s => bars.push(segToBar(s)));
+      } else {
+        bars.push(segToBar(step));
+      }
+    }
+    const merged = mergeConsecutive(bars);
+    if (merged.length) return merged;
+  }
+
+  // New format without zones: pace_min/pace_max + distance_km
+  if (structure?.length && isNewStructure(structure)) {
+    const bars = flattenNewStructure(structure, thresholdPace);
+    if (bars.length) return bars;
+  }
+
+  // Legacy format: { pace_per_km, duration_mins } steps
   if (structure?.length && structure[0].pace_per_km && structure[0].duration_mins != null) {
     const raw = structure
       .filter(p => p.pace_per_km && p.duration_mins != null)

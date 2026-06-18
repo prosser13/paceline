@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import WeekAccordion from './WeekAccordion';
+import type { ZoneMap } from '@/lib/plan-structure';
 
 interface PlanSession {
   id: string;
@@ -48,20 +49,45 @@ function shortDate(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
+function isoLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Every yyyy-mm-dd from `from` to `to` inclusive
+function eachDate(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d   = new Date(from + 'T00:00:00');
+  const end = new Date(to   + 'T00:00:00');
+  while (d <= end) {
+    out.push(isoLocal(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
+}
+
 export default async function PlanPage() {
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }] = await Promise.all([
+  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }, { data: paceZones }] = await Promise.all([
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
-    supabaseAdmin.from('app_config').select('threshold_pace_per_km').single(),
+    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km'),
+    supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
   ]);
 
   const thresholdPace = config?.threshold_pace_per_km ?? '3:40';
   const allSessions   = (sessions ?? []) as PlanSession[];
   const allWeeks      = (weeks   ?? []) as PlanWeek[];
+
+  const zones: ZoneMap = {};
+  for (const z of paceZones ?? []) {
+    zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
+  }
 
   // Build map of plan_session_id → actual display values for done sessions
   const completedMap: Record<string, { durationStr: string; tss: number | null }> = {};
@@ -97,6 +123,26 @@ export default async function PlanPage() {
     return acc;
   }, {});
 
+  // Fill empty days of the current and future weeks with rest days (render-only,
+  // not persisted). Past weeks are left as-is.
+  for (const w of allWeeks) {
+    if (w.date_to < todayStr) continue;
+    const wk = (byWeek[w.week_number] ??= []);
+    const have = new Set(wk.map(s => s.scheduled_date));
+    for (const date of eachDate(w.date_from, w.date_to)) {
+      if (have.has(date)) continue;
+      wk.push({
+        id:            `rest-${date}`,
+        week_number:   w.week_number,
+        session_type:  'REST',
+        name:          'Rest',
+        scheduled_date: date,
+        status:        'rest',
+      } as PlanSession);
+    }
+    wk.sort((a, b) => (a.scheduled_date < b.scheduled_date ? -1 : a.scheduled_date > b.scheduled_date ? 1 : 0));
+  }
+
   // Phase bar — merge consecutive same-phase weeks into proportional segments
   const planStart = allWeeks[0]?.date_from;
   const planEnd   = allWeeks[allWeeks.length - 1]?.date_to;
@@ -124,30 +170,30 @@ export default async function PlanPage() {
 
   return (
     <AppShell>
-      <div className="px-[26px] py-[22px] max-w-[900px]">
+      <div className="px-[26px] py-[22px] max-w-[1040px]">
 
         {/* Race card */}
         {aRace && (
           <div className="mb-6 rounded-[18px] overflow-hidden border border-fog">
             <div className="bg-oxblood px-[22px] py-[18px] flex items-start justify-between">
               <div>
-                <span className="font-mono text-[10px] tracking-[.16em] uppercase text-bone/50">
+                <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">
                   A-Race
                 </span>
-                <h2 className="font-display font-semibold text-[26px] text-bone leading-tight mt-[2px]">
+                <h2 className="font-display font-semibold text-[28px] text-bone leading-tight mt-[2px]">
                   {aRace.name}
                 </h2>
-                <p className="font-mono text-[12px] text-bone/60 mt-[5px]">
+                <p className="font-mono text-[14px] text-bone/60 mt-[5px]">
                   {new Date(aRace.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', {
                     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                   })}
                 </p>
               </div>
               <div className="text-right shrink-0 ml-6">
-                <div className="font-display font-semibold text-[42px] leading-none text-bone">
+                <div className="font-display font-semibold text-[44px] leading-none text-bone">
                   {daysUntil(aRace.scheduled_date)}
                 </div>
-                <div className="font-mono text-[10px] tracking-[.1em] uppercase text-bone/50">
+                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-bone/50">
                   days to go
                 </div>
               </div>
@@ -159,8 +205,8 @@ export default async function PlanPage() {
                 { label: 'Target pace', value: aRace.target_pace ? `${aRace.target_pace}/km` : '—'   },
               ].map(({ label, value }) => (
                 <div key={label} className="px-[18px] py-[14px]">
-                  <div className="font-mono text-[10px] tracking-[.1em] uppercase text-stone">{label}</div>
-                  <div className="font-display font-semibold text-[18px] mt-[4px]">{value}</div>
+                  <div className="font-mono text-[12px] tracking-[.1em] uppercase text-stone">{label}</div>
+                  <div className="font-display font-semibold text-[20px] mt-[4px]">{value}</div>
                 </div>
               ))}
             </div>
@@ -174,13 +220,13 @@ export default async function PlanPage() {
               {phaseSegments.map((seg, i) => (
                 <span key={i} className="flex items-center gap-[5px]">
                   <i className={`inline-block w-[8px] h-[8px] rounded-[2px] ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`} />
-                  <span className={`font-mono text-[10px] tracking-[.1em] uppercase ${PHASE_COLOR[seg.phase]?.label ?? 'text-stone'}`}>
+                  <span className={`font-mono text-[12px] tracking-[.1em] uppercase ${PHASE_COLOR[seg.phase]?.label ?? 'text-stone'}`}>
                     {seg.phase}
                   </span>
                 </span>
               ))}
               {planStart && planEnd && (
-                <span className="font-mono text-[10px] text-stone ml-auto">
+                <span className="font-mono text-[12px] text-stone ml-auto">
                   {shortDate(planStart)} – {shortDate(planEnd)}
                 </span>
               )}
@@ -217,6 +263,7 @@ export default async function PlanPage() {
               defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
               completedMap={completedMap}
               nextSessionId={nextSessionId}
+              zones={zones}
             />
           ))}
         </div>

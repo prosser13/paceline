@@ -5,15 +5,22 @@ import type { ProfileBar } from '@/lib/profile';
 
 interface ProfileChartProps {
   bars: ProfileBar[];
-  size?: 'sm' | 'lg';
+  size?: 'xs' | 'sm' | 'lg';
+  color?: string;
+  opacity?: number;
 }
 
-const H_BY_SIZE  = { sm: 34,  lg: 54  } as const;
-const MAX_W      = { sm: 160, lg: 210 } as const;
-const MIN_W      = { sm: 36,  lg: 210 } as const;
-const PX_PER_MIN = { sm: 1.2, lg: 999 } as const;
+const H_BY_SIZE  = { xs: 22, sm: 34,  lg: 54  } as const;
+const MAX_W      = { xs: 80, sm: 160, lg: 210 } as const;
+const MIN_W      = { xs: 26, sm: 36,  lg: 210 } as const;
+const PX_PER_MIN = { xs: 1.2, sm: 1.2, lg: 999 } as const;
 
-export default function ProfileChart({ bars, size = 'sm' }: ProfileChartProps) {
+// Minimum rendered width per bar (px) so short intervals (e.g. strides) stay visible
+const MIN_BAR_W = { xs: 2, sm: 2, lg: 0 } as const;
+
+export default function ProfileChart({
+  bars, size = 'sm', color = '#17191e', opacity = 0.32,
+}: ProfileChartProps) {
   const H = H_BY_SIZE[size];
 
   if (!bars.length) {
@@ -21,15 +28,22 @@ export default function ProfileChart({ bars, size = 'sm' }: ProfileChartProps) {
   }
 
   const totalMins = bars.reduce((s, b) => s + b.minutes, 0);
-  const W = Math.round(
+  const targetW = Math.round(
     Math.max(MIN_W[size], Math.min(MAX_W[size], totalMins * PX_PER_MIN[size]))
   );
 
-  let x = 0;
+  // Floor each bar's width so slim segments stay visible, then scale back to fit
+  const floored = bars.map(b => Math.max(MIN_BAR_W[size], (b.minutes / totalMins) * targetW));
+  const flooredSum = floored.reduce((s, w) => s + w, 0);
+  const scale  = flooredSum > targetW ? targetW / flooredSum : 1;
+  const widths = floored.map(w => w * scale);
+  const W = widths.reduce((s, w) => s + w, 0);
+
   const rects = bars.map((bar, i) => {
-    const bw = (bar.minutes / totalMins) * W;
+    const bw = widths[i];
     const bh = (bar.effort / 100) * H;
-    const el = (
+    const x  = widths.slice(0, i).reduce((sum, w) => sum + w, 0);
+    return (
       <rect
         key={i}
         x={x.toFixed(2)}
@@ -38,13 +52,11 @@ export default function ProfileChart({ bars, size = 'sm' }: ProfileChartProps) {
         height={bh.toFixed(2)}
       />
     );
-    x += bw;
-    return el;
   });
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} style={{ display: 'block', flexShrink: 0 }}>
-      <g fill="#17191e" opacity="0.32">
+    <svg viewBox={`0 0 ${W.toFixed(2)} ${H}`} width={W.toFixed(2)} height={H} style={{ display: 'block', flexShrink: 0 }}>
+      <g fill={color} opacity={opacity}>
         {rects}
       </g>
     </svg>

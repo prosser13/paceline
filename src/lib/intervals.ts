@@ -99,6 +99,50 @@ export async function syncSession(session: PlanSession): Promise<string> {
   return String(id);
 }
 
+export interface FitnessForm {
+  fitness: number; // CTL — chronic training load
+  fatigue: number; // ATL — acute training load
+  form: number;    // TSB — form / freshness (CTL − ATL)
+}
+
+function isoDay(d: Date) {
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Fetches the latest fitness (CTL), fatigue (ATL) and form (TSB) from
+ * intervals.icu wellness. Returns null if the key is missing or the API
+ * call fails, so the dashboard can fall back to its placeholder state.
+ */
+export async function getFitnessForm(): Promise<FitnessForm | null> {
+  if (!process.env.INTERVALS_API_KEY) return null;
+
+  const today  = new Date();
+  const newest = isoDay(today);
+  const oldest = isoDay(new Date(today.getTime() - 7 * 86_400_000));
+
+  try {
+    const res = await fetch(
+      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
+      { headers: authHeaders(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+
+    const days = (await res.json()) as Array<{ ctl?: number | null; atl?: number | null }>;
+    // wellness is returned ascending by date — take the most recent day with load data
+    const latest = [...days].reverse().find(d => d.ctl != null && d.atl != null);
+    if (!latest || latest.ctl == null || latest.atl == null) return null;
+
+    return {
+      fitness: Math.round(latest.ctl),
+      fatigue: Math.round(latest.atl),
+      form:    Math.round(latest.ctl - latest.atl),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
   const res = await fetch(`${BASE}/events/${eventId}`, {
     method: 'DELETE',

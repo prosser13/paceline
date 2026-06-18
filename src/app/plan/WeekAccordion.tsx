@@ -2,146 +2,13 @@
 
 import { useState } from 'react';
 import ProfileChart from '@/components/ProfileChart';
-import TssPill from '@/components/TssPill';
 import { buildProfileBars } from '@/lib/profile';
-import { ROW_CLASS } from '@/components/StatusMark';
-import type { Intensity } from '@/components/TssPill';
+import { normalizeStructure } from '@/lib/plan-structure';
+import type { ZoneMap, NormStep } from '@/lib/plan-structure';
+import {
+  INTENSITY, WorkoutDetail, MetricBlock, fmtHMM, sumSegmentSeconds, syntheticStructure,
+} from '@/components/session-ui';
 import type { SessionStatus } from '@/components/StatusMark';
-
-// ── Workout structure types ──────────────────────────────────
-
-interface StructurePhase {
-  type: 'phase';
-  label: string;
-  distance_km: number;
-  pace_min: string;
-  pace_max: string;
-  zone: string;
-}
-
-interface StructureRepeat {
-  type: 'repeat';
-  count: number;
-  steps: Array<{
-    label: string;
-    distance_km: number;
-    pace_min: string;
-    pace_max: string;
-    zone: string;
-  }>;
-}
-
-type StructureStep = StructurePhase | StructureRepeat;
-
-// Inline styles for zone chips — avoids dynamic Tailwind class purging
-const ZONE_STYLE: Record<string, { background: string; color: string }> = {
-  Z1:     { background: 'rgba(138,133,122,.10)', color: '#5f5a55' },
-  Z2:     { background: 'rgba(20,97,126,.12)',   color: '#14617e' },
-  Z3:     { background: 'rgba(79,122,82,.13)',   color: '#3b6343' },
-  Z4:     { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  Z5:     { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  'Z4-5': { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  'Z1-2': { background: 'rgba(20,97,126,.10)',   color: '#14617e' },
-};
-
-function ZoneChip({ zone }: { zone: string }) {
-  const s = ZONE_STYLE[zone] ?? ZONE_STYLE.Z2;
-  return (
-    <span
-      className="font-mono text-[10px] px-[5px] py-[1px] rounded-[3px] shrink-0"
-      style={s}
-    >
-      {zone}
-    </span>
-  );
-}
-
-function PhaseRow({
-  label, distance_km, pace_min, pace_max, zone, indent = false,
-}: {
-  label: string; distance_km: number; pace_min: string; pace_max: string;
-  zone: string; indent?: boolean;
-}) {
-  return (
-    <div
-      className={`grid items-center py-[4px]${indent ? ' pl-[16px]' : ''}`}
-      style={{ gridTemplateColumns: '110px 56px 1fr' }}
-    >
-      <span className="font-mono text-[11px]">{label}</span>
-      <span className="font-mono text-[11px] text-stone">{distance_km} km</span>
-      <span className="font-mono text-[11px] flex items-center gap-[6px]">
-        {pace_min}–{pace_max}/km <ZoneChip zone={zone} />
-      </span>
-    </div>
-  );
-}
-
-type LegacyStep = { phase?: string; description?: string; pace_per_km?: string; duration_mins?: number };
-
-function isNewFormat(step: unknown): step is StructureStep {
-  return typeof step === 'object' && step !== null && 'type' in step;
-}
-
-function WorkoutDetail({ structure }: { structure: unknown[] }) {
-  return (
-    <div className="border-t border-fog/60 bg-paper pl-[74px] pr-[18px] py-[12px] divide-y divide-fog/30">
-      {structure.map((raw, i) => {
-        // Legacy format: { phase, description, pace_per_km, duration_mins }
-        if (!isNewFormat(raw)) {
-          const s = raw as LegacyStep;
-          return (
-            <div key={i} className="grid items-start py-[5px]" style={{ gridTemplateColumns: '100px 1fr' }}>
-              {s.phase && (
-                <span className="font-mono text-[10px] uppercase tracking-[.07em] text-stone pt-[1px] shrink-0">
-                  {s.phase}
-                </span>
-              )}
-              <span className="font-mono text-[11px] text-stone/80">{s.description}</span>
-            </div>
-          );
-        }
-        const step = raw;
-        if (step.type === 'phase') {
-          return (
-            <PhaseRow
-              key={i}
-              label={step.label}
-              distance_km={step.distance_km}
-              pace_min={step.pace_min}
-              pace_max={step.pace_max}
-              zone={step.zone}
-            />
-          );
-        }
-        if (step.type === 'repeat') {
-          return (
-            <div key={i} className="divide-y divide-fog/20">
-              <div className="flex items-center gap-[8px] py-[6px]">
-                <div className="flex-1 h-px bg-fog/50" />
-                <span className="font-mono text-[10px] text-stone uppercase tracking-[.08em]">
-                  {step.count}× repeat
-                </span>
-                <div className="flex-1 h-px bg-fog/50" />
-              </div>
-              {step.steps.map((s, j) => (
-                <PhaseRow
-                  key={j}
-                  label={s.label}
-                  distance_km={s.distance_km}
-                  pace_min={s.pace_min}
-                  pace_max={s.pace_max}
-                  zone={s.zone}
-                  indent
-                />
-              ))}
-            </div>
-          );
-        }
-        return null;
-      })}
-    </div>
-  );
-}
 
 // ── Plan data types ──────────────────────────────────────────
 
@@ -166,7 +33,10 @@ interface PlanSession {
   intensity?: string | null;
   estimated_tss?: number | null;
   estimated_duration?: string | null;
-  structure?: StructureStep[] | null;
+  target_pace?: string | null;
+  target_pace_end?: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  structure?: any[] | null;
 }
 
 interface CompletedData {
@@ -188,13 +58,14 @@ function formatTssDelta(delta: number): string {
 }
 
 function formatDurationDelta(deltaMins: number): string {
-  const abs = Math.abs(Math.round(deltaMins));
-  const h = Math.floor(abs / 60);
-  const m = abs % 60;
+  const abs  = Math.abs(Math.round(deltaMins));
+  const h    = Math.floor(abs / 60);
+  const m    = abs % 60;
   const sign = deltaMins >= 0 ? '+' : '−';
-  return `⏱${sign}${h}:${String(m).padStart(2, '0')}`;
+  return `${sign}${h}:${String(m).padStart(2, '0')}`;
 }
 
+// Quiet when within plan, louder the further off it drifts
 function deviationClass(pct: number): string {
   const abs = Math.abs(pct);
   if (abs < 0.10) return 'text-stone/60';
@@ -207,6 +78,16 @@ const PHASE_LABEL_CLASS: Record<string, string> = {
   Build: 'text-amber-dark',
   Peak:  'text-ember',
   Taper: 'text-fern',
+};
+
+// Thin left-rail colour per status — replaces full-row background washes
+const STATUS_RAIL: Record<SessionStatus, string> = {
+  done:          'border-l-fern/70',
+  today:         'border-l-oxblood',
+  planned:       'border-l-transparent',
+  missed_injury: 'border-l-ember',
+  skipped:       'border-l-transparent',
+  rest:          'border-l-transparent',
 };
 
 function resolveStatus(
@@ -235,6 +116,27 @@ function formatDateRange(from: string, to: string) {
   return `${f} – ${t}`;
 }
 
+// ── Delta block ──────────────────────────────────────────────
+
+interface DeltaData {
+  tssDelta: number; tssPct: number;
+  durDelta: number; durPct: number;
+}
+
+// Done-only: how close to plan. Two lines (≤ metric height) so row heights stay equal.
+function DeltaBlock({ delta }: { delta: DeltaData }) {
+  return (
+    <div className="shrink-0 w-[72px] text-right leading-tight">
+      <div className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">vs plan</div>
+      <div className="font-mono text-[13px] mt-[2px] flex items-center justify-end gap-[4px] whitespace-nowrap">
+        <span className={deviationClass(delta.tssPct)}>{formatTssDelta(delta.tssDelta)}</span>
+        <span className="text-fog">·</span>
+        <span className={deviationClass(delta.durPct)}>{formatDurationDelta(delta.durDelta)}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Component ────────────────────────────────────────────────
 
 interface Props {
@@ -245,12 +147,13 @@ interface Props {
   defaultOpen: boolean;
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
+  zones: ZoneMap;
 }
 
 export default function WeekAccordion({
-  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId,
+  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones,
 }: Props) {
-  const [open, setOpen]           = useState(defaultOpen);
+  const [open, setOpen]             = useState(defaultOpen);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const totalKm    = sessions.reduce((s, sess) => s + (Number(sess.distance_km) || 0), 0);
@@ -272,7 +175,7 @@ export default function WeekAccordion({
   }
 
   return (
-    <div className="border border-fog rounded-[14px] overflow-hidden">
+    <div className="border border-fog rounded-[14px] overflow-hidden bg-paper">
 
       {/* Accordion header */}
       <button
@@ -281,14 +184,14 @@ export default function WeekAccordion({
         className="w-full flex items-center justify-between px-[18px] py-[14px] bg-paper hover:bg-fog/20 transition-colors text-left"
       >
         <div className="flex flex-col min-w-0">
-          <span className={`font-mono text-[10px] tracking-[.12em] uppercase ${labelClass}`}>
+          <span className={`font-mono text-[14px] tracking-[.12em] uppercase ${labelClass}`}>
             Week {week.week_number} · {week.phase}
           </span>
-          <span className="font-display font-semibold text-[16px] mt-[2px]">
+          <span className="font-display font-semibold text-[18px] mt-[2px]">
             {formatDateRange(week.date_from, week.date_to)}
           </span>
           {week.purpose && (
-            <span className="text-[13px] text-stone mt-[2px] hidden md:block truncate">
+            <span className="text-[15px] text-ink mt-[2px] hidden md:block truncate">
               {week.purpose}
             </span>
           )}
@@ -296,11 +199,11 @@ export default function WeekAccordion({
 
         <div className="flex items-center gap-[18px] shrink-0 ml-4">
           <div className="text-right hidden sm:block">
-            <div className="font-mono text-[13px] font-semibold">{totalKm.toFixed(0)} km</div>
-            <div className="font-mono text-[11px] text-stone">{tssIsEstimated ? '~' : ''}{headerTss} TSS</div>
+            <div className="font-mono text-[15px] font-semibold">{totalKm.toFixed(0)} km</div>
+            <div className="font-mono text-[13px] text-stone">{tssIsEstimated ? '~' : ''}{headerTss} TSS</div>
           </div>
           <span
-            className="font-mono text-[18px] text-stone leading-none"
+            className="font-mono text-[20px] text-stone leading-none"
             style={{
               display: 'inline-block',
               transform: open ? 'rotate(180deg)' : 'none',
@@ -314,26 +217,59 @@ export default function WeekAccordion({
 
       {/* Session rows */}
       {open && (
-        <div className="border-t border-fog divide-y divide-fog/60">
+        <div className="border-t border-fog divide-y divide-fog/50">
           {sessions.map(session => {
             const status     = resolveStatus(session, todayStr, completedMap);
             const d          = formatDay(session.scheduled_date);
             const isDone     = status === 'done';
             const isRest     = status === 'rest';
+            const intensity  = (session.intensity as string | null) ?? 'easy';
+
+            // Rest days — date sits in the day column like every other row; right side blank
+            if (isRest) {
+              return (
+                <div
+                  key={session.id}
+                  className="flex items-center gap-[14px] border-l-[3px] border-l-transparent px-[16px] py-[8px]"
+                >
+                  <div className="w-[46px] shrink-0">
+                    <div className="font-display font-semibold text-[16px] leading-none text-ink">{d.short}</div>
+                    <div className="font-mono text-[12.5px] text-stone mt-[4px]">{d.date}</div>
+                  </div>
+                  <span className="flex-1 font-mono text-[13px] uppercase tracking-[.1em] text-stone">
+                    {session.name || 'Rest'}
+                  </span>
+                </div>
+              );
+            }
+
             const isRace     = session.session_type === 'RACE';
+            const isToday    = status === 'today';
             const isNext     = session.id === nextSessionId;
-            const hasDetail  = !!(session.structure?.length);
+            const isFocus    = isToday || isNext;
             const isExpanded = expandedId === session.id;
             const completed  = completedMap[session.id];
 
+            // Every (non-rest) session is expandable — structured or synthesised.
+            // Normalise both formats and derive paces from the Settings zones.
+            const detailSteps: NormStep[] = normalizeStructure(
+              session.structure?.length ? session.structure : syntheticStructure(session, intensity),
+              zones,
+            );
+
+            // Planned duration derived from the zone-paced segments (falls back to the
+            // stored estimate when a session has no usable segments).
+            const plannedSec         = sumSegmentSeconds(detailSteps);
+            const plannedDurationStr = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+
             const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
-            const displayDuration = isDone && completed?.durationStr ? completed.durationStr : session.estimated_duration ?? null;
+            const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
 
             // Deltas — only when done and both planned values exist
             const actualTss   = isDone ? completed?.tss ?? null : null;
             const plannedTss  = session.estimated_tss ?? null;
             const actualMins  = isDone ? parseDurationMins(completed?.durationStr) : null;
-            const plannedMins = parseDurationMins(session.estimated_duration);
+            const plannedMins = plannedSec > 0 ? plannedSec / 60 : parseDurationMins(session.estimated_duration);
 
             const tssDelta = actualTss != null && plannedTss != null && plannedTss > 0
               ? actualTss - plannedTss : null;
@@ -343,81 +279,82 @@ export default function WeekAccordion({
               ? actualMins - plannedMins : null;
             const durPct   = durDelta != null && plannedMins != null ? durDelta / plannedMins : null;
 
-            const showDelta = tssDelta != null && tssPct != null && durDelta != null && durPct != null;
+            const delta: DeltaData | null =
+              tssDelta != null && tssPct != null && durDelta != null && durPct != null
+                ? { tssDelta, tssPct, durDelta, durPct }
+                : null;
 
-            // Row background: next-up > done-tint > status default
-            const borderClass = isNext ? 'border-l-[4px] border-l-oxblood' : ROW_CLASS[status];
-            const bgClass     = isNext ? 'bg-paper' : isDone ? 'bg-fern/25' : '';
+            const railClass = isFocus ? 'border-l-oxblood' : STATUS_RAIL[status];
 
             return (
               <div key={session.id}>
                 <div
-                  className={`grid items-center gap-4 px-[18px] py-[13px] ${borderClass} ${bgClass} ${isRest ? 'opacity-50' : ''} ${hasDetail ? 'cursor-pointer select-none' : ''}`}
-                  style={{ gridTemplateColumns: '56px 1fr auto auto' }}
-                  onClick={hasDetail ? () => setExpandedId(isExpanded ? null : session.id) : undefined}
+                  className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${railClass} ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
+                  onClick={() => setExpandedId(isExpanded ? null : session.id)}
                 >
                   {/* Day */}
-                  <div>
-                    <div className="font-display font-semibold text-[14px]">{d.short}</div>
-                    <div className="font-mono text-[11px] text-stone">{d.date}</div>
+                  <div className="w-[46px] shrink-0">
+                    <div className="font-display font-semibold text-[16px] leading-none text-ink">
+                      {d.short}
+                    </div>
+                    <div className="font-mono text-[12.5px] text-stone mt-[4px]">{d.date}</div>
                   </div>
 
-                  {/* Name + description */}
-                  <div className="min-w-0">
-                    <div className={`font-semibold text-[14.5px] leading-tight mb-[2px] flex items-center gap-[7px] flex-wrap ${isRest ? 'text-stone font-normal' : ''}`}>
+                  {/* Name + detail */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-[7px] flex-wrap leading-tight">
+                      {isFocus && (
+                        <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
+                          {isToday ? 'Today' : 'Next up'}
+                        </span>
+                      )}
                       {isRace && (
-                        <span className="font-mono text-[9px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0">
+                        <span className="font-mono text-[11px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0">
                           Race
                         </span>
                       )}
-                      {session.name}
-                      {hasDetail && (
-                        <span
-                          className="font-mono text-[13px] text-stone/40 leading-none"
-                          style={{
-                            display: 'inline-block',
-                            transform: isExpanded ? 'rotate(180deg)' : 'none',
-                            transition: 'transform 150ms',
-                          }}
-                        >
-                          ▾
-                        </span>
-                      )}
+                      {isDone && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
+                      <span className="text-[16.5px] font-semibold text-ink">
+                        {session.name}
+                      </span>
+                      <span
+                        className="font-mono text-[14px] text-stone leading-none"
+                        style={{
+                          display: 'inline-block',
+                          transform: isExpanded ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 150ms',
+                        }}
+                      >
+                        ▾
+                      </span>
                     </div>
                     {session.description && (
-                      <div className="text-[12.5px] text-stone leading-tight truncate">
+                      <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">
                         {session.description}
                       </div>
                     )}
                   </div>
 
-                  {/* Profile chart */}
+                  {/* Profile chart — colour encodes session difficulty */}
                   <ProfileChart
-                    bars={buildProfileBars(session, thresholdPace)}
-                    size="sm"
+                    bars={buildProfileBars(session, thresholdPace, zones)}
+                    size="xs"
+                    color={INTENSITY[intensity]?.hex ?? '#17191e'}
+                    opacity={0.6}
                   />
 
-                  {/* TSS pill + delta */}
-                  <div className="flex flex-col items-center">
-                    <TssPill
-                      tss={displayTss}
-                      duration={displayDuration}
-                      intensity={(session.intensity as Intensity | null) ?? 'easy'}
-                      estimated={!isDone}
-                    />
-                    {showDelta && (
-                      <div className="font-mono text-[10px] mt-[4px] whitespace-nowrap flex items-center gap-[3px]">
-                        <span className={deviationClass(tssPct!)}>{formatTssDelta(tssDelta!)}</span>
-                        <span className="text-stone/30">·</span>
-                        <span className={deviationClass(durPct!)}>{formatDurationDelta(durDelta!)}</span>
-                      </div>
-                    )}
-                  </div>
+                  {/* Past only: how close to plan */}
+                  {isDone && delta && <DeltaBlock delta={delta} />}
+
+                  {/* Metric */}
+                  <MetricBlock
+                    duration={displayDuration}
+                    tss={displayTss}
+                    estimated={!isDone}
+                  />
                 </div>
 
-                {isExpanded && hasDetail && (
-                  <WorkoutDetail structure={session.structure as unknown[]} />
-                )}
+                {isExpanded && <WorkoutDetail steps={detailSteps} />}
               </div>
             );
           })}

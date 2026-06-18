@@ -30,17 +30,17 @@ interface TssPillProps {
 export default function TssPill({ tss, duration, intensity, estimated, size = 'sm' }: TssPillProps) {
   if (tss == null) {
     return (
-      <span className={`font-mono font-normal text-stone text-center whitespace-nowrap ${size === 'lg' ? 'text-[19px] px-4 py-2.5 min-w-[96px]' : 'text-[13.5px] px-2.5 py-1.5 min-w-[74px]'}`}>
+      <span className={`font-mono font-normal text-stone text-center whitespace-nowrap ${size === 'lg' ? 'text-[21px] px-4 py-2.5 min-w-[96px]' : 'text-[15.5px] px-2.5 py-1.5 min-w-[74px]'}`}>
         —
       </span>
     );
   }
 
   const sizeClass = size === 'lg'
-    ? 'text-[19px] px-4 py-2.5 min-w-[96px]'
-    : 'text-[13.5px] px-2.5 py-1.5 min-w-[74px]';
+    ? 'text-[21px] px-4 py-2.5 min-w-[96px]'
+    : 'text-[15.5px] px-2.5 py-1.5 min-w-[74px]';
 
-  const smallClass = size === 'lg' ? 'text-[12px] mt-[3px]' : 'text-[11px] mt-[1px]';
+  const smallClass = size === 'lg' ? 'text-[14px] mt-[3px]' : 'text-[13px] mt-[1px]';
 
   if (estimated) {
     return (

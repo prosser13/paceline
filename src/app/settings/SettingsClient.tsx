@@ -54,12 +54,12 @@ export default function SettingsClient({ connected, athleteName, lastSyncedAt }:
   if (!connected) {
     return (
       <div>
-        <p className="text-[14px] text-stone mb-4">
+        <p className="text-[16px] text-stone mb-4">
           Connect Strava to automatically mark completed runs on your plan.
         </p>
         <a
           href="/api/auth/strava"
-          className="inline-flex items-center gap-2 font-semibold text-[13.5px] px-4 py-[9px] rounded-[10px] transition-colors"
+          className="inline-flex items-center gap-2 font-semibold text-[15.5px] px-4 py-[9px] rounded-[10px] transition-colors"
           style={{ background: '#FC4C02', color: '#fff' }}
         >
           Connect with Strava
@@ -74,9 +74,9 @@ export default function SettingsClient({ connected, athleteName, lastSyncedAt }:
         <div>
           <div className="flex items-center gap-[7px] mb-[3px]">
             <span className="w-[7px] h-[7px] rounded-full bg-fern shrink-0" />
-            <span className="font-semibold text-[14.5px]">{athleteName}</span>
+            <span className="font-semibold text-[16.5px]">{athleteName}</span>
           </div>
-          <p className="font-mono text-[11px] text-stone">
+          <p className="font-mono text-[13px] text-stone">
             {lastSyncedAt ? `Last synced ${timeAgo(lastSyncedAt)}` : 'Never synced'}
           </p>
         </div>
@@ -84,14 +84,14 @@ export default function SettingsClient({ connected, athleteName, lastSyncedAt }:
           <button
             onClick={handleSync}
             disabled={syncing}
-            className="bg-oxblood text-bone text-[13px] font-medium px-3 py-[7px] rounded-[8px] hover:bg-oxblood-dark transition-colors disabled:opacity-50"
+            className="bg-oxblood text-bone text-[15px] font-medium px-3 py-[7px] rounded-[8px] hover:bg-oxblood-dark transition-colors disabled:opacity-50"
           >
             {syncing ? 'Syncing…' : 'Sync now'}
           </button>
           <button
             onClick={handleDisconnect}
             disabled={disconnecting}
-            className="text-[13px] text-stone border border-fog px-3 py-[7px] rounded-[8px] hover:border-stone transition-colors disabled:opacity-50"
+            className="text-[15px] text-stone border border-fog px-3 py-[7px] rounded-[8px] hover:border-stone transition-colors disabled:opacity-50"
           >
             Disconnect
           </button>
@@ -99,7 +99,7 @@ export default function SettingsClient({ connected, athleteName, lastSyncedAt }:
       </div>
 
       {syncMsg && (
-        <p className="font-mono text-[11px] text-stone bg-fog/30 rounded-[8px] px-3 py-[8px]">
+        <p className="font-mono text-[13px] text-stone bg-fog/30 rounded-[8px] px-3 py-[8px]">
           {syncMsg}
         </p>
       )}

@@ -22,5 +22,5 @@ export const ROW_CLASS: Record<SessionStatus, string> = {
 
 export default function StatusMark({ status }: { status: SessionStatus }) {
   const { symbol, className } = MARKS[status];
-  return <span className={`text-[13px] text-center leading-none ${className}`}>{symbol}</span>;
+  return <span className={`text-[15px] text-center leading-none ${className}`}>{symbol}</span>;
 }
