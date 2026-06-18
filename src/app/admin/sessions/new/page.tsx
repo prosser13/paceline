@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import SessionForm from '@/components/SessionForm';
 import { createSessionAction } from '../actions';
 
