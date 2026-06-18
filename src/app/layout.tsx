@@ -1,36 +1,34 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Inter, Space_Grotesk, Space_Mono } from 'next/font/google';
+import './globals.css';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space-grotesk',
+  weight: ['500', '600', '700'],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const spaceMono = Space_Mono({
+  subsets: ['latin'],
+  variable: '--font-space-mono',
+  weight: ['400', '700'],
 });
 
 export const metadata: Metadata = {
-  title: { default: "Paceline", template: "%s — Paceline" },
-  description: "Paceline",
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://paceline.co"
-  ),
+  title: { default: 'Paceline', template: '%s — Paceline' },
+  description: 'The plan that runs with you',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL ?? 'https://paceline.co'),
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${spaceMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-full">{children}</body>
     </html>
   );
 }
