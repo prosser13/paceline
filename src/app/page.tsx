@@ -1,11 +1,10 @@
 import AppShell from '@/components/AppShell';
-import ProfileChart from '@/components/ProfileChart';
+import ProfileChart, { buildProfileBars } from '@/components/ProfileChart';
 import TssPill from '@/components/TssPill';
-import StatusMark, { ROW_CLASS } from '@/components/StatusMark';
+import { ROW_CLASS } from '@/components/StatusMark';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
 import type { Intensity } from '@/components/TssPill';
-import type { ProfileKey } from '@/components/ProfileChart';
 import type { SessionStatus } from '@/components/StatusMark';
 
 export const dynamic = 'force-dynamic';
@@ -24,7 +23,7 @@ interface PlanSession {
   status?: string | null;
   intensity?: string | null;
   profile_shape?: string | null;
-  structure?: Array<{ phase: string; description: string }> | null;
+  structure?: Array<{ phase: string; description: string; effort_pct?: number; duration_mins?: number }> | null;
 }
 
 function addDays(date: Date, n: number) {
@@ -256,7 +255,7 @@ function TodayHero({ session }: { session: PlanSession }) {
           )}
         </div>
         <div className="flex items-center gap-4 shrink-0">
-          <ProfileChart profile={(session.profile_shape as ProfileKey | null) ?? null} size="lg" />
+          <ProfileChart bars={buildProfileBars(session)} size="lg" />
           <TssPill
             tss={session.estimated_tss ?? null}
             duration={session.estimated_duration ?? null}
@@ -325,7 +324,7 @@ function SessionRow({ session }: { session: PlanSession }) {
         <span className="font-mono text-[11px] text-stone">{d.date}</span>
       </div>
 
-      <ProfileChart profile={(session.profile_shape as ProfileKey | null) ?? null} size="sm" />
+      <ProfileChart bars={buildProfileBars(session)} size="sm" />
 
       <div>
         <div className={`font-semibold text-[15px] mb-[2px] ${isRest ? 'font-medium text-stone' : ''}`}>
