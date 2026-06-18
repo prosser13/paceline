@@ -1,5 +1,6 @@
 import AppShell from '@/components/AppShell';
-import ProfileChart, { buildProfileBars } from '@/components/ProfileChart';
+import ProfileChart from '@/components/ProfileChart';
+import { buildProfileBars } from '@/lib/profile';
 import TssPill from '@/components/TssPill';
 import { ROW_CLASS } from '@/components/StatusMark';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -23,7 +24,7 @@ interface PlanSession {
   status?: string | null;
   intensity?: string | null;
   profile_shape?: string | null;
-  structure?: Array<{ phase: string; description: string; effort_pct?: number; duration_mins?: number }> | null;
+  structure?: Array<{ phase: string; description: string; pace_per_km?: string; duration_mins?: number }> | null;
 }
 
 function addDays(date: Date, n: number) {
@@ -93,6 +94,13 @@ export default async function DashboardPage() {
   const h = Math.floor(totalMins / 60);
   const m = Math.round(totalMins % 60);
 
+  // Threshold pace for profile chart effort calculation
+  const { data: appConfig } = await supabaseAdmin
+    .from('app_config')
+    .select('threshold_pace_per_km')
+    .single();
+  const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
+
   // Current week from plan_weeks
   const { data: weekRow } = await supabaseAdmin
     .from('plan_weeks')
@@ -161,7 +169,7 @@ export default async function DashboardPage() {
 
         {/* Today hero */}
         {todaySession ? (
-          <TodayHero session={todaySession} />
+          <TodayHero session={todaySession} thresholdPace={thresholdPace} />
         ) : (
           <div className="border border-fog rounded-[18px] bg-paper p-[22px_26px] mb-[26px] text-stone text-[14px]">
             No session scheduled for today.
@@ -185,7 +193,7 @@ export default async function DashboardPage() {
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              {(upcoming as PlanSession[]).map(s => <SessionRow key={s.id} session={s} />)}
+              {(upcoming as PlanSession[]).map(s => <SessionRow key={s.id} session={s} thresholdPace={thresholdPace} />)}
             </div>
           </div>
         )}
@@ -233,7 +241,7 @@ export default async function DashboardPage() {
 
 /* ── Sub-components ────────────────────────────────────────── */
 
-function TodayHero({ session }: { session: PlanSession }) {
+function TodayHero({ session, thresholdPace }: { session: PlanSession; thresholdPace: string }) {
   const d     = formatDay(session.scheduled_date);
   const steps = session.structure ?? null;
 
@@ -255,7 +263,7 @@ function TodayHero({ session }: { session: PlanSession }) {
           )}
         </div>
         <div className="flex items-center gap-4 shrink-0">
-          <ProfileChart bars={buildProfileBars(session)} size="lg" />
+          <ProfileChart bars={buildProfileBars(session, thresholdPace)} size="lg" />
           <TssPill
             tss={session.estimated_tss ?? null}
             duration={session.estimated_duration ?? null}
@@ -309,7 +317,7 @@ function TodayHero({ session }: { session: PlanSession }) {
   );
 }
 
-function SessionRow({ session }: { session: PlanSession }) {
+function SessionRow({ session, thresholdPace }: { session: PlanSession; thresholdPace: string }) {
   const d      = formatDay(session.scheduled_date);
   const status = (session.status as SessionStatus | null) ?? 'planned';
   const isRest = status === 'rest';
@@ -324,7 +332,7 @@ function SessionRow({ session }: { session: PlanSession }) {
         <span className="font-mono text-[11px] text-stone">{d.date}</span>
       </div>
 
-      <ProfileChart bars={buildProfileBars(session)} size="sm" />
+      <ProfileChart bars={buildProfileBars(session, thresholdPace)} size="sm" />
 
       <div>
         <div className={`font-semibold text-[15px] mb-[2px] ${isRest ? 'font-medium text-stone' : ''}`}>

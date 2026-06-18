@@ -1,68 +1,17 @@
-export interface ProfileBar {
-  effort: number;   // 0–100
-  minutes: number;  // minimum 1
-}
+export type { ProfileBar } from '@/lib/profile';
+export { buildProfileBars } from '@/lib/profile';
 
-const INTENSITY_EFFORT: Record<string, number> = {
-  recovery: 25,
-  easy:     40,
-  steady:   60,
-  tempo:    75,
-  hard:     90,
-  race:     95,
-};
-
-function parseDurationMins(duration: string | null | undefined): number {
-  if (!duration) return 0;
-  const parts = duration.split(':').map(Number);
-  return parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
-}
-
-function mergeConsecutive(bars: ProfileBar[]): ProfileBar[] {
-  return bars.reduce<ProfileBar[]>((acc, bar) => {
-    const last = acc[acc.length - 1];
-    if (last && last.effort === bar.effort) {
-      last.minutes += bar.minutes;
-      return acc;
-    }
-    acc.push({ effort: bar.effort, minutes: bar.minutes });
-    return acc;
-  }, []);
-}
-
-export function buildProfileBars(session: {
-  structure?: Array<{ effort_pct?: number; duration_mins?: number }> | null;
-  intensity?: string | null;
-  estimated_duration?: string | null;
-}): ProfileBar[] {
-  const structure = session.structure;
-
-  if (structure?.length && structure[0].effort_pct != null && structure[0].duration_mins != null) {
-    const raw = structure
-      .filter(p => p.effort_pct != null && p.duration_mins != null)
-      .map(p => ({
-        effort:  p.effort_pct as number,
-        minutes: Math.max(1, p.duration_mins as number),
-      }));
-    return mergeConsecutive(raw);
-  }
-
-  // Fallback: single block derived from intensity + estimated_duration
-  const effort = INTENSITY_EFFORT[session.intensity ?? 'easy'] ?? 40;
-  const mins = parseDurationMins(session.estimated_duration);
-  return mins > 0 ? [{ effort, minutes: mins }] : [];
-}
+import type { ProfileBar } from '@/lib/profile';
 
 interface ProfileChartProps {
   bars: ProfileBar[];
   size?: 'sm' | 'lg';
 }
 
-// lg (hero): always full width  sm: scales with duration so longer runs are visually wider
 const H_BY_SIZE  = { sm: 34,  lg: 54  } as const;
 const MAX_W      = { sm: 160, lg: 210 } as const;
 const MIN_W      = { sm: 36,  lg: 210 } as const;
-const PX_PER_MIN = { sm: 1.2, lg: 999 } as const; // lg: uncapped so it always hits MAX_W
+const PX_PER_MIN = { sm: 1.2, lg: 999 } as const;
 
 export default function ProfileChart({ bars, size = 'sm' }: ProfileChartProps) {
   const H = H_BY_SIZE[size];
