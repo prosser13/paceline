@@ -40,13 +40,13 @@ export default function TssPill({ tss, duration, intensity, estimated, size = 's
     ? 'text-[19px] px-4 py-2.5 min-w-[96px]'
     : 'text-[13.5px] px-2.5 py-1.5 min-w-[74px]';
 
-  const smallClass = size === 'lg' ? 'text-[11px] mt-[3px]' : 'text-[10px] mt-[1px]';
+  const smallClass = size === 'lg' ? 'text-[12px] mt-[3px]' : 'text-[11px] mt-[1px]';
 
   if (estimated) {
     return (
       <span className={`font-mono font-bold rounded-lg border border-dashed text-center whitespace-nowrap block ${sizeClass} ${ESTIMATED[intensity]}`}>
         ~{tss}
-        {duration && <small className={`font-normal tracking-[.05em] block ${smallClass}`}>{duration}</small>}
+        {duration && <small className={`font-normal tracking-[.05em] block ${smallClass}`}>⏱ {duration}</small>}
       </span>
     );
   }
@@ -54,7 +54,7 @@ export default function TssPill({ tss, duration, intensity, estimated, size = 's
   return (
     <span className={`font-mono font-bold rounded-lg text-center whitespace-nowrap block ${sizeClass} ${ACTUAL[intensity]}`}>
       {tss}
-      {duration && <small className={`font-normal tracking-[.05em] block ${smallClass}`}>{duration}</small>}
+      {duration && <small className={`font-normal tracking-[.05em] block ${smallClass}`}>⏱ {duration}</small>}
     </span>
   );
 }
