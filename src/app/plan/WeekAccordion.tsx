@@ -32,6 +32,11 @@ interface PlanSession {
   structure?: Array<{ pace_per_km?: string; duration_mins?: number }> | null;
 }
 
+interface CompletedData {
+  durationStr: string;
+  tss: number | null;
+}
+
 const PHASE_LABEL_CLASS: Record<string, string> = {
   Base:  'text-marine',
   Build: 'text-amber-dark',
@@ -39,8 +44,12 @@ const PHASE_LABEL_CLASS: Record<string, string> = {
   Taper: 'text-fern',
 };
 
-function resolveStatus(session: PlanSession, todayStr: string, doneSet: Set<string>): SessionStatus {
-  if (doneSet.has(session.id)) return 'done';
+function resolveStatus(
+  session: PlanSession,
+  todayStr: string,
+  completedMap: Record<string, CompletedData>,
+): SessionStatus {
+  if (session.id in completedMap) return 'done';
   const db = session.status as SessionStatus | null;
   if (db === 'rest' || db === 'missed_injury' || db === 'skipped') return db;
   if (session.scheduled_date === todayStr) return 'today';
@@ -67,12 +76,11 @@ interface Props {
   thresholdPace: string;
   todayStr: string;
   defaultOpen: boolean;
-  doneIds: string[];
+  completedMap: Record<string, CompletedData>;
 }
 
-export default function WeekAccordion({ week, sessions, thresholdPace, todayStr, defaultOpen, doneIds }: Props) {
+export default function WeekAccordion({ week, sessions, thresholdPace, todayStr, defaultOpen, completedMap }: Props) {
   const [open, setOpen] = useState(defaultOpen);
-  const doneSet = new Set(doneIds);
 
   const totalKm  = sessions.reduce((s, sess) => s + (Number(sess.distance_km) || 0), 0);
   const totalTss = sessions.reduce((s, sess) => s + (sess.estimated_tss ?? 0), 0);
@@ -123,15 +131,20 @@ export default function WeekAccordion({ week, sessions, thresholdPace, todayStr,
       {open && (
         <div className="border-t border-fog divide-y divide-fog/60">
           {sessions.map(session => {
-            const status = resolveStatus(session, todayStr, doneSet);
-            const d      = formatDay(session.scheduled_date);
-            const isRest = status === 'rest';
-            const isRace = session.session_type === 'RACE';
+            const status    = resolveStatus(session, todayStr, completedMap);
+            const d         = formatDay(session.scheduled_date);
+            const isDone    = status === 'done';
+            const isRest    = status === 'rest';
+            const isRace    = session.session_type === 'RACE';
+            const completed = completedMap[session.id];
+
+            const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
+            const displayDuration = isDone && completed?.durationStr ? completed.durationStr : session.estimated_duration ?? null;
 
             return (
               <div
                 key={session.id}
-                className={`grid items-center gap-4 px-[18px] py-[13px] ${ROW_CLASS[status]} ${isRest ? 'opacity-50' : ''}`}
+                className={`grid items-center gap-4 px-[18px] py-[13px] ${ROW_CLASS[status]} ${isDone ? 'bg-paper' : ''} ${isRest ? 'opacity-50' : ''}`}
                 style={{ gridTemplateColumns: '56px 1fr auto auto' }}
               >
                 {/* Day */}
@@ -163,12 +176,12 @@ export default function WeekAccordion({ week, sessions, thresholdPace, todayStr,
                   size="sm"
                 />
 
-                {/* TSS pill */}
+                {/* TSS pill — solid background + actual values when done */}
                 <TssPill
-                  tss={session.estimated_tss ?? null}
-                  duration={session.estimated_duration ?? null}
+                  tss={displayTss}
+                  duration={displayDuration}
                   intensity={(session.intensity as Intensity | null) ?? 'easy'}
-                  estimated
+                  estimated={!isDone}
                 />
               </div>
             );

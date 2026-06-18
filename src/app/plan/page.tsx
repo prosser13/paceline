@@ -55,13 +55,31 @@ export default async function PlanPage() {
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').single(),
-    supabaseAdmin.from('completed_workouts').select('plan_session_id'),
+    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km'),
   ]);
 
   const thresholdPace = config?.threshold_pace_per_km ?? '3:40';
   const allSessions   = (sessions ?? []) as PlanSession[];
   const allWeeks      = (weeks   ?? []) as PlanWeek[];
-  const doneIds       = (completed ?? []).map(c => c.plan_session_id).filter(Boolean) as string[];
+
+  // Build map of plan_session_id → actual display values for done sessions
+  const completedMap: Record<string, { durationStr: string; tss: number | null }> = {};
+  for (const cw of completed ?? []) {
+    if (!cw.plan_session_id) continue;
+    const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
+    const pace  = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+    const durationStr = mins != null
+      ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
+      : null;
+    let tss: number | null = null;
+    if (mins != null && pace != null && pace > 0) {
+      const parts = thresholdPace.split(':').map(Number);
+      const threshMinKm = parts[0] + parts[1] / 60;
+      const IF = threshMinKm / pace;
+      tss = Math.round((mins / 60) * IF * IF * 100);
+    }
+    completedMap[cw.plan_session_id] = { durationStr: durationStr ?? '', tss };
+  }
 
   const aRace = allSessions.find(s => s.session_type === 'RACE' && s.name === 'Dragon 50 Ultra');
 
@@ -188,7 +206,7 @@ export default async function PlanPage() {
               thresholdPace={thresholdPace}
               todayStr={todayStr}
               defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
-              doneIds={doneIds}
+              completedMap={completedMap}
             />
           ))}
         </div>

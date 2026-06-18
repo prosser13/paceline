@@ -107,10 +107,10 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     { onConflict: 'strava_activity_id' },
   );
 
-  // Re-fetch stored rows to get their UUIDs
+  // Re-fetch stored rows to get their UUIDs + timing
   const { data: stored } = await supabaseAdmin
     .from('activities')
-    .select('id, strava_activity_id, activity_date, distance_km')
+    .select('id, strava_activity_id, activity_date, distance_km, duration_mins, avg_pace_min_km')
     .in('strava_activity_id', runs.map(a => a.id));
 
   if (!stored?.length) return { synced: runs.length, matched: 0 };
@@ -149,13 +149,14 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       matched_at:      new Date().toISOString(),
     });
 
-    // Plain insert is safe — we already confirmed no session_match exists above
     await supabaseAdmin.from('completed_workouts').insert({
-      plan_session_id:    match.id,
-      completed_date:     activity.activity_date,
-      actual_distance_km: activity.distance_km,
-      strava_activity_id: activity.strava_activity_id,
-      source:             'strava',
+      plan_session_id:       match.id,
+      completed_date:        activity.activity_date,
+      actual_distance_km:    activity.distance_km,
+      actual_duration_mins:  activity.duration_mins,
+      actual_avg_pace_min_km: activity.avg_pace_min_km,
+      strava_activity_id:    activity.strava_activity_id,
+      source:                'strava',
     });
 
     matched++;
