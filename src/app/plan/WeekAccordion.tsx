@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, fmtHMM, sumSegmentSeconds, syntheticStructure,
+  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure,
 } from '@/components/session-ui';
 import type { SessionStatus } from '@/components/StatusMark';
 
@@ -227,22 +227,9 @@ export default function WeekAccordion({
             const isRest     = status === 'rest';
             const intensity  = (session.intensity as string | null) ?? 'easy';
 
-            // Rest days — date sits in the day column like every other row; right side blank
+            // Rest days — dashed "sheets" row with a bed watermark
             if (isRest) {
-              return (
-                <div
-                  key={session.id}
-                  className="flex items-center gap-[14px] border-l-[3px] border-l-transparent px-[16px] py-[8px]"
-                >
-                  <div className="w-[46px] shrink-0">
-                    <div className="font-display font-semibold text-[16px] leading-none text-ink">{d.short}</div>
-                    <div className="font-mono text-[12.5px] text-stone mt-[4px]">{d.date}</div>
-                  </div>
-                  <span className="flex-1 font-mono text-[13px] uppercase tracking-[.1em] text-stone">
-                    {session.name || 'Rest'}
-                  </span>
-                </div>
-              );
+              return <RestDayRow key={session.id} short={d.short} date={d.date} />;
             }
 
             const isRace     = session.session_type === 'RACE';

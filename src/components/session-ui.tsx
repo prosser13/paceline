@@ -166,6 +166,41 @@ export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; v
   );
 }
 
+// ── Rest day row (design E: dashed sheets + bed watermark) ───
+
+const REST_SHEETS = 'repeating-linear-gradient(135deg,#fbf8f2,#fbf8f2 9px,#f4efe4 9px,#f4efe4 18px)';
+
+function RestBed() {
+  return (
+    <svg width={76} height={76} viewBox="0 0 24 24" fill="none" stroke="#5f5a50"
+         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.09 }} aria-hidden="true">
+      <path d="M3 18 v-4 h18 v4" />
+      <path d="M3 14 v-4" />
+      <path d="M6 14 q3 -3 6 0" />
+      <path d="M3 18 h18" />
+      <path d="M3 18 v2 M21 18 v2" />
+    </svg>
+  );
+}
+
+export function RestDayRow({ short, date }: { short: string; date: string }) {
+  return (
+    <div className="px-[10px] py-[6px]">
+      <div className="relative overflow-hidden flex items-center gap-[14px] rounded-[8px] px-[14px] py-[12px]"
+           style={{ border: '1px dashed #c9c2b2', background: REST_SHEETS }}>
+        <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 pointer-events-none">
+          <RestBed />
+        </div>
+        <div className="w-[46px] shrink-0 relative">
+          <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
+          <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
+        </div>
+        <span className="relative flex-1 font-mono text-[13px] tracking-[.1em] uppercase text-stone">Rest day</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Metric block (time-led) ──────────────────────────────────
 
 const METRIC_SIZE = {
