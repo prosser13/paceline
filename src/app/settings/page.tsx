@@ -43,6 +43,31 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Zone type</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Choose which zones the app uses to build and display sessions.
+            </p>
+            <div className="flex items-start gap-3">
+              <span className="bg-oxblood text-bone border border-oxblood rounded-[8px] px-[18px] py-[9px] text-[14px] font-medium select-none">
+                Pace
+              </span>
+              <div className="flex flex-col items-center gap-[5px]">
+                <span
+                  aria-disabled="true"
+                  className="bg-bone border border-fog rounded-[8px] px-[18px] py-[9px] text-[14px] text-stone/40 cursor-not-allowed select-none"
+                >
+                  Heart rate
+                </span>
+                <span className="font-mono text-[10px] uppercase tracking-[.1em] text-stone/50">coming soon</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
             <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Pace zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
