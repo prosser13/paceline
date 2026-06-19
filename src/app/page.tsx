@@ -75,12 +75,21 @@ export default async function DashboardPage() {
 
   const todaySession = (todaySessions?.[0] ?? null) as PlanSession | null;
 
-  // Coming up — next 6 days
+  // Tomorrow's session — its own hero card
+  const tomorrowStr = isoDate(addDays(today, 1));
+  const { data: tomorrowSessions } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('*')
+    .eq('scheduled_date', tomorrowStr)
+    .order('am_pm', { ascending: true });
+  const tomorrowSession = (tomorrowSessions?.[0] ?? null) as PlanSession | null;
+
+  // Coming up — the days after tomorrow
   const { data: upcoming } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
-    .gt('scheduled_date', todayStr)
-    .lte('scheduled_date', isoDate(addDays(today, 6)))
+    .gt('scheduled_date', tomorrowStr)
+    .lte('scheduled_date', isoDate(addDays(today, 7)))
     .order('scheduled_date', { ascending: true })
     .order('am_pm', { ascending: true });
 
@@ -93,7 +102,7 @@ export default async function DashboardPage() {
     byDate.set(s.scheduled_date, list);
   }
   const upcomingWithRest: PlanSession[] = [];
-  for (let i = 1; i <= 6; i++) {
+  for (let i = 2; i <= 7; i++) {
     const date = isoDate(addDays(today, i));
     const daySessions = byDate.get(date);
     if (daySessions?.length) {
@@ -250,18 +259,29 @@ export default async function DashboardPage() {
 
         {/* Today hero */}
         {todaySession ? (
-          <TodayHero session={todaySession} thresholdPace={thresholdPace} zones={zones} completed={todayCompleted} />
+          <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} completed={todayCompleted} />
         ) : (
-          <div className="border border-fog rounded-[18px] bg-paper p-[22px_26px] mb-[26px] text-stone text-[16px]">
-            No session scheduled for today.
+          <div className="border border-fog border-l-[4px] border-l-oxblood rounded-[18px] bg-paper p-[22px_26px] mb-[18px]">
+            <span className="font-display font-semibold text-[22px] uppercase tracking-[.04em] text-oxblood">Today</span>
+            <p className="text-stone text-[16px] mt-[6px]">No session scheduled — rest day.</p>
+          </div>
+        )}
+
+        {/* Tomorrow hero */}
+        {tomorrowSession ? (
+          <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} completed={null} />
+        ) : (
+          <div className="border border-fog border-l-[4px] border-l-marine rounded-[18px] bg-paper p-[22px_26px] mb-[18px]">
+            <span className="font-display font-semibold text-[22px] uppercase tracking-[.04em] text-marine">Tomorrow</span>
+            <p className="text-stone text-[16px] mt-[6px]">No session scheduled — rest day.</p>
           </div>
         )}
 
         {/* Coming up */}
         {upcomingWithRest.length > 0 && (
-          <div className="mb-6">
+          <div className="mb-6 mt-6">
             <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px] m-0">
-              Coming up · next 6 days
+              Coming up
             </p>
             <div className="border border-fog rounded-[14px] bg-paper overflow-hidden divide-y divide-fog/50">
               {upcomingWithRest.map(s => (
@@ -351,9 +371,16 @@ function VsStat({ label, value, delta, deltaClass }: {
 
 /* ── Sub-components ────────────────────────────────────────── */
 
-function TodayHero({
-  session, thresholdPace, zones, completed,
+const HERO_ACCENT: Record<string, { rail: string; text: string }> = {
+  oxblood: { rail: 'border-l-oxblood', text: 'text-oxblood' },
+  marine:  { rail: 'border-l-marine',  text: 'text-marine' },
+  fern:    { rail: 'border-l-fern',    text: 'text-fern' },
+};
+
+function SessionHero({
+  label, session, thresholdPace, zones, completed,
 }: {
+  label: 'Today' | 'Tomorrow';
   session: PlanSession;
   thresholdPace: string;
   zones: ZoneMap;
@@ -370,6 +397,7 @@ function TodayHero({
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
   const isDone     = !!completed;
+  const accent     = HERO_ACCENT[isDone ? 'fern' : label === 'Today' ? 'oxblood' : 'marine'];
 
   const displayDuration = isDone && completed!.durationStr ? completed!.durationStr : plannedDur;
   const displayTss      = isDone && completed!.tss != null ? completed!.tss : session.estimated_tss ?? null;
@@ -387,14 +415,17 @@ function TodayHero({
   const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
 
   return (
-    <div className={`border border-fog border-l-[4px] bg-paper rounded-[18px] p-[22px_26px] mb-[26px] ${isDone ? 'border-l-fern' : 'border-l-oxblood'}`}>
+    <div className={`border border-fog border-l-[4px] bg-paper rounded-[18px] p-[22px_26px] mb-[18px] ${accent.rail}`}>
       <div className="flex justify-between items-start gap-6">
         <div className="min-w-0">
-          <span className={`font-mono text-[15px] tracking-[.14em] uppercase flex items-center gap-[8px] ${isDone ? 'text-fern' : 'text-oxblood'}`}>
-            Today · {d.long}
-            {isDone && <span className="text-fern">✓ Completed</span>}
-          </span>
-          <h3 className="font-display font-semibold text-[34px] my-[7px_5px] leading-tight">
+          <div className="flex items-baseline gap-[10px] flex-wrap">
+            <span className={`font-display font-semibold text-[22px] uppercase tracking-[.04em] leading-none ${accent.text}`}>
+              {label}
+            </span>
+            <span className="font-mono text-[13px] text-stone">{d.long}</span>
+            {isDone && <span className="font-mono text-[13px] text-fern">✓ Completed</span>}
+          </div>
+          <h3 className="font-display font-semibold text-[30px] my-[7px_5px] leading-tight">
             {session.name}
           </h3>
           {session.description && (
@@ -443,7 +474,7 @@ function TodayHero({
       </div>
 
       {session.rationale && (
-        <p className={`text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${isDone ? 'border-l-fern' : 'border-l-oxblood'}`}>
+        <p className={`text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${accent.rail}`}>
           {session.rationale}
         </p>
       )}
@@ -457,7 +488,7 @@ function TodayHero({
 
       {isDone ? (
         <div className="mt-[18px] font-mono text-[13px] text-stone">Logged from Strava</div>
-      ) : (
+      ) : label === 'Today' ? (
         <div className="mt-[18px]">
           <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
           <div className="flex flex-wrap gap-2">
@@ -471,7 +502,7 @@ function TodayHero({
             ))}
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
