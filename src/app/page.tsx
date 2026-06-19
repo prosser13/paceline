@@ -261,9 +261,11 @@ export default async function DashboardPage() {
         {todaySession ? (
           <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} completed={todayCompleted} />
         ) : (
-          <div className="border border-fog border-l-[4px] border-l-oxblood rounded-[18px] bg-paper p-[22px_26px] mb-[18px]">
-            <span className="font-display font-semibold text-[22px] uppercase tracking-[.04em] text-oxblood">Today</span>
-            <p className="text-stone text-[16px] mt-[6px]">No session scheduled — rest day.</p>
+          <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
+            <div className="px-[26px] py-[12px]" style={{ background: '#8c2b2b', color: BONE }}>
+              <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Today</span>
+            </div>
+            <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
           </div>
         )}
 
@@ -271,9 +273,11 @@ export default async function DashboardPage() {
         {tomorrowSession ? (
           <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} completed={null} />
         ) : (
-          <div className="border border-fog border-l-[4px] border-l-marine rounded-[18px] bg-paper p-[22px_26px] mb-[18px]">
-            <span className="font-display font-semibold text-[22px] uppercase tracking-[.04em] text-marine">Tomorrow</span>
-            <p className="text-stone text-[16px] mt-[6px]">No session scheduled — rest day.</p>
+          <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
+            <div className="px-[26px] py-[12px]" style={{ background: '#14617e', color: BONE }}>
+              <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Tomorrow</span>
+            </div>
+            <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
           </div>
         )}
 
@@ -371,10 +375,12 @@ function VsStat({ label, value, delta, deltaClass }: {
 
 /* ── Sub-components ────────────────────────────────────────── */
 
-const HERO_ACCENT: Record<string, { rail: string; text: string }> = {
-  oxblood: { rail: 'border-l-oxblood', text: 'text-oxblood' },
-  marine:  { rail: 'border-l-marine',  text: 'text-marine' },
-  fern:    { rail: 'border-l-fern',    text: 'text-fern' },
+const BONE = '#f4efe4';
+
+const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
+  oxblood: { rail: 'border-l-oxblood', solid: '#8c2b2b' },
+  marine:  { rail: 'border-l-marine',  solid: '#14617e' },
+  fern:    { rail: 'border-l-fern',    solid: '#4f7a52' },
 };
 
 function SessionHero({
@@ -415,17 +421,20 @@ function SessionHero({
   const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
 
   return (
-    <div className={`border border-fog border-l-[4px] bg-paper rounded-[18px] p-[22px_26px] mb-[18px] ${accent.rail}`}>
+    <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
+      {/* Full-width coloured header bar */}
+      <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
+        <div className="flex items-center gap-[12px] font-mono text-[13px]">
+          <span style={{ opacity: 0.8 }}>{d.long}</span>
+          {isDone && <span>✓ Completed</span>}
+        </div>
+      </div>
+
+      <div className="p-[22px_26px]">
       <div className="flex justify-between items-start gap-6">
         <div className="min-w-0">
-          <div className="flex items-baseline gap-[10px] flex-wrap">
-            <span className={`font-display font-semibold text-[22px] uppercase tracking-[.04em] leading-none ${accent.text}`}>
-              {label}
-            </span>
-            <span className="font-mono text-[13px] text-stone">{d.long}</span>
-            {isDone && <span className="font-mono text-[13px] text-fern">✓ Completed</span>}
-          </div>
-          <h3 className="font-display font-semibold text-[30px] my-[7px_5px] leading-tight">
+          <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
             {session.name}
           </h3>
           {session.description && (
@@ -509,6 +518,7 @@ function SessionHero({
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
