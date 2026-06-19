@@ -174,17 +174,14 @@ export default async function DashboardPage() {
     .gte('date_to', todayStr)
     .single();
 
-  // Planned km this week — actual sum of Mon–Fri sessions (not the stored estimate)
+  // Planned km this week — actual sum of the full week's sessions (not the stored estimate)
   let weekPlannedKm: number | null = null;
-  if (weekRow?.date_from) {
-    const friD = new Date(weekRow.date_from + 'T12:00:00');
-    friD.setDate(friD.getDate() + 4);
-    const friStr = `${friD.getFullYear()}-${String(friD.getMonth() + 1).padStart(2, '0')}-${String(friD.getDate()).padStart(2, '0')}`;
+  if (weekRow?.date_from && weekRow?.date_to) {
     const { data: weekSessions } = await supabaseAdmin
       .from('plan_sessions')
       .select('distance_km')
       .gte('scheduled_date', weekRow.date_from)
-      .lte('scheduled_date', friStr);
+      .lte('scheduled_date', weekRow.date_to);
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
   }
 
