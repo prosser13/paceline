@@ -93,6 +93,7 @@ function PhaseLine({ seg }: { seg: NormSegment }) {
   const perf      = segmentPerformance(seg);
   const perfColor = perf ? PERF_COLOR[perf] : undefined;
   const actual    = seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : null;
+  const actualLine = perf === 'missed' ? 'missed' : (actual ? `ran ${actual}` : null);
 
   return (
     <div className="py-[6px]">
@@ -108,8 +109,8 @@ function PhaseLine({ seg }: { seg: NormSegment }) {
         </span>
         <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
           <span className="block text-ink">{paceStr}</span>
-          {actual && (
-            <span className="block text-[12px]" style={{ color: perfColor }}>ran {actual}</span>
+          {actualLine && (
+            <span className="block text-[12px]" style={{ color: perfColor }}>{actualLine}</span>
           )}
         </span>
         <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">

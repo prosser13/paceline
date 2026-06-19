@@ -229,16 +229,20 @@ export function expandSegmentDistances(structure: any[] | null | undefined): num
 }
 
 // Actual pacing vs the segment's target zone window.
-export type SegmentPerf = 'ahead' | 'on' | 'behind';
+export type SegmentPerf = 'ahead' | 'on' | 'behind' | 'missed';
 
 export const PERF_COLOR: Record<SegmentPerf, string> = {
   ahead:  '#14617e', // faster than the window
   on:     '#4f7a52', // within the window
   behind: '#c75b33', // slower than the window
+  missed: '#a9a193', // completed run, but this segment wasn't covered
 };
 
+// Returns null when the session isn't completed (no actuals at all); 'missed'
+// when completed but this segment fell beyond the actual distance.
 export function segmentPerformance(seg: NormSegment): SegmentPerf | null {
-  if (seg.actualPaceSec == null) return null;
+  if (seg.actualPaceSec === undefined) return null;
+  if (seg.actualPaceSec === null) return 'missed';
   const fast = paceToSeconds(seg.paceMin);
   const slow = paceToSeconds(seg.paceMax);
   if (fast == null || slow == null) return null;

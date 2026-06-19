@@ -126,7 +126,7 @@ export default async function DashboardPage() {
 
   // Is today's session already completed (matched to a Strava activity)?
   let todayCompleted: {
-    durationStr: string; tss: number | null; distanceKm: number | null;
+    durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null;
     segmentActuals: (number | null)[] | null;
   } | null = null;
   if (todaySession) {
@@ -149,7 +149,7 @@ export default async function DashboardPage() {
         tss = Math.round((mins / 60) * IF * IF * 100);
       }
       todayCompleted = {
-        durationStr, tss,
+        durationStr, mins, tss,
         distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
         segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
       };
@@ -322,6 +322,33 @@ function formLabel(form: number): string {
   return 'Fatigued — ease off soon';
 }
 
+// Magnitude-based delta colour (neutral when close to plan)
+function devClass(pct: number | null): string {
+  if (pct == null) return 'text-stone';
+  const a = Math.abs(pct);
+  if (a < 0.10) return 'text-stone';
+  if (a < 0.20) return 'text-ember';
+  return 'text-oxblood';
+}
+
+function signedTime(deltaMin: number): string {
+  const sign   = deltaMin >= 0 ? '+' : '−';
+  const absSec = Math.round(Math.abs(deltaMin) * 60);
+  return `${sign}${Math.floor(absSec / 60)}:${String(absSec % 60).padStart(2, '0')}`;
+}
+
+function VsStat({ label, value, delta, deltaClass }: {
+  label: string; value: string; delta: string | null; deltaClass: string;
+}) {
+  return (
+    <div className="text-right">
+      <div className="font-mono text-[10px] uppercase tracking-[.08em] text-stone">{label}</div>
+      <div className="font-mono text-[15px] text-ink leading-tight mt-[2px]">{value}</div>
+      {delta && <div className={`font-mono text-[12px] mt-[1px] ${deltaClass}`}>{delta}</div>}
+    </div>
+  );
+}
+
 /* ── Sub-components ────────────────────────────────────────── */
 
 function TodayHero({
@@ -330,7 +357,7 @@ function TodayHero({
   session: PlanSession;
   thresholdPace: string;
   zones: ZoneMap;
-  completed: { durationStr: string; tss: number | null; distanceKm: number | null; segmentActuals: (number | null)[] | null } | null;
+  completed: { durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null; segmentActuals: (number | null)[] | null } | null;
 }) {
   const d         = formatDay(session.scheduled_date);
   const intensity = (session.intensity as string | null) ?? 'easy';
@@ -347,6 +374,18 @@ function TodayHero({
   const displayDuration = isDone && completed!.durationStr ? completed!.durationStr : plannedDur;
   const displayTss      = isDone && completed!.tss != null ? completed!.tss : session.estimated_tss ?? null;
 
+  // vs-plan deltas (completed only)
+  const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;
+  const distActual  = completed?.distanceKm ?? null;
+  const distDelta   = distActual != null && distPlanned != null ? distActual - distPlanned : null;
+
+  const plannedMins = plannedSec > 0 ? plannedSec / 60 : null;
+  const timeDelta   = completed?.mins != null && plannedMins != null ? completed.mins - plannedMins : null;
+
+  const tssPlanned  = session.estimated_tss ?? null;
+  const tssActual   = completed?.tss ?? null;
+  const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
+
   return (
     <div className={`border border-fog border-l-[4px] bg-paper rounded-[18px] p-[22px_26px] mb-[26px] ${isDone ? 'border-l-fern' : 'border-l-oxblood'}`}>
       <div className="flex justify-between items-start gap-6">
@@ -362,14 +401,44 @@ function TodayHero({
             <div className="text-[15px] text-stone">{session.description}</div>
           )}
         </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <ProfileChart
-            bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
-            size="lg"
-            color={INTENSITY[intensity]?.hex ?? '#17191e'}
-            opacity={segActuals ? 0.9 : 0.6}
-          />
-          <MetricBlock duration={displayDuration} tss={displayTss} estimated={!isDone} size="lg" />
+        <div className="flex flex-col items-end gap-[14px] shrink-0">
+          <div className="flex items-center gap-4">
+            <ProfileChart
+              bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
+              size="lg"
+              color={INTENSITY[intensity]?.hex ?? '#17191e'}
+              opacity={segActuals ? 0.9 : 0.6}
+            />
+            <MetricBlock duration={displayDuration} tss={displayTss} estimated={!isDone} size="lg" />
+          </div>
+
+          {isDone && (
+            <div className="border-t border-fog pt-[10px] w-full">
+              <div className="font-mono text-[10px] uppercase tracking-[.12em] text-stone mb-[7px] text-right">
+                Vs planned
+              </div>
+              <div className="flex gap-[20px] justify-end">
+                <VsStat
+                  label="Distance"
+                  value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
+                  delta={distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)} km` : null}
+                  deltaClass={devClass(distDelta != null && distPlanned ? distDelta / distPlanned : null)}
+                />
+                <VsStat
+                  label="Time"
+                  value={displayDuration ?? '—'}
+                  delta={timeDelta != null ? signedTime(timeDelta) : null}
+                  deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)}
+                />
+                <VsStat
+                  label="Load"
+                  value={tssActual != null ? `${tssActual} TSS` : '—'}
+                  delta={tssDelta != null ? `${tssDelta >= 0 ? '+' : '−'}${Math.abs(tssDelta)}` : null}
+                  deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -387,12 +456,7 @@ function TodayHero({
       )}
 
       {isDone ? (
-        <div className="mt-[18px] font-mono text-[14px] text-stone">
-          Logged from Strava
-          {completed!.distanceKm != null ? ` · ${completed!.distanceKm} km` : ''}
-          {completed!.durationStr ? ` · ${completed!.durationStr}` : ''}
-          {completed!.tss != null ? ` · ${completed!.tss} TSS` : ''}
-        </div>
+        <div className="mt-[18px] font-mono text-[13px] text-stone">Logged from Strava</div>
       ) : (
         <div className="mt-[18px]">
           <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
