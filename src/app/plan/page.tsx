@@ -31,6 +31,21 @@ interface PlanWeek {
   planned_volume_km?: number | null;
   date_from: string;
   date_to: string;
+  plan_id?: number | null;
+}
+
+interface PlanRow {
+  id: number;
+  name: string;
+  slug: string | null;
+  kind: string;
+  race_date: string | null;
+  distance_km: number | null;
+  target_time: string | null;
+  target_pace: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  status: 'archived' | 'active' | 'future';
 }
 
 const PHASE_COLOR: Record<string, { bar: string; label: string }> = {
@@ -125,7 +140,25 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     return true;
   })?.id ?? null;
 
-  const aRace = allSessions.find(s => s.session_type === 'RACE' && s.name === 'Dragon 50 Ultra');
+  // Derive plan status from dates: archived (ended) / active (spans today) / future.
+  const planRows = (plans ?? []) as Omit<PlanRow, 'status'>[];
+  const withStatus: PlanRow[] = planRows.map(p => {
+    let status: PlanRow['status'];
+    if (p.end_date && p.end_date < todayStr) status = 'archived';
+    else if (p.start_date && p.end_date && p.start_date <= todayStr && todayStr <= p.end_date) status = 'active';
+    else status = 'future';
+    return { ...p, status };
+  });
+
+  const activePlan  = withStatus.find(p => p.status === 'active') ?? null;
+  const futurePlans = withStatus
+    .filter(p => p.status === 'future')
+    .sort((a, b) => ((a.start_date ?? '') < (b.start_date ?? '') ? -1 : 1));
+
+  // ?plan=<slug> filters the page to one plan; default view is the active plan.
+  const selectedPlan = planParam ? withStatus.find(p => p.slug === planParam) ?? null : null;
+  const viewPlan  = selectedPlan ?? activePlan;
+  const viewWeeks = viewPlan ? allWeeks.filter(w => w.plan_id === viewPlan.id) : [];
 
   const byWeek = allSessions.reduce<Record<number, PlanSession[]>>((acc, s) => {
     (acc[s.week_number] ??= []).push(s);
@@ -134,7 +167,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
   // Fill empty days of the current and future weeks with rest days (render-only,
   // not persisted). Past weeks are left as-is.
-  for (const w of allWeeks) {
+  for (const w of viewWeeks) {
     if (w.date_to < todayStr) continue;
     const wk = (byWeek[w.week_number] ??= []);
     const have = new Set(wk.map(s => s.scheduled_date));
@@ -153,14 +186,14 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   }
 
   // Phase bar — merge consecutive same-phase weeks into proportional segments
-  const planStart = allWeeks[0]?.date_from;
-  const planEnd   = allWeeks[allWeeks.length - 1]?.date_to;
+  const planStart = viewWeeks[0]?.date_from;
+  const planEnd   = viewWeeks[viewWeeks.length - 1]?.date_to;
   const phaseSegments: { phase: string; pct: number }[] = [];
 
   if (planStart && planEnd) {
     const totalMs = new Date(planEnd   + 'T00:00:00').getTime()
                   - new Date(planStart + 'T00:00:00').getTime() + 86400000;
-    for (const w of allWeeks) {
+    for (const w of viewWeeks) {
       const wMs  = new Date(w.date_to   + 'T00:00:00').getTime()
                  - new Date(w.date_from + 'T00:00:00').getTime() + 86400000;
       const pct  = (wMs / totalMs) * 100;
@@ -178,8 +211,8 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     : null;
 
   // Past weeks collapse into a single greyed accordion; current + future stay open
-  const pastWeeks   = allWeeks.filter(w => w.date_to < todayStr);
-  const futureWeeks = allWeeks.filter(w => w.date_to >= todayStr);
+  const pastWeeks   = viewWeeks.filter(w => w.date_to < todayStr);
+  const futureWeeks = viewWeeks.filter(w => w.date_to >= todayStr);
   const pastLabel = pastWeeks.length === 1
     ? `Week ${pastWeeks[0].week_number} · done`
     : pastWeeks.length > 1
@@ -201,105 +234,96 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     />
   );
 
-  // ?plan=<slug> filters the page: a future plan's slug shows only that plan;
-  // no param shows the full current plan (Dragon 50) + future race blocks.
-  const selectedFuture = planParam ? (plans ?? []).find(p => p.slug === planParam) ?? null : null;
-  const showFutureBlocks = !planParam;
+  const planBlock = (p: PlanRow) => (
+    <RaceBlock
+      name={p.name}
+      kind={p.kind}
+      raceDate={p.race_date}
+      startDate={p.start_date}
+      endDate={p.end_date}
+      distanceKm={p.distance_km}
+      targetTime={p.target_time}
+      targetPace={p.target_pace}
+    />
+  );
+
+  const phaseBar = phaseSegments.length > 0 && (
+    <div className="mb-7">
+      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] mb-[10px]">
+        {phaseSegments.map((seg, i) => (
+          <span key={i} className="flex items-center gap-[5px]">
+            <i className={`inline-block w-[8px] h-[8px] rounded-[2px] ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`} />
+            <span className={`font-mono text-[12px] tracking-[.1em] uppercase ${PHASE_COLOR[seg.phase]?.label ?? 'text-stone'}`}>
+              {seg.phase}
+            </span>
+          </span>
+        ))}
+        {planStart && planEnd && (
+          <span className="font-mono text-[12px] text-stone ml-auto">
+            {shortDate(planStart)} – {shortDate(planEnd)}
+          </span>
+        )}
+      </div>
+      <div className="relative h-[6px] rounded-full bg-fog overflow-hidden">
+        <div className="absolute inset-0 flex">
+          {phaseSegments.map((seg, i) => (
+            <div
+              key={i}
+              className={`h-full opacity-80 ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`}
+              style={{ width: `${seg.pct}%` }}
+            />
+          ))}
+        </div>
+        {todayPct != null && (
+          <div
+            className="absolute top-[-2px] bottom-[-2px] w-[2px] bg-oxblood rounded-full"
+            style={{ left: `${todayPct}%` }}
+          />
+        )}
+      </div>
+    </div>
+  );
+
+  const weeksSection = (
+    <>
+      {phaseBar}
+      <div className="flex flex-col gap-[10px]">
+        {pastWeeks.length > 0 && (
+          <PastWeeksAccordion label={pastLabel}>
+            {pastWeeks.map(renderWeek)}
+          </PastWeeksAccordion>
+        )}
+        {futureWeeks.map(renderWeek)}
+      </div>
+    </>
+  );
+
+  const notBuilt = (
+    <div className="mt-6 border border-fog rounded-[14px] bg-paper px-[22px] py-[44px] text-center">
+      <p className="text-stone text-[15px]">This plan hasn&apos;t been built yet.</p>
+    </div>
+  );
 
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
 
-      {selectedFuture ? (
+      {selectedPlan ? (
+        // A specific plan was requested via ?plan=slug
         <>
-          <RaceBlock
-            name={selectedFuture.name}
-            raceDate={selectedFuture.race_date}
-            distanceKm={selectedFuture.distance_km}
-            targetTime={selectedFuture.target_time}
-            targetPace={selectedFuture.target_pace}
-          />
-          <div className="mt-6 border border-fog rounded-[14px] bg-paper px-[22px] py-[44px] text-center">
-            <p className="text-stone text-[15px]">This plan hasn&apos;t been built yet.</p>
+          {planBlock(selectedPlan)}
+          <div className="mt-6">
+            {viewWeeks.length > 0 ? weeksSection : notBuilt}
           </div>
         </>
       ) : (
+        // Default view: active plan + its weeks, then future-plan teasers
         <>
-
-        {/* A-race block (current plan) */}
-        {aRace && (
-          <div className="mb-6">
-            <RaceBlock
-              name={aRace.name}
-              raceDate={aRace.scheduled_date}
-              distanceKm={aRace.distance_km ?? null}
-              targetTime={aRace.estimated_duration ?? null}
-              targetPace={aRace.target_pace ?? null}
-            />
-          </div>
-        )}
-
-        {/* Phase bar */}
-        {phaseSegments.length > 0 && (
-          <div className="mb-7">
-            <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] mb-[10px]">
-              {phaseSegments.map((seg, i) => (
-                <span key={i} className="flex items-center gap-[5px]">
-                  <i className={`inline-block w-[8px] h-[8px] rounded-[2px] ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`} />
-                  <span className={`font-mono text-[12px] tracking-[.1em] uppercase ${PHASE_COLOR[seg.phase]?.label ?? 'text-stone'}`}>
-                    {seg.phase}
-                  </span>
-                </span>
-              ))}
-              {planStart && planEnd && (
-                <span className="font-mono text-[12px] text-stone ml-auto">
-                  {shortDate(planStart)} – {shortDate(planEnd)}
-                </span>
-              )}
-            </div>
-            <div className="relative h-[6px] rounded-full bg-fog overflow-hidden">
-              <div className="absolute inset-0 flex">
-                {phaseSegments.map((seg, i) => (
-                  <div
-                    key={i}
-                    className={`h-full opacity-80 ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`}
-                    style={{ width: `${seg.pct}%` }}
-                  />
-                ))}
-              </div>
-              {todayPct != null && (
-                <div
-                  className="absolute top-[-2px] bottom-[-2px] w-[2px] bg-oxblood rounded-full"
-                  style={{ left: `${todayPct}%` }}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Week accordions — past collapsed, current + future open */}
-        <div className="flex flex-col gap-[10px]">
-          {pastWeeks.length > 0 && (
-            <PastWeeksAccordion label={pastLabel}>
-              {pastWeeks.map(renderWeek)}
-            </PastWeeksAccordion>
-          )}
-          {futureWeeks.map(renderWeek)}
-        </div>
-
-        {/* Future A-race blocks (their own plans, built later) */}
-        {showFutureBlocks && (plans ?? []).map(p => (
-          <div key={p.id} className="mt-8">
-            <RaceBlock
-              name={p.name}
-              raceDate={p.race_date}
-              distanceKm={p.distance_km}
-              targetTime={p.target_time}
-              targetPace={p.target_pace}
-            />
-          </div>
-        ))}
-
+          {activePlan && <div className="mb-6">{planBlock(activePlan)}</div>}
+          {viewWeeks.length > 0 ? weeksSection : (!activePlan && notBuilt)}
+          {futurePlans.map(p => (
+            <div key={p.id} className="mt-8">{planBlock(p)}</div>
+          ))}
         </>
       )}
 

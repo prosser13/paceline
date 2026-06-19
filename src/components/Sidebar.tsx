@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import PacelineMark from './PacelineMark';
 
-const PLANS = [
-  { slug: 'dragon-50',       label: 'Dragon 50' },
-  { slug: 'malaga-marathon', label: 'Malaga Marathon' },
-];
-
-export default function Sidebar() {
+export default function Sidebar({
+  plans = [],
+  hasArchive = false,
+}: {
+  plans?: { slug: string; label: string }[];
+  hasArchive?: boolean;
+}) {
   const pathname = usePathname();
   const planParam = useSearchParams().get('plan');
 
@@ -49,12 +50,23 @@ export default function Sidebar() {
         Plan
       </Link>
       <div className="ml-[18px] flex flex-col gap-1">
-        {PLANS.map(p => (
+        {plans.map(p => (
           <Link key={p.slug} href={`/plan?plan=${p.slug}`} className={planClass(p.slug)}>
             <span className="w-[6px] h-[6px] rounded-[2px] bg-oxblood/60 flex-shrink-0" />
             {p.label}
           </Link>
         ))}
+        {hasArchive && (
+          <Link
+            href="/plan/archive"
+            className={`flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-colors ${
+              pathname === '/plan/archive' ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+            }`}
+          >
+            <span className="w-[6px] h-[6px] rounded-[2px] bg-stone/50 flex-shrink-0" />
+            Archive
+          </Link>
+        )}
       </div>
 
       <div className="mt-auto">
