@@ -4,10 +4,11 @@ import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
-import type { ZoneInput } from './actions';
+import HrZonesClient from './HrZonesClient';
+import type { ZoneInput, HrZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [{ data: strava }, { data: config }, { data: paceZones }] = await Promise.all([
+  const [{ data: strava }, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }] = await Promise.all([
     supabaseAdmin
       .from('strava_connection')
       .select('athlete_name, connected_at, last_synced_at')
@@ -15,6 +16,8 @@ export default async function SettingsPage() {
       .single(),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('hr_config').select('*').eq('id', 1).maybeSingle(),
+    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
   ]);
 
   const threshold = config?.threshold_pace_per_km ?? '3:40';
@@ -22,6 +25,15 @@ export default async function SettingsPage() {
     name:     z.name,
     pace_min: z.pace_min,
     pace_max: z.pace_max,
+  }));
+
+  const hrThreshold = hrConfig?.threshold_hr != null ? String(hrConfig.threshold_hr) : '';
+  const hrMax       = hrConfig?.max_hr != null ? String(hrConfig.max_hr) : '';
+  const hrResting   = hrConfig?.resting_hr != null ? String(hrConfig.resting_hr) : '';
+  const hrZoneInputs: HrZoneInput[] = (hrZones ?? []).map(z => ({
+    name:   z.name,
+    hr_min: String(z.hr_min),
+    hr_max: String(z.hr_max),
   }));
 
   return (
@@ -39,6 +51,23 @@ export default async function SettingsPage() {
               derived from these windows, so editing a zone updates every session.
             </p>
             <ZonesClient initialThreshold={threshold} initialZones={zones} />
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Heart rate zones</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Your heart-rate threshold, max and resting values, plus zone ranges in bpm.
+            </p>
+            <HrZonesClient
+              initialThreshold={hrThreshold}
+              initialMax={hrMax}
+              initialResting={hrResting}
+              initialZones={hrZoneInputs}
+            />
           </div>
         </section>
 

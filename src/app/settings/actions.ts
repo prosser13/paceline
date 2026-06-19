@@ -39,3 +39,43 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
 
   return { ok: true };
 }
+
+export interface HrZoneInput {
+  name: string;
+  hr_min: string;
+  hr_max: string;
+}
+
+const toInt = (s: string): number | null => (s.trim() ? Number(s) : null);
+
+export async function saveHrZones(
+  threshold: string, max: string, resting: string, zones: HrZoneInput[],
+) {
+  await supabaseAdmin.from('hr_config').upsert({
+    id:           1,
+    threshold_hr: toInt(threshold),
+    max_hr:       toInt(max),
+    resting_hr:   toInt(resting),
+  });
+
+  // Replace the zone set (supports add/remove). Keys are assigned by order.
+  await supabaseAdmin.from('hr_zones').delete().gte('sort_order', 0);
+
+  const rows = zones
+    .filter(z => z.name.trim() || z.hr_min.trim() || z.hr_max.trim())
+    .map((z, i) => ({
+      zone_key:   `Z${i + 1}`,
+      name:       z.name.trim() || `Zone ${i + 1}`,
+      hr_min:     toInt(z.hr_min) ?? 0,
+      hr_max:     toInt(z.hr_max) ?? 0,
+      sort_order: i + 1,
+    }));
+
+  if (rows.length) {
+    await supabaseAdmin.from('hr_zones').insert(rows);
+  }
+
+  revalidatePath('/settings');
+
+  return { ok: true };
+}
