@@ -4,7 +4,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM,
+  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS,
 } from '@/components/session-ui';
 import ExpandableSessionRow from './ExpandableSessionRow';
 import { supabaseAdmin } from '@/lib/supabase-admin';
@@ -361,13 +361,13 @@ function signedTime(deltaMin: number): string {
   return `${sign}${Math.floor(absSec / 60)}:${String(absSec % 60).padStart(2, '0')}`;
 }
 
-function VsStat({ label, value, delta, deltaClass }: {
-  label: string; value: string; delta: string | null; deltaClass: string;
+function VsStat({ label, value, delta, deltaClass, align = 'right' }: {
+  label: string; value: string; delta: string | null; deltaClass: string; align?: 'left' | 'right';
 }) {
   return (
-    <div className="text-right">
+    <div className={align === 'left' ? 'text-left' : 'text-right'}>
       <div className="font-mono text-[10px] uppercase tracking-[.08em] text-stone">{label}</div>
-      <div className="font-mono text-[15px] text-ink leading-tight mt-[2px]">{value}</div>
+      <div className="font-display font-semibold text-[20px] text-ink leading-tight mt-[2px]">{value}</div>
       {delta && <div className={`font-mono text-[12px] mt-[1px] ${deltaClass}`}>{delta}</div>}
     </div>
   );
@@ -420,6 +420,10 @@ function SessionHero({
   const tssActual   = completed?.tss ?? null;
   const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
 
+  const avgPaceStr  = completed?.mins != null && completed?.distanceKm
+    ? fmtMMSS((completed.mins * 60) / completed.distanceKm)
+    : null;
+
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Full-width coloured header bar */}
@@ -432,17 +436,58 @@ function SessionHero({
       </div>
 
       <div className="p-[22px_26px]">
-      <div className="flex justify-between items-start gap-6">
-        <div className="min-w-0">
-          <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
-            {session.name}
-          </h3>
-          {session.description && (
-            <div className="text-[15px] text-stone">{session.description}</div>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-[14px] shrink-0">
-          <div className="flex items-center gap-4">
+      {isDone ? (
+        <>
+          {/* Title + profile, then a full-width stat strip (no wasted middle) */}
+          <div className="flex items-start justify-between gap-6">
+            <div className="min-w-0">
+              <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
+                {session.name}
+              </h3>
+              {session.description && (
+                <div className="text-[15px] text-stone">{session.description}</div>
+              )}
+            </div>
+            <ProfileChart
+              bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
+              size="lg"
+              color={INTENSITY[intensity]?.hex ?? '#17191e'}
+              opacity={segActuals ? 0.9 : 0.6}
+            />
+          </div>
+          <div className="grid grid-cols-4 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
+            <VsStat align="left"
+              label="Distance"
+              value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
+              delta={distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)} km` : null}
+              deltaClass={devClass(distDelta != null && distPlanned ? distDelta / distPlanned : null)}
+            />
+            <VsStat align="left"
+              label="Time"
+              value={displayDuration ?? '—'}
+              delta={timeDelta != null ? signedTime(timeDelta) : null}
+              deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)}
+            />
+            <VsStat align="left"
+              label="Load"
+              value={tssActual != null ? `${tssActual} TSS` : '—'}
+              delta={tssDelta != null ? `${tssDelta >= 0 ? '+' : '−'}${Math.abs(tssDelta)}` : null}
+              deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)}
+            />
+            <VsStat align="left" label="Avg pace" value={avgPaceStr ? `${avgPaceStr}/km` : '—'} delta={null} deltaClass="" />
+          </div>
+        </>
+      ) : (
+        <div className="flex justify-between items-start gap-6">
+          <div className="min-w-0">
+            <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
+              {session.name}
+            </h3>
+            {session.description && (
+              <div className="text-[15px] text-stone">{session.description}</div>
+            )}
+          </div>
+          <div className="flex items-center gap-4 shrink-0">
             <ProfileChart
               bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
               size="lg"
@@ -451,42 +496,14 @@ function SessionHero({
             />
             <MetricBlock
               duration={displayDuration}
-              distanceKm={isDone ? distActual : distPlanned}
+              distanceKm={distPlanned}
               tss={displayTss}
-              estimated={!isDone}
+              estimated
               size="lg"
             />
           </div>
-
-          {isDone && (
-            <div className="border-t border-fog pt-[10px] w-full">
-              <div className="font-mono text-[10px] uppercase tracking-[.12em] text-stone mb-[7px] text-right">
-                Vs planned
-              </div>
-              <div className="flex gap-[20px] justify-end">
-                <VsStat
-                  label="Distance"
-                  value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
-                  delta={distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)} km` : null}
-                  deltaClass={devClass(distDelta != null && distPlanned ? distDelta / distPlanned : null)}
-                />
-                <VsStat
-                  label="Time"
-                  value={displayDuration ?? '—'}
-                  delta={timeDelta != null ? signedTime(timeDelta) : null}
-                  deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)}
-                />
-                <VsStat
-                  label="Load"
-                  value={tssActual != null ? `${tssActual} TSS` : '—'}
-                  delta={tssDelta != null ? `${tssDelta >= 0 ? '+' : '−'}${Math.abs(tssDelta)}` : null}
-                  deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)}
-                />
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {session.rationale && (
         <p className={`text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${accent.rail}`}>
