@@ -124,6 +124,31 @@ export default async function DashboardPage() {
     .maybeSingle();
   const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
 
+  // Is today's session already completed (matched to a Strava activity)?
+  let todayCompleted: { durationStr: string; tss: number | null; distanceKm: number | null } | null = null;
+  if (todaySession) {
+    const { data: cw } = await supabaseAdmin
+      .from('completed_workouts')
+      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km')
+      .eq('plan_session_id', todaySession.id)
+      .maybeSingle();
+    if (cw) {
+      const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
+      const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+      const durationStr = mins != null
+        ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
+        : '';
+      let tss: number | null = null;
+      if (mins != null && pace != null && pace > 0) {
+        const parts = thresholdPace.split(':').map(Number);
+        const threshMinKm = parts[0] + parts[1] / 60;
+        const IF = threshMinKm / pace;
+        tss = Math.round((mins / 60) * IF * IF * 100);
+      }
+      todayCompleted = { durationStr, tss, distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null };
+    }
+  }
+
   // Pace zones — paces/times across the dashboard derive from these (same as the plan page)
   const { data: paceZones } = await supabaseAdmin.from('pace_zones').select('*').order('sort_order');
   const zones: ZoneMap = {};
@@ -218,7 +243,7 @@ export default async function DashboardPage() {
 
         {/* Today hero */}
         {todaySession ? (
-          <TodayHero session={todaySession} thresholdPace={thresholdPace} zones={zones} />
+          <TodayHero session={todaySession} thresholdPace={thresholdPace} zones={zones} completed={todayCompleted} />
         ) : (
           <div className="border border-fog rounded-[18px] bg-paper p-[22px_26px] mb-[26px] text-stone text-[16px]">
             No session scheduled for today.
@@ -292,7 +317,14 @@ function formLabel(form: number): string {
 
 /* ── Sub-components ────────────────────────────────────────── */
 
-function TodayHero({ session, thresholdPace, zones }: { session: PlanSession; thresholdPace: string; zones: ZoneMap }) {
+function TodayHero({
+  session, thresholdPace, zones, completed,
+}: {
+  session: PlanSession;
+  thresholdPace: string;
+  zones: ZoneMap;
+  completed: { durationStr: string; tss: number | null; distanceKm: number | null } | null;
+}) {
   const d         = formatDay(session.scheduled_date);
   const intensity = (session.intensity as string | null) ?? 'easy';
   const steps     = normalizeStructure(
@@ -300,14 +332,19 @@ function TodayHero({ session, thresholdPace, zones }: { session: PlanSession; th
     zones,
   );
   const plannedSec = sumSegmentSeconds(steps);
-  const duration   = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+  const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+  const isDone     = !!completed;
+
+  const displayDuration = isDone && completed!.durationStr ? completed!.durationStr : plannedDur;
+  const displayTss      = isDone && completed!.tss != null ? completed!.tss : session.estimated_tss ?? null;
 
   return (
-    <div className="border border-fog border-l-[4px] border-l-oxblood bg-paper rounded-[18px] p-[22px_26px] mb-[26px]">
+    <div className={`border border-fog border-l-[4px] bg-paper rounded-[18px] p-[22px_26px] mb-[26px] ${isDone ? 'border-l-fern' : 'border-l-oxblood'}`}>
       <div className="flex justify-between items-start gap-6">
         <div className="min-w-0">
-          <span className="font-mono text-[15px] tracking-[.14em] uppercase text-oxblood">
+          <span className={`font-mono text-[15px] tracking-[.14em] uppercase flex items-center gap-[8px] ${isDone ? 'text-fern' : 'text-oxblood'}`}>
             Today · {d.long}
+            {isDone && <span className="text-fern">✓ Completed</span>}
           </span>
           <h3 className="font-display font-semibold text-[34px] my-[7px_5px] leading-tight">
             {session.name}
@@ -323,12 +360,12 @@ function TodayHero({ session, thresholdPace, zones }: { session: PlanSession; th
             color={INTENSITY[intensity]?.hex ?? '#17191e'}
             opacity={0.6}
           />
-          <MetricBlock duration={duration} tss={session.estimated_tss ?? null} estimated size="lg" />
+          <MetricBlock duration={displayDuration} tss={displayTss} estimated={!isDone} size="lg" />
         </div>
       </div>
 
       {session.rationale && (
-        <p className="text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] border-l-oxblood pl-[14px] max-w-[64ch] text-ink">
+        <p className={`text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${isDone ? 'border-l-fern' : 'border-l-oxblood'}`}>
           {session.rationale}
         </p>
       )}
@@ -340,19 +377,28 @@ function TodayHero({ session, thresholdPace, zones }: { session: PlanSession; th
         </div>
       )}
 
-      <div className="mt-[18px]">
-        <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
-        <div className="flex flex-wrap gap-2">
-          {['Short on time', 'Legs feel flat', "Can't today"].map(chip => (
-            <button
-              key={chip}
-              className="border border-fog bg-bone rounded-full px-[14px] py-[7px] text-[15px] text-ink cursor-pointer hover:border-stone transition-colors"
-            >
-              {chip}
-            </button>
-          ))}
+      {isDone ? (
+        <div className="mt-[18px] font-mono text-[14px] text-stone">
+          Logged from Strava
+          {completed!.distanceKm != null ? ` · ${completed!.distanceKm} km` : ''}
+          {completed!.durationStr ? ` · ${completed!.durationStr}` : ''}
+          {completed!.tss != null ? ` · ${completed!.tss} TSS` : ''}
         </div>
-      </div>
+      ) : (
+        <div className="mt-[18px]">
+          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
+          <div className="flex flex-wrap gap-2">
+            {['Short on time', 'Legs feel flat', "Can't today"].map(chip => (
+              <button
+                key={chip}
+                className="border border-fog bg-bone rounded-full px-[14px] py-[7px] text-[15px] text-ink cursor-pointer hover:border-stone transition-colors"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
