@@ -219,6 +219,10 @@ export function RestDayRow({ short, date }: { short: string; date: string }) {
         <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
       </div>
       <span className="relative flex-1 font-mono text-[13px] tracking-[.1em] uppercase text-stone">Rest day</span>
+      {/* Invisible metric spacer so the row matches a session row's height */}
+      <div className="invisible shrink-0" aria-hidden="true">
+        <MetricBlock duration="0:00" distanceKm={0} tss={0} estimated />
+      </div>
     </div>
   );
 }
