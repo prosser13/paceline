@@ -35,6 +35,7 @@ interface PlanSession {
   estimated_duration?: string | null;
   target_pace?: string | null;
   target_pace_end?: string | null;
+  priority?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
 }
@@ -76,12 +77,31 @@ function deviationClass(pct: number): string {
   return 'text-oxblood';
 }
 
-const PHASE_LABEL_CLASS: Record<string, string> = {
-  Base:  'text-marine',
-  Build: 'text-amber-dark',
-  Peak:  'text-ember',
-  Taper: 'text-fern',
+// Phase colour (hex) for the thick top border on each week card
+const PHASE_HEX: Record<string, string> = {
+  Base:  '#14617e',
+  Build: '#dfa01c',
+  Peak:  '#c75b33',
+  Taper: '#4f7a52',
 };
+
+// Race priority → badge colour
+const RACE_COLOR: Record<string, string> = {
+  A: '#8c2b2b',
+  B: '#b5790f',
+  C: '#14617e',
+};
+
+function RaceBadge({ priority }: { priority: string }) {
+  return (
+    <span
+      className="font-mono text-[11px] font-bold text-bone rounded-[4px] px-[6px] py-[2px] shrink-0"
+      style={{ background: RACE_COLOR[priority] ?? '#8c2b2b' }}
+    >
+      {priority}
+    </span>
+  );
+}
 
 // Thin left-rail colour per status — replaces full-row background washes
 const STATUS_RAIL: Record<SessionStatus, string> = {
@@ -161,7 +181,8 @@ export default function WeekAccordion({
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const totalKm    = sessions.reduce((s, sess) => s + (Number(sess.distance_km) || 0), 0);
-  const labelClass = PHASE_LABEL_CLASS[week.phase] ?? 'text-stone';
+  const phaseHex   = PHASE_HEX[week.phase] ?? '#8a857a';
+  const weekRace   = sessions.find(s => s.session_type === 'RACE' && s.priority)?.priority ?? null;
 
   // Header TSS — use actual for completed sessions, estimated for the rest
   let headerTss = 0;
@@ -179,29 +200,25 @@ export default function WeekAccordion({
   }
 
   return (
-    <div className="border border-fog rounded-[14px] overflow-hidden bg-paper">
+    <div className="border border-fog rounded-[14px] overflow-hidden bg-paper" style={{ borderTop: `4px solid ${phaseHex}` }}>
 
-      {/* Accordion header */}
+      {/* Accordion header — Week · Phase and date on one line, same size */}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-[18px] py-[14px] bg-paper hover:bg-fog/20 transition-colors text-left"
+        className="w-full flex items-center justify-between gap-4 px-[18px] py-[13px] bg-paper hover:bg-fog/20 transition-colors text-left"
       >
-        <div className="flex flex-col min-w-0">
-          <span className={`font-mono text-[14px] tracking-[.12em] uppercase ${labelClass}`}>
+        <div className="flex items-center gap-[10px] min-w-0 flex-wrap">
+          <span className="font-display font-semibold text-[15px] text-ink">
             Week {week.week_number} · {week.phase}
           </span>
-          <span className="font-display font-semibold text-[18px] mt-[2px]">
+          <span className="font-display text-[15px] text-stone">
             {formatDateRange(week.date_from, week.date_to)}
           </span>
-          {week.purpose && (
-            <span className="text-[15px] text-ink mt-[2px] hidden md:block truncate">
-              {week.purpose}
-            </span>
-          )}
+          {weekRace && <RaceBadge priority={weekRace} />}
         </div>
 
-        <div className="flex items-center gap-[18px] shrink-0 ml-4">
+        <div className="flex items-center gap-[18px] shrink-0">
           <div className="text-right hidden sm:block">
             <div className="font-mono text-[15px] font-semibold">{totalKm.toFixed(0)} km</div>
             <div className="font-mono text-[13px] text-stone">{tssIsEstimated ? '~' : ''}{headerTss} TSS</div>
@@ -219,9 +236,15 @@ export default function WeekAccordion({
         </div>
       </button>
 
-      {/* Session rows */}
+      {/* Expanded content */}
       {open && (
-        <div className="border-t border-fog divide-y divide-fog/50">
+        <div className="border-t border-fog">
+          {week.purpose && (
+            <div className="px-[18px] py-[9px] text-[13px] text-stone/80 italic border-b border-fog/50">
+              {week.purpose}
+            </div>
+          )}
+          <div className="divide-y divide-fog/50">
           {sessions.map(session => {
             const status     = resolveStatus(session, todayStr, completedMap);
             const d          = formatDay(session.scheduled_date);
@@ -356,6 +379,7 @@ export default function WeekAccordion({
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>

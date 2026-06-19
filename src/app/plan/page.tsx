@@ -3,6 +3,8 @@ export const dynamic = 'force-dynamic';
 import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import WeekAccordion from './WeekAccordion';
+import RaceBlock from './RaceBlock';
+import PastWeeksAccordion from './PastWeeksAccordion';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 
 interface PlanSession {
@@ -38,13 +40,6 @@ const PHASE_COLOR: Record<string, { bar: string; label: string }> = {
   Taper: { bar: 'bg-fern',    label: 'text-fern'       },
 };
 
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
-  const today  = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-}
-
 function shortDate(dateStr: string): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
@@ -72,13 +67,14 @@ export default async function PlanPage() {
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }, { data: paceZones }, { data: hrZonesRows }] = await Promise.all([
+  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }, { data: paceZones }, { data: hrZonesRows }, { data: plans }] = await Promise.all([
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, segment_actuals, segment_hr'),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('plans').select('*').order('sort_order'),
   ]);
 
   const thresholdPace = config?.threshold_pace_per_km ?? '3:40';
@@ -180,48 +176,44 @@ export default async function PlanPage() {
       ))
     : null;
 
+  // Past weeks collapse into a single greyed accordion; current + future stay open
+  const pastWeeks   = allWeeks.filter(w => w.date_to < todayStr);
+  const futureWeeks = allWeeks.filter(w => w.date_to >= todayStr);
+  const pastLabel = pastWeeks.length === 1
+    ? `Week ${pastWeeks[0].week_number} · done`
+    : pastWeeks.length > 1
+      ? `Weeks ${pastWeeks[0].week_number}–${pastWeeks[pastWeeks.length - 1].week_number} · done`
+      : '';
+
+  const renderWeek = (week: PlanWeek) => (
+    <WeekAccordion
+      key={week.week_number}
+      week={week}
+      sessions={byWeek[week.week_number] ?? []}
+      thresholdPace={thresholdPace}
+      todayStr={todayStr}
+      defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
+      completedMap={completedMap}
+      nextSessionId={nextSessionId}
+      zones={zones}
+      hrZones={hrZones}
+    />
+  );
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
 
-        {/* Race card */}
+        {/* A-race block (current plan) */}
         {aRace && (
-          <div className="mb-6 rounded-[18px] overflow-hidden border border-fog">
-            <div className="bg-oxblood px-[22px] py-[18px] flex items-start justify-between">
-              <div>
-                <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">
-                  A-Race
-                </span>
-                <h2 className="font-display font-semibold text-[28px] text-bone leading-tight mt-[2px]">
-                  {aRace.name}
-                </h2>
-                <p className="font-mono text-[14px] text-bone/60 mt-[5px]">
-                  {new Date(aRace.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', {
-                    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                  })}
-                </p>
-              </div>
-              <div className="text-right shrink-0 ml-6">
-                <div className="font-display font-semibold text-[44px] leading-none text-bone">
-                  {daysUntil(aRace.scheduled_date)}
-                </div>
-                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-bone/50">
-                  days to go
-                </div>
-              </div>
-            </div>
-            <div className="bg-paper grid grid-cols-3 divide-x divide-fog">
-              {[
-                { label: 'Distance',    value: `${aRace.distance_km} km`                              },
-                { label: 'Target time', value: aRace.estimated_duration ?? '—'                         },
-                { label: 'Target pace', value: aRace.target_pace ? `${aRace.target_pace}/km` : '—'   },
-              ].map(({ label, value }) => (
-                <div key={label} className="px-[18px] py-[14px]">
-                  <div className="font-mono text-[12px] tracking-[.1em] uppercase text-stone">{label}</div>
-                  <div className="font-display font-semibold text-[20px] mt-[4px]">{value}</div>
-                </div>
-              ))}
-            </div>
+          <div className="mb-6">
+            <RaceBlock
+              name={aRace.name}
+              raceDate={aRace.scheduled_date}
+              distanceKm={aRace.distance_km ?? null}
+              targetTime={aRace.estimated_duration ?? null}
+              targetPace={aRace.target_pace ?? null}
+            />
           </div>
         )}
 
@@ -263,23 +255,28 @@ export default async function PlanPage() {
           </div>
         )}
 
-        {/* Week accordions */}
+        {/* Week accordions — past collapsed, current + future open */}
         <div className="flex flex-col gap-[10px]">
-          {allWeeks.map(week => (
-            <WeekAccordion
-              key={week.week_number}
-              week={week}
-              sessions={byWeek[week.week_number] ?? []}
-              thresholdPace={thresholdPace}
-              todayStr={todayStr}
-              defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
-              completedMap={completedMap}
-              nextSessionId={nextSessionId}
-              zones={zones}
-              hrZones={hrZones}
-            />
-          ))}
+          {pastWeeks.length > 0 && (
+            <PastWeeksAccordion label={pastLabel}>
+              {pastWeeks.map(renderWeek)}
+            </PastWeeksAccordion>
+          )}
+          {futureWeeks.map(renderWeek)}
         </div>
+
+        {/* Future A-race blocks (their own plans, built later) */}
+        {(plans ?? []).map(p => (
+          <div key={p.id} className="mt-8">
+            <RaceBlock
+              name={p.name}
+              raceDate={p.race_date}
+              distanceKm={p.distance_km}
+              targetTime={p.target_time}
+              targetPace={p.target_pace}
+            />
+          </div>
+        ))}
 
       </div>
     </AppShell>
