@@ -200,13 +200,14 @@ export default function WeekAccordion({
   }
 
   return (
-    <div className="rounded-[14px] overflow-hidden bg-paper" style={{ border: `4px solid ${phaseHex}` }}>
+    <div className="rounded-[14px] overflow-hidden bg-paper">
 
-      {/* Accordion header — Week · Phase and date on one line, same size */}
+      {/* Accordion header — boxed in the phase colour (header only) */}
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-4 px-[18px] py-[13px] bg-paper hover:bg-fog/20 transition-colors text-left"
+        className={`w-full flex items-center justify-between gap-4 px-[18px] py-[13px] bg-paper hover:bg-fog/20 transition-colors text-left ${open ? 'rounded-t-[12px]' : 'rounded-[12px]'}`}
+        style={{ border: `3px solid ${phaseHex}` }}
       >
         <div className="flex items-center gap-[10px] min-w-0 flex-wrap">
           <span className="font-display font-semibold text-[15px] text-ink">
@@ -236,9 +237,9 @@ export default function WeekAccordion({
         </div>
       </button>
 
-      {/* Expanded content */}
+      {/* Expanded content — its own light frame; phase border stays on the header */}
       {open && (
-        <div style={{ borderTop: `4px solid ${phaseHex}` }}>
+        <div className="border-x border-b border-fog">
           {week.purpose && (
             <div className="px-[18px] py-[9px] text-[13px] text-stone/80 italic border-b border-fog/50">
               {week.purpose}
