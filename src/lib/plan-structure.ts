@@ -86,6 +86,9 @@ export function resolveZone(
   return zoneFromPace(fallbackPace, zones);
 }
 
+// HR zone target ranges, keyed by zone (Z1..Zn)
+export type HrZoneMap = Record<string, { min: number; max: number }>;
+
 // ── Normalised output ────────────────────────────────────────
 
 export interface NormSegment {
@@ -98,6 +101,9 @@ export interface NormSegment {
   distanceKm: number;
   note?: string;            // legacy description, preserved
   actualPaceSec?: number | null; // actual pace (s/km) when completed; repeats = mean
+  hrMin?: number | null;    // target HR window from the matching HR zone
+  hrMax?: number | null;
+  actualHr?: number | null; // actual avg HR when completed; repeats = mean
 }
 
 export interface NormRepeat {
@@ -167,11 +173,18 @@ export function normalizeStructure(
   structure: any[] | null | undefined,
   zones: ZoneMap,
   actuals?: (number | null)[] | null,
+  hrZones?: HrZoneMap,
+  hrActuals?: (number | null)[] | null,
 ): NormStep[] {
   if (!structure?.length) return [];
   const out: NormStep[] = [];
-  let ai = 0;
-  const next = (): number | null => (actuals ? (actuals[ai++] ?? null) : null);
+  let ai = 0, hi = 0;
+  const next   = (): number | null => (actuals ? (actuals[ai++] ?? null) : null);
+  const nextHr = (): number | null => (hrActuals ? (hrActuals[hi++] ?? null) : null);
+  const applyHr = (seg: NormSegment) => {
+    const z = hrZones && seg.zoneKey ? hrZones[seg.zoneKey] : undefined;
+    if (z) { seg.hrMin = z.min; seg.hrMax = z.max; }
+  };
 
   for (const raw of structure) {
     if (isNewFormat(raw)) {
@@ -179,26 +192,32 @@ export function normalizeStructure(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const steps: NormSegment[] = raw.steps.map((st: any) => segmentNew(st, zones));
         const count = raw.count || 1;
-        const sums: number[] = steps.map(() => 0);
-        const hits: number[] = steps.map(() => 0);
+        const pSum = steps.map(() => 0), pHit = steps.map(() => 0);
+        const hSum = steps.map(() => 0), hHit = steps.map(() => 0);
         for (let r = 0; r < count; r++) {
           for (let j = 0; j < steps.length; j++) {
-            const v = next();
-            if (v != null) { sums[j] += v; hits[j]++; }
+            const v = next();   if (v != null) { pSum[j] += v; pHit[j]++; }
+            const h = nextHr(); if (h != null) { hSum[j] += h; hHit[j]++; }
           }
         }
-        if (actuals) {
-          steps.forEach((s, j) => { s.actualPaceSec = hits[j] ? Math.round(sums[j] / hits[j]) : null; });
-        }
+        steps.forEach((s, j) => {
+          applyHr(s);
+          if (actuals)   s.actualPaceSec = pHit[j] ? Math.round(pSum[j] / pHit[j]) : null;
+          if (hrActuals) s.actualHr      = hHit[j] ? Math.round(hSum[j] / hHit[j]) : null;
+        });
         out.push({ kind: 'repeat', count, steps });
       } else if (raw.type === 'phase') {
         const seg = segmentNew(raw, zones);
-        if (actuals) seg.actualPaceSec = next();
+        applyHr(seg);
+        if (actuals)   seg.actualPaceSec = next();
+        if (hrActuals) seg.actualHr      = nextHr();
         out.push(seg);
       }
     } else {
       const seg = segmentLegacy(raw, zones);
-      if (actuals) seg.actualPaceSec = next();
+      applyHr(seg);
+      if (actuals)   seg.actualPaceSec = next();
+      if (hrActuals) seg.actualHr      = nextHr();
       out.push(seg);
     }
   }
@@ -250,5 +269,15 @@ export function segmentPerformance(seg: NormSegment): SegmentPerf | null {
   const hi = Math.max(fast, slow);
   if (seg.actualPaceSec < lo) return 'ahead';
   if (seg.actualPaceSec > hi) return 'behind';
+  return 'on';
+}
+
+// Actual avg HR vs the segment's target HR window. Null when no HR / no target.
+export function segmentHrPerformance(seg: NormSegment): SegmentPerf | null {
+  if (seg.actualHr == null || seg.hrMin == null || seg.hrMax == null) return null;
+  const lo = Math.min(seg.hrMin, seg.hrMax);
+  const hi = Math.max(seg.hrMin, seg.hrMax);
+  if (seg.actualHr < lo) return 'ahead';
+  if (seg.actualHr > hi) return 'behind';
   return 'on';
 }

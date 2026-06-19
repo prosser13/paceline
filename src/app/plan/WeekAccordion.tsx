@@ -4,7 +4,7 @@ import { useState } from 'react';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
-import type { ZoneMap, NormStep } from '@/lib/plan-structure';
+import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
   INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure,
 } from '@/components/session-ui';
@@ -44,6 +44,7 @@ interface CompletedData {
   distanceKm?: number | null;
   tss: number | null;
   segmentActuals?: (number | null)[] | null;
+  segmentHr?: (number | null)[] | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -150,10 +151,11 @@ interface Props {
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
   zones: ZoneMap;
+  hrZones: HrZoneMap;
 }
 
 export default function WeekAccordion({
-  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones,
+  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones, hrZones,
 }: Props) {
   const [open, setOpen]             = useState(defaultOpen);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -243,10 +245,13 @@ export default function WeekAccordion({
             // Normalise both formats and derive paces from the Settings zones.
             // For completed sessions, attach per-segment actuals for colour-coding.
             const segActuals = isDone ? completed?.segmentActuals ?? null : null;
+            const segHr      = isDone ? completed?.segmentHr ?? null : null;
             const detailSteps: NormStep[] = normalizeStructure(
               session.structure?.length ? session.structure : syntheticStructure(session, intensity),
               zones,
               segActuals,
+              hrZones,
+              segHr,
             );
 
             // Planned duration derived from the zone-paced segments (falls back to the

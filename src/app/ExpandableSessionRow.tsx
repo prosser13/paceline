@@ -4,7 +4,7 @@ import { useState } from 'react';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
-import type { ZoneMap } from '@/lib/plan-structure';
+import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, MetricBlock, WorkoutDetail, RestDayRow, syntheticStructure, sumSegmentSeconds, fmtHMM,
 } from '@/components/session-ui';
@@ -34,11 +34,12 @@ function formatDay(dateStr: string) {
 }
 
 export default function ExpandableSessionRow({
-  session, thresholdPace, zones,
+  session, thresholdPace, zones, hrZones,
 }: {
   session: Session;
   thresholdPace: string;
   zones: ZoneMap;
+  hrZones: HrZoneMap;
 }) {
   const [expanded, setExpanded] = useState(false);
   const d         = formatDay(session.scheduled_date);
@@ -52,6 +53,8 @@ export default function ExpandableSessionRow({
   const steps      = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
     zones,
+    null,
+    hrZones,
   );
   const plannedSec = sumSegmentSeconds(steps);
   const duration   = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;

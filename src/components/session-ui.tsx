@@ -2,7 +2,7 @@
 // segments and metrics. Pure components (no hooks) so they can be used by both
 // the plan page (client) and the dashboard (server) — keeping styling in sync.
 
-import { segmentPerformance, PERF_COLOR } from '@/lib/plan-structure';
+import { segmentPerformance, segmentHrPerformance, PERF_COLOR } from '@/lib/plan-structure';
 import type { NormSegment, NormStep } from '@/lib/plan-structure';
 
 // Intensity → on-brand colour (drives the profile chart) + nominal zone
@@ -82,10 +82,9 @@ export function syntheticStructure(
 
 // ── Segment table ────────────────────────────────────────────
 
-const DETAIL_COLS = '1fr 64px 104px 96px 40px';
+const DETAIL_COLS = '1fr 54px 104px 92px 80px 40px';
 
 function PhaseLine({ seg }: { seg: NormSegment }) {
-  const time = seg.midSeconds && seg.distanceKm ? fmtMMSS(seg.distanceKm * seg.midSeconds) : null;
   const paceStr = seg.paceMin
     ? (seg.paceMin === seg.paceMax ? `${seg.paceMin}/km` : `${seg.paceMin}–${seg.paceMax}/km`)
     : '—';
@@ -94,6 +93,22 @@ function PhaseLine({ seg }: { seg: NormSegment }) {
   const perfColor = perf ? PERF_COLOR[perf] : undefined;
   const actual    = seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : null;
   const actualLine = perf === 'missed' ? 'missed' : (actual ? `ran ${actual}` : null);
+
+  // HR target window + actual
+  const hrStr = seg.hrMin != null && seg.hrMax != null ? `${seg.hrMin}–${seg.hrMax}` : '—';
+  const hrPerf = segmentHrPerformance(seg);
+  const hrColor = hrPerf ? PERF_COLOR[hrPerf] : undefined;
+  const hrActualLine = seg.actualHr != null ? `${seg.actualHr} bpm` : null;
+
+  // Time: actual for completed segments, ~estimate otherwise, — when missed
+  let timeStr: string;
+  if (seg.actualPaceSec === undefined) {
+    timeStr = seg.midSeconds && seg.distanceKm ? `~${fmtMMSS(seg.midSeconds * seg.distanceKm)}` : '—';
+  } else if (seg.actualPaceSec === null) {
+    timeStr = '—';
+  } else {
+    timeStr = fmtMMSS(seg.actualPaceSec * seg.distanceKm);
+  }
 
   return (
     <div className="py-[6px]">
@@ -113,9 +128,13 @@ function PhaseLine({ seg }: { seg: NormSegment }) {
             <span className="block text-[12px]" style={{ color: perfColor }}>{actualLine}</span>
           )}
         </span>
-        <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">
-          {time ? `~${time}` : '—'}
+        <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
+          <span className="block text-ink">{hrStr}</span>
+          {hrActualLine && (
+            <span className="block text-[12px]" style={{ color: hrColor }}>{hrActualLine}</span>
+          )}
         </span>
+        <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{timeStr}</span>
         {seg.zoneKey
           ? <ZoneChip zone={seg.zoneKey} />
           : <span className="font-mono text-[12px] text-stone text-center">—</span>}
@@ -140,10 +159,10 @@ export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; v
         className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
         style={{ gridTemplateColumns: DETAIL_COLS }}
       >
-        {['Segment', 'Dist', 'Pace', 'Time', 'Zone'].map((h, i) => (
+        {['Segment', 'Dist', 'Pace', 'HR', 'Time', 'Zone'].map((h, i) => (
           <span
             key={h}
-            className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : i === 4 ? 'text-center' : 'text-right'}`}
+            className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : i === 5 ? 'text-center' : 'text-right'}`}
           >
             {h}
           </span>

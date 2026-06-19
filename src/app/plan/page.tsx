@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import WeekAccordion from './WeekAccordion';
-import type { ZoneMap } from '@/lib/plan-structure';
+import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 
 interface PlanSession {
   id: string;
@@ -72,12 +72,13 @@ export default async function PlanPage() {
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }, { data: paceZones }] = await Promise.all([
+  const [{ data: sessions }, { data: weeks }, { data: config }, { data: completed }, { data: paceZones }, { data: hrZonesRows }] = await Promise.all([
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, segment_actuals'),
+    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, segment_actuals, segment_hr'),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
   ]);
 
   const thresholdPace = config?.threshold_pace_per_km ?? '3:40';
@@ -89,8 +90,13 @@ export default async function PlanPage() {
     zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
   }
 
+  const hrZones: HrZoneMap = {};
+  for (const z of hrZonesRows ?? []) {
+    hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
+  }
+
   // Build map of plan_session_id → actual display values for done sessions
-  const completedMap: Record<string, { durationStr: string; distanceKm: number | null; tss: number | null; segmentActuals: (number | null)[] | null }> = {};
+  const completedMap: Record<string, { durationStr: string; distanceKm: number | null; tss: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
   for (const cw of completed ?? []) {
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
@@ -110,6 +116,7 @@ export default async function PlanPage() {
       distanceKm: cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null,
       tss,
       segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+      segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     };
   }
 
@@ -269,6 +276,7 @@ export default async function PlanPage() {
               completedMap={completedMap}
               nextSessionId={nextSessionId}
               zones={zones}
+              hrZones={hrZones}
             />
           ))}
         </div>

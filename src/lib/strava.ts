@@ -64,19 +64,24 @@ const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 async function fetchStreams(
   activityId: number,
   token: string,
-): Promise<{ distance: number[]; time: number[] } | null> {
+): Promise<{ distance: number[]; time: number[]; heartrate: number[] | null } | null> {
   const res = await fetch(
-    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time&key_by_type=true`,
+    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time,heartrate&key_by_type=true`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok) return null;
   const data = await res.json();
   const distance = data?.distance?.data;
   const time     = data?.time?.data;
+  const hr       = data?.heartrate?.data;
   if (!Array.isArray(distance) || !Array.isArray(time) || distance.length !== time.length || !distance.length) {
     return null;
   }
-  return { distance, time };
+  return {
+    distance,
+    time,
+    heartrate: Array.isArray(hr) && hr.length === distance.length ? hr : null,
+  };
 }
 
 // Interpolated elapsed time (s) at a cumulative distance (m); null if beyond run.
@@ -106,17 +111,39 @@ function computeSegmentActuals(distancesKm: number[], dist: number[], time: numb
   return out;
 }
 
+// Average HR per planned segment, in expanded order. Null = beyond run / no HR.
+function computeSegmentHr(distancesKm: number[], dist: number[], hr: number[]): (number | null)[] {
+  const out: (number | null)[] = [];
+  const lastM = dist[dist.length - 1];
+  let cum = 0;
+  for (const km of distancesKm) {
+    const startM = cum * 1000;
+    const endM   = (cum + km) * 1000;
+    cum += km;
+    if (km <= 0 || endM > lastM) { out.push(null); continue; }
+    let sum = 0, n = 0;
+    for (let i = 0; i < dist.length; i++) {
+      if (dist[i] >= startM && dist[i] <= endM && hr[i] != null) { sum += hr[i]; n++; }
+    }
+    out.push(n ? Math.round(sum / n) : null);
+  }
+  return out;
+}
+
 async function computeForActivity(
   stravaId: number,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure: any[] | null | undefined,
   token: string,
-): Promise<(number | null)[] | null> {
+): Promise<{ pace: (number | null)[]; hr: (number | null)[] | null } | null> {
   const distances = expandSegmentDistances(structure);
   if (!distances.length) return null;
   const streams = await fetchStreams(stravaId, token);
   if (!streams) return null;
-  return computeSegmentActuals(distances, streams.distance, streams.time);
+  return {
+    pace: computeSegmentActuals(distances, streams.distance, streams.time),
+    hr:   streams.heartrate ? computeSegmentHr(distances, streams.distance, streams.heartrate) : null,
+  };
 }
 
 export async function syncActivities(): Promise<{ synced: number; matched: number }> {
@@ -171,7 +198,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   // Re-fetch stored rows to get their UUIDs + timing
   const { data: stored } = await supabaseAdmin
     .from('activities')
-    .select('id, strava_activity_id, activity_date, distance_km, duration_mins, avg_pace_min_km')
+    .select('id, strava_activity_id, activity_date, distance_km, duration_mins, avg_pace_min_km, avg_hr')
     .in('strava_activity_id', runs.map(a => a.id));
 
   if (!stored?.length) return { synced: runs.length, matched: 0 };
@@ -210,7 +237,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       matched_at:      new Date().toISOString(),
     });
 
-    const segmentActuals = await computeForActivity(activity.strava_activity_id, match.structure, token);
+    const seg = await computeForActivity(activity.strava_activity_id, match.structure, token);
 
     await supabaseAdmin.from('completed_workouts').insert({
       plan_session_id:       match.id,
@@ -218,28 +245,43 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       actual_distance_km:    activity.distance_km,
       actual_duration_mins:  activity.duration_mins,
       actual_avg_pace_min_km: activity.avg_pace_min_km,
+      actual_avg_hr:         activity.avg_hr ?? null,
       strava_activity_id:    activity.strava_activity_id,
       source:                'strava',
-      segment_actuals:       segmentActuals,
+      segment_actuals:       seg?.pace ?? null,
+      segment_hr:            seg?.hr ?? null,
     });
 
     matched++;
   }
 
-  // Backfill per-segment actuals for matched runs that don't have them yet
+  // Backfill per-segment actuals + HR for matched runs missing them
   const { data: missing } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, strava_activity_id')
-    .is('segment_actuals', null)
+    .select('id, plan_session_id, strava_activity_id, actual_avg_hr')
+    .or('segment_actuals.is.null,segment_hr.is.null')
     .eq('source', 'strava');
 
   if (missing?.length) {
     const structById = new Map(planSessions.map(p => [p.id, p.structure]));
+    const { data: acts } = await supabaseAdmin
+      .from('activities')
+      .select('strava_activity_id, avg_hr')
+      .in('strava_activity_id', missing.map(m => m.strava_activity_id).filter(Boolean));
+    const hrById = new Map((acts ?? []).map(a => [a.strava_activity_id, a.avg_hr]));
+
     for (const cw of missing) {
       if (!cw.plan_session_id || !cw.strava_activity_id) continue;
-      const segmentActuals = await computeForActivity(cw.strava_activity_id, structById.get(cw.plan_session_id), token);
-      if (segmentActuals) {
-        await supabaseAdmin.from('completed_workouts').update({ segment_actuals: segmentActuals }).eq('id', cw.id);
+      const seg = await computeForActivity(cw.strava_activity_id, structById.get(cw.plan_session_id), token);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const update: Record<string, any> = {};
+      if (seg?.pace) update.segment_actuals = seg.pace;
+      if (seg?.hr)   update.segment_hr = seg.hr;
+      if (cw.actual_avg_hr == null && hrById.get(cw.strava_activity_id) != null) {
+        update.actual_avg_hr = hrById.get(cw.strava_activity_id);
+      }
+      if (Object.keys(update).length) {
+        await supabaseAdmin.from('completed_workouts').update(update).eq('id', cw.id);
       }
     }
   }

@@ -2,7 +2,7 @@ import AppShell from '@/components/AppShell';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
-import type { ZoneMap } from '@/lib/plan-structure';
+import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS,
 } from '@/components/session-ui';
@@ -138,12 +138,14 @@ export default async function DashboardPage() {
   // Is today's session already completed (matched to a Strava activity)?
   let todayCompleted: {
     durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null;
+    avgHr: number | null;
     segmentActuals: (number | null)[] | null;
+    segmentHr: (number | null)[] | null;
   } | null = null;
   if (todaySession) {
     const { data: cw } = await supabaseAdmin
       .from('completed_workouts')
-      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, segment_actuals')
+      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
       .eq('plan_session_id', todaySession.id)
       .maybeSingle();
     if (cw) {
@@ -162,7 +164,9 @@ export default async function DashboardPage() {
       todayCompleted = {
         durationStr, mins, tss,
         distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
+        avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
         segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+        segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
       };
     }
   }
@@ -172,6 +176,13 @@ export default async function DashboardPage() {
   const zones: ZoneMap = {};
   for (const z of paceZones ?? []) {
     zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
+  }
+
+  // HR zones — target HR windows shown per segment
+  const { data: hrZoneRows } = await supabaseAdmin.from('hr_zones').select('*').order('sort_order');
+  const hrZones: HrZoneMap = {};
+  for (const z of hrZoneRows ?? []) {
+    hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
   // Fitness / fatigue / form from intervals.icu (null if unconfigured or API down)
@@ -292,7 +303,7 @@ export default async function DashboardPage() {
 
         {/* Today hero */}
         {todaySession ? (
-          <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} completed={todayCompleted} />
+          <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={todayCompleted} />
         ) : (
           <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
             <div className="px-[26px] py-[12px]" style={{ background: '#8c2b2b', color: BONE }}>
@@ -304,7 +315,7 @@ export default async function DashboardPage() {
 
         {/* Tomorrow hero */}
         {tomorrowSession ? (
-          <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} completed={null} />
+          <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={null} />
         ) : (
           <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
             <div className="px-[26px] py-[12px]" style={{ background: '#14617e', color: BONE }}>
@@ -322,7 +333,7 @@ export default async function DashboardPage() {
             </p>
             <div className="border border-fog rounded-[14px] bg-paper overflow-hidden divide-y divide-fog/50">
               {upcomingWithRest.map(s => (
-                <ExpandableSessionRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} />
+                <ExpandableSessionRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} />
               ))}
             </div>
           </div>
@@ -417,20 +428,24 @@ const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
 };
 
 function SessionHero({
-  label, session, thresholdPace, zones, completed,
+  label, session, thresholdPace, zones, hrZones, completed,
 }: {
   label: 'Today' | 'Tomorrow';
   session: PlanSession;
   thresholdPace: string;
   zones: ZoneMap;
-  completed: { durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null; segmentActuals: (number | null)[] | null } | null;
+  hrZones: HrZoneMap;
+  completed: { durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null } | null;
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   const segActuals = completed?.segmentActuals ?? null;
+  const segHr      = completed?.segmentHr ?? null;
   const steps     = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
     zones,
     segActuals,
+    hrZones,
+    segHr,
   );
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
@@ -493,7 +508,7 @@ function SessionHero({
               opacity={segActuals ? 0.9 : 0.6}
             />
           </div>
-          <div className="grid grid-cols-4 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
+          <div className="grid grid-cols-5 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
             <VsStat align="left"
               label="Distance"
               value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
@@ -513,6 +528,7 @@ function SessionHero({
               deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)}
             />
             <VsStat align="left" label="Avg pace" value={avgPaceStr ? `${avgPaceStr}/km` : '—'} delta={null} deltaClass="" />
+            <VsStat align="left" label="Avg HR" value={completed?.avgHr != null ? `${completed.avgHr} bpm` : '—'} delta={null} deltaClass="" />
           </div>
         </>
       ) : (
