@@ -237,67 +237,70 @@ export default async function DashboardPage() {
         {/* Context row */}
         <div className="grid grid-cols-[1.5fr_1fr] gap-[14px] mb-5">
           {/* Block banner */}
-          <div className="flex flex-col gap-2 border border-fog rounded-[14px] bg-paper p-[15px_18px]">
-            {weekRow ? (
-              <>
-                <span className="font-mono text-[13px] tracking-[.12em] uppercase text-oxblood">
-                  {weekRow.phase} · Week {weekRow.week_number}
-                </span>
-                {weekRow.purpose && (
-                  <p className="text-[15.5px] text-ink m-0">{weekRow.purpose}</p>
-                )}
-                <span className="font-mono text-[13px] text-stone mt-auto">
-                  {weekPlannedKm ?? weekRow.planned_volume_km} km planned this week
-                </span>
-                {daysToRace != null && daysToRace >= 0 && (
-                  <span className="font-mono text-[13px] text-oxblood">
-                    {daysToRace} days to Dragon 50
+          <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
+            <div className="px-[18px] py-[10px]" style={{ background: '#8c2b2b', color: BONE }}>
+              <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">
+                {weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'Plan'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-2 px-[18px] py-[15px] flex-1">
+              {weekRow ? (
+                <>
+                  {weekRow.purpose && (
+                    <p className="text-[15.5px] text-ink m-0">{weekRow.purpose}</p>
+                  )}
+                  <span className="font-mono text-[13px] text-stone mt-auto">
+                    {weekPlannedKm ?? weekRow.planned_volume_km} km planned this week
                   </span>
-                )}
-              </>
-            ) : (
-              <>
-                <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">Plan</span>
-                <p className="text-[15.5px] text-stone m-0">
-                  Plan starts 17 Aug 2026 · Pfitz 12/70
-                </p>
-                <span className="font-mono text-[13px] text-stone mt-auto">
-                  Marathon — 8 Nov 2026
-                </span>
-              </>
-            )}
+                  {daysToRace != null && daysToRace >= 0 && (
+                    <span className="font-mono text-[13px] text-oxblood">
+                      {daysToRace} days to Dragon 50
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="text-[15.5px] text-stone m-0">Plan starts 17 Aug 2026 · Pfitz 12/70</p>
+                  <span className="font-mono text-[13px] text-stone mt-auto">Marathon — 8 Nov 2026</span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Status card — live intervals.icu fitness/fatigue/form */}
-          <div className="flex flex-col border border-fog rounded-[14px] bg-fern-soft p-[15px_18px]">
-            <span className="font-mono text-[13px] tracking-[.12em] uppercase text-fern">
-              Current status · intervals.icu
-            </span>
-            {fitnessForm ? (
-              <>
-                <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">
-                  {fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}
-                </div>
-                <p className="text-[15px] text-ink mb-[10px]">{formLabel(fitnessForm.form)}</p>
-                <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
-                  <span>Fitness <b className="text-marine">{fitnessForm.fitness}</b></span>
-                  <span>Fatigue <b className="text-marine">{fitnessForm.fatigue}</b></span>
-                  <span>Form <b className="text-marine">{fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}</b></span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">—</div>
-                <p className="text-[15px] text-ink mb-[10px]">
-                  Connect intervals.icu in Settings to see your fitness, fatigue &amp; form.
-                </p>
-                <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
-                  <span>Fitness <b className="text-marine">—</b></span>
-                  <span>Fatigue <b className="text-marine">—</b></span>
-                  <span>Form <b className="text-marine">—</b></span>
-                </div>
-              </>
-            )}
+          <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
+            <div className="px-[18px] py-[10px]" style={{ background: '#4f7a52', color: BONE }}>
+              <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">
+                Current status · intervals.icu
+              </span>
+            </div>
+            <div className="flex flex-col flex-1 px-[18px] py-[15px]">
+              {fitnessForm ? (
+                <>
+                  <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">
+                    {fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}
+                  </div>
+                  <p className="text-[15px] text-ink mb-[10px]">{formLabel(fitnessForm.form)}</p>
+                  <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
+                    <span>Fitness <b className="text-marine">{fitnessForm.fitness}</b></span>
+                    <span>Fatigue <b className="text-marine">{fitnessForm.fatigue}</b></span>
+                    <span>Form <b className="text-marine">{fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}</b></span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">—</div>
+                  <p className="text-[15px] text-ink mb-[10px]">
+                    Connect intervals.icu in Settings to see your fitness, fatigue &amp; form.
+                  </p>
+                  <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
+                    <span>Fitness <b className="text-marine">—</b></span>
+                    <span>Fatigue <b className="text-marine">—</b></span>
+                    <span>Form <b className="text-marine">—</b></span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
