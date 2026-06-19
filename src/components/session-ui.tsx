@@ -184,19 +184,22 @@ function RestBed() {
 }
 
 export function RestDayRow({ short, date }: { short: string; date: string }) {
+  // Same box model as a session row (border-l-[3px] transparent + px-16 + py-12)
+  // so height and day-column alignment match. Dashed look via inset outline,
+  // which doesn't affect layout height.
   return (
-    <div className="px-[2px] py-[5px]">
-      <div className="relative overflow-hidden flex items-center gap-[14px] rounded-[8px] px-[16px] py-[12px]"
-           style={{ border: '1px dashed #c9c2b2', background: REST_SHEETS }}>
-        <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 pointer-events-none">
-          <RestBed />
-        </div>
-        <div className="w-[46px] shrink-0 relative">
-          <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
-          <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
-        </div>
-        <span className="relative flex-1 font-mono text-[13px] tracking-[.1em] uppercase text-stone">Rest day</span>
+    <div
+      className="relative overflow-hidden flex items-center gap-[14px] border-l-[3px] border-l-transparent px-[16px] py-[12px]"
+      style={{ background: REST_SHEETS, outline: '1px dashed #c9c2b2', outlineOffset: '-1px' }}
+    >
+      <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 pointer-events-none">
+        <RestBed />
       </div>
+      <div className="w-[46px] shrink-0 relative">
+        <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
+        <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
+      </div>
+      <span className="relative flex-1 font-mono text-[13px] tracking-[.1em] uppercase text-stone">Rest day</span>
     </div>
   );
 }

@@ -106,7 +106,7 @@ export default async function DashboardPage() {
   // Last 7 days stats
   const { data: recent } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_distance_km, actual_duration_mins')
+    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
     .gte('completed_date', isoDate(addDays(today, -7)))
     .lte('completed_date', todayStr);
 
@@ -123,6 +123,17 @@ export default async function DashboardPage() {
     .limit(1)
     .maybeSingle();
   const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
+
+  // 7-day training load = Σ TSS (duration × IF², IF = threshold ÷ actual pace)
+  const threshParts   = thresholdPace.split(':').map(Number);
+  const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
+  const totalTss = Math.round((recent ?? []).reduce((s, w) => {
+    const mins = w.actual_duration_mins ? Number(w.actual_duration_mins) : null;
+    const pace = w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
+    if (mins == null || pace == null || pace <= 0) return s;
+    const IF = threshMinKm / pace;
+    return s + (mins / 60) * IF * IF * 100;
+  }, 0));
 
   // Is today's session already completed (matched to a Strava activity)?
   let todayCompleted: {
@@ -185,6 +196,21 @@ export default async function DashboardPage() {
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
   }
 
+  // Countdown to the A-race (Dragon 50)
+  const { data: raceRow } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('scheduled_date')
+    .eq('session_type', 'RACE')
+    .ilike('name', '%Dragon 50%')
+    .order('scheduled_date')
+    .limit(1)
+    .maybeSingle();
+  let daysToRace: number | null = null;
+  if (raceRow?.scheduled_date) {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    daysToRace = Math.ceil((new Date(raceRow.scheduled_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
+  }
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
@@ -212,6 +238,11 @@ export default async function DashboardPage() {
                 <span className="font-mono text-[13px] text-stone mt-auto">
                   {weekPlannedKm ?? weekRow.planned_volume_km} km planned this week
                 </span>
+                {daysToRace != null && daysToRace >= 0 && (
+                  <span className="font-mono text-[13px] text-oxblood">
+                    {daysToRace} days to Dragon 50
+                  </span>
+                )}
               </>
             ) : (
               <>
@@ -308,7 +339,7 @@ export default async function DashboardPage() {
                 { k: 'Distance',      v: `${totalKm.toFixed(1)}`, unit: 'km' },
                 { k: 'Sessions',      v: `${sessions}`,            unit: 'runs' },
                 { k: 'Time',          v: `${h}:${String(m).padStart(2,'0')}`, unit: 'h:m' },
-                { k: 'Training load', v: '—',                      unit: 'TSS' },
+                { k: 'Training load', v: totalTss > 0 ? `${totalTss}` : '—', unit: 'TSS' },
               ].map(({ k, v, unit }) => (
                 <div key={k} className="border border-fog rounded-[12px] bg-paper p-[13px_15px]">
                   <div className="font-mono text-[13px] tracking-[.08em] uppercase text-stone">{k}</div>
@@ -431,7 +462,14 @@ function SessionHero({
       <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         <div className="flex items-center gap-[12px] font-mono text-[13px]">
-          {isDone && <span>✓ Completed</span>}
+          {isDone && (
+            <span className="flex items-center gap-[7px]">
+              ✓ Completed
+              <svg width="13" height="13" viewBox="0 0 24 24" fill={BONE} role="img" aria-label="Strava">
+                <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+              </svg>
+            </span>
+          )}
         </div>
       </div>
 
@@ -513,9 +551,7 @@ function SessionHero({
 
       <CollapsibleSession steps={steps} defaultOpen={!isDone} />
 
-      {isDone ? (
-        <div className="mt-[18px] font-mono text-[13px] text-stone">Logged from Strava</div>
-      ) : label === 'Today' ? (
+      {!isDone && label === 'Today' && (
         <div className="mt-[18px]">
           <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
           <div className="flex flex-wrap gap-2">
@@ -529,7 +565,7 @@ function SessionHero({
             ))}
           </div>
         </div>
-      ) : null}
+      )}
       </div>
     </div>
   );
