@@ -1,8 +1,9 @@
-import { normalizeStructure, type ZoneMap, type NormSegment } from './plan-structure';
+import { normalizeStructure, segmentPerformance, PERF_COLOR, type ZoneMap, type NormSegment } from './plan-structure';
 
 export interface ProfileBar {
   effort: number;   // 0–100
   minutes: number;  // minimum 1
+  color?: string;   // per-bar override (e.g. pacing-performance colour)
 }
 
 // Converts "m:ss" or "mm:ss" pace string to total seconds
@@ -101,25 +102,31 @@ export function buildProfileBars(
   },
   thresholdPace: string,
   zones?: ZoneMap,
+  actuals?: (number | null)[] | null,
 ): ProfileBar[] {
   const structure = session.structure;
 
   // Preferred: zone-derived bars (paces come from the Settings zones)
   if (zones && structure?.length) {
-    const segToBar = (seg: NormSegment): ProfileBar => ({
-      effort:  seg.midSeconds ? paceToEffort(secsToPace(seg.midSeconds), thresholdPace) : 40,
-      minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
-    });
+    const segToBar = (seg: NormSegment): ProfileBar => {
+      const perf = segmentPerformance(seg);
+      return {
+        effort:  seg.midSeconds ? paceToEffort(secsToPace(seg.midSeconds), thresholdPace) : 40,
+        minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
+        ...(perf ? { color: PERF_COLOR[perf] } : {}),
+      };
+    };
     const bars: ProfileBar[] = [];
-    for (const step of normalizeStructure(structure, zones)) {
+    for (const step of normalizeStructure(structure, zones, actuals)) {
       if (step.kind === 'repeat') {
         for (let r = 0; r < step.count; r++) step.steps.forEach(s => bars.push(segToBar(s)));
       } else {
         bars.push(segToBar(step));
       }
     }
-    const merged = mergeConsecutive(bars);
-    if (merged.length) return merged;
+    // Keep per-segment colours distinct when we have actuals; otherwise merge
+    const result = actuals?.length ? bars : mergeConsecutive(bars);
+    if (result.length) return result;
   }
 
   // New format without zones: pace_min/pace_max + distance_km

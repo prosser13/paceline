@@ -50,13 +50,14 @@ export default function ProfileChart({
         y={(H - bh).toFixed(2)}
         width={bw.toFixed(2)}
         height={bh.toFixed(2)}
+        fill={bar.color ?? color}
       />
     );
   });
 
   return (
     <svg viewBox={`0 0 ${W.toFixed(2)} ${H}`} width={W.toFixed(2)} height={H} style={{ display: 'block', flexShrink: 0 }}>
-      <g fill={color} opacity={opacity}>
+      <g opacity={opacity}>
         {rects}
       </g>
     </svg>

@@ -125,11 +125,14 @@ export default async function DashboardPage() {
   const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
 
   // Is today's session already completed (matched to a Strava activity)?
-  let todayCompleted: { durationStr: string; tss: number | null; distanceKm: number | null } | null = null;
+  let todayCompleted: {
+    durationStr: string; tss: number | null; distanceKm: number | null;
+    segmentActuals: (number | null)[] | null;
+  } | null = null;
   if (todaySession) {
     const { data: cw } = await supabaseAdmin
       .from('completed_workouts')
-      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km')
+      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, segment_actuals')
       .eq('plan_session_id', todaySession.id)
       .maybeSingle();
     if (cw) {
@@ -145,7 +148,11 @@ export default async function DashboardPage() {
         const IF = threshMinKm / pace;
         tss = Math.round((mins / 60) * IF * IF * 100);
       }
-      todayCompleted = { durationStr, tss, distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null };
+      todayCompleted = {
+        durationStr, tss,
+        distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
+        segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+      };
     }
   }
 
@@ -323,13 +330,15 @@ function TodayHero({
   session: PlanSession;
   thresholdPace: string;
   zones: ZoneMap;
-  completed: { durationStr: string; tss: number | null; distanceKm: number | null } | null;
+  completed: { durationStr: string; tss: number | null; distanceKm: number | null; segmentActuals: (number | null)[] | null } | null;
 }) {
   const d         = formatDay(session.scheduled_date);
   const intensity = (session.intensity as string | null) ?? 'easy';
+  const segActuals = completed?.segmentActuals ?? null;
   const steps     = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
     zones,
+    segActuals,
   );
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
@@ -355,10 +364,10 @@ function TodayHero({
         </div>
         <div className="flex items-center gap-4 shrink-0">
           <ProfileChart
-            bars={buildProfileBars(session, thresholdPace, zones)}
+            bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
             size="lg"
             color={INTENSITY[intensity]?.hex ?? '#17191e'}
-            opacity={0.6}
+            opacity={segActuals ? 0.9 : 0.6}
           />
           <MetricBlock duration={displayDuration} tss={displayTss} estimated={!isDone} size="lg" />
         </div>

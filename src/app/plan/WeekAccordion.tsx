@@ -42,6 +42,7 @@ interface PlanSession {
 interface CompletedData {
   durationStr: string;
   tss: number | null;
+  segmentActuals?: (number | null)[] | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -252,9 +253,12 @@ export default function WeekAccordion({
 
             // Every (non-rest) session is expandable — structured or synthesised.
             // Normalise both formats and derive paces from the Settings zones.
+            // For completed sessions, attach per-segment actuals for colour-coding.
+            const segActuals = isDone ? completed?.segmentActuals ?? null : null;
             const detailSteps: NormStep[] = normalizeStructure(
               session.structure?.length ? session.structure : syntheticStructure(session, intensity),
               zones,
+              segActuals,
             );
 
             // Planned duration derived from the zone-paced segments (falls back to the
@@ -335,12 +339,12 @@ export default function WeekAccordion({
                     )}
                   </div>
 
-                  {/* Profile chart — colour encodes session difficulty */}
+                  {/* Profile chart — bars coloured by pacing performance when done, else intensity */}
                   <ProfileChart
-                    bars={buildProfileBars(session, thresholdPace, zones)}
+                    bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
                     size="xs"
                     color={INTENSITY[intensity]?.hex ?? '#17191e'}
-                    opacity={0.6}
+                    opacity={segActuals ? 0.9 : 0.6}
                   />
 
                   {/* Past only: how close to plan */}

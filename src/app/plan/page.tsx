@@ -76,7 +76,7 @@ export default async function PlanPage() {
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km'),
+    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km, segment_actuals'),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
   ]);
 
@@ -90,7 +90,7 @@ export default async function PlanPage() {
   }
 
   // Build map of plan_session_id → actual display values for done sessions
-  const completedMap: Record<string, { durationStr: string; tss: number | null }> = {};
+  const completedMap: Record<string, { durationStr: string; tss: number | null; segmentActuals: (number | null)[] | null }> = {};
   for (const cw of completed ?? []) {
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
@@ -105,7 +105,11 @@ export default async function PlanPage() {
       const IF = threshMinKm / pace;
       tss = Math.round((mins / 60) * IF * IF * 100);
     }
-    completedMap[cw.plan_session_id] = { durationStr: durationStr ?? '', tss };
+    completedMap[cw.plan_session_id] = {
+      durationStr: durationStr ?? '',
+      tss,
+      segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+    };
   }
 
   // First non-done, non-rest session in date order — used for next-up row highlight

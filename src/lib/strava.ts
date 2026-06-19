@@ -1,4 +1,5 @@
 import { supabaseAdmin } from './supabase-admin';
+import { expandSegmentDistances } from './plan-structure';
 
 export interface StravaActivity {
   id: number;
@@ -57,6 +58,66 @@ export async function getValidAccessToken(): Promise<string | null> {
 }
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
+
+// ── Per-segment pacing (Strava streams) ──────────────────────
+
+async function fetchStreams(
+  activityId: number,
+  token: string,
+): Promise<{ distance: number[]; time: number[] } | null> {
+  const res = await fetch(
+    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time&key_by_type=true`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  const distance = data?.distance?.data;
+  const time     = data?.time?.data;
+  if (!Array.isArray(distance) || !Array.isArray(time) || distance.length !== time.length || !distance.length) {
+    return null;
+  }
+  return { distance, time };
+}
+
+// Interpolated elapsed time (s) at a cumulative distance (m); null if beyond run.
+function timeAtDistance(targetM: number, dist: number[], time: number[]): number | null {
+  if (targetM <= 0) return time[0] ?? 0;
+  if (targetM > dist[dist.length - 1]) return null;
+  for (let i = 1; i < dist.length; i++) {
+    if (dist[i] >= targetM) {
+      const d0 = dist[i - 1], d1 = dist[i], t0 = time[i - 1], t1 = time[i];
+      return d1 === d0 ? t1 : t0 + (t1 - t0) * ((targetM - d0) / (d1 - d0));
+    }
+  }
+  return time[time.length - 1];
+}
+
+// Actual pace (s/km) per planned segment, in expanded order. Null = beyond run.
+function computeSegmentActuals(distancesKm: number[], dist: number[], time: number[]): (number | null)[] {
+  const out: (number | null)[] = [];
+  let cum = 0;
+  for (const km of distancesKm) {
+    const tStart = timeAtDistance(cum * 1000, dist, time);
+    const tEnd   = timeAtDistance((cum + km) * 1000, dist, time);
+    cum += km;
+    if (km <= 0 || tStart == null || tEnd == null) { out.push(null); continue; }
+    out.push(Math.round((tEnd - tStart) / km));
+  }
+  return out;
+}
+
+async function computeForActivity(
+  stravaId: number,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  structure: any[] | null | undefined,
+  token: string,
+): Promise<(number | null)[] | null> {
+  const distances = expandSegmentDistances(structure);
+  if (!distances.length) return null;
+  const streams = await fetchStreams(stravaId, token);
+  if (!streams) return null;
+  return computeSegmentActuals(distances, streams.distance, streams.time);
+}
 
 export async function syncActivities(): Promise<{ synced: number; matched: number }> {
   const token = await getValidAccessToken();
@@ -118,7 +179,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   // Fetch plan sessions
   const { data: planSessions } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, distance_km');
+    .select('id, scheduled_date, distance_km, structure');
 
   if (!planSessions?.length) return { synced: runs.length, matched: 0 };
 
@@ -149,6 +210,8 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       matched_at:      new Date().toISOString(),
     });
 
+    const segmentActuals = await computeForActivity(activity.strava_activity_id, match.structure, token);
+
     await supabaseAdmin.from('completed_workouts').insert({
       plan_session_id:       match.id,
       completed_date:        activity.activity_date,
@@ -157,9 +220,28 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       actual_avg_pace_min_km: activity.avg_pace_min_km,
       strava_activity_id:    activity.strava_activity_id,
       source:                'strava',
+      segment_actuals:       segmentActuals,
     });
 
     matched++;
+  }
+
+  // Backfill per-segment actuals for matched runs that don't have them yet
+  const { data: missing } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, plan_session_id, strava_activity_id')
+    .is('segment_actuals', null)
+    .eq('source', 'strava');
+
+  if (missing?.length) {
+    const structById = new Map(planSessions.map(p => [p.id, p.structure]));
+    for (const cw of missing) {
+      if (!cw.plan_session_id || !cw.strava_activity_id) continue;
+      const segmentActuals = await computeForActivity(cw.strava_activity_id, structById.get(cw.plan_session_id), token);
+      if (segmentActuals) {
+        await supabaseAdmin.from('completed_workouts').update({ segment_actuals: segmentActuals }).eq('id', cw.id);
+      }
+    }
   }
 
   await supabaseAdmin.from('strava_connection')

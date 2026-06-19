@@ -97,6 +97,7 @@ export interface NormSegment {
   midSeconds: number | null; // for approx time + effort
   distanceKm: number;
   note?: string;            // legacy description, preserved
+  actualPaceSec?: number | null; // actual pace (s/km) when completed; repeats = mean
 }
 
 export interface NormRepeat {
@@ -158,24 +159,92 @@ function segmentLegacy(s: any, zones: ZoneMap): NormSegment {
   };
 }
 
+// `actuals` (optional): actual pace s/km per segment in EXPANDED order (repeats
+// unrolled, for r in count { for sub }). Phases take one; repeat steps get the
+// mean across reps. Must match expandSegmentDistances ordering.
 export function normalizeStructure(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure: any[] | null | undefined,
   zones: ZoneMap,
+  actuals?: (number | null)[] | null,
 ): NormStep[] {
   if (!structure?.length) return [];
   const out: NormStep[] = [];
+  let ai = 0;
+  const next = (): number | null => (actuals ? (actuals[ai++] ?? null) : null);
+
   for (const raw of structure) {
     if (isNewFormat(raw)) {
       if (raw.type === 'repeat' && Array.isArray(raw.steps)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        out.push({ kind: 'repeat', count: raw.count || 1, steps: raw.steps.map((st: any) => segmentNew(st, zones)) });
+        const steps: NormSegment[] = raw.steps.map((st: any) => segmentNew(st, zones));
+        const count = raw.count || 1;
+        const sums: number[] = steps.map(() => 0);
+        const hits: number[] = steps.map(() => 0);
+        for (let r = 0; r < count; r++) {
+          for (let j = 0; j < steps.length; j++) {
+            const v = next();
+            if (v != null) { sums[j] += v; hits[j]++; }
+          }
+        }
+        if (actuals) {
+          steps.forEach((s, j) => { s.actualPaceSec = hits[j] ? Math.round(sums[j] / hits[j]) : null; });
+        }
+        out.push({ kind: 'repeat', count, steps });
       } else if (raw.type === 'phase') {
-        out.push(segmentNew(raw, zones));
+        const seg = segmentNew(raw, zones);
+        if (actuals) seg.actualPaceSec = next();
+        out.push(seg);
       }
     } else {
-      out.push(segmentLegacy(raw, zones));
+      const seg = segmentLegacy(raw, zones);
+      if (actuals) seg.actualPaceSec = next();
+      out.push(seg);
     }
   }
   return out;
+}
+
+// Expanded per-segment distances (km), matching normalizeStructure ordering.
+// Used by the sync to align Strava streams to planned segments.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function expandSegmentDistances(structure: any[] | null | undefined): number[] {
+  if (!structure?.length) return [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const dist = (s: any): number => {
+    if ('distance_km' in s) return Number(s.distance_km) || 0;
+    const sec = paceToSeconds(s.pace_per_km);
+    const mins = Number(s.duration_mins) || 0;
+    return sec ? Number((mins / (sec / 60)).toFixed(1)) : 0;
+  };
+  const out: number[] = [];
+  for (const raw of structure) {
+    if (raw?.type === 'repeat' && Array.isArray(raw.steps)) {
+      for (let r = 0; r < (raw.count || 1); r++) for (const st of raw.steps) out.push(dist(st));
+    } else {
+      out.push(dist(raw));
+    }
+  }
+  return out;
+}
+
+// Actual pacing vs the segment's target zone window.
+export type SegmentPerf = 'ahead' | 'on' | 'behind';
+
+export const PERF_COLOR: Record<SegmentPerf, string> = {
+  ahead:  '#14617e', // faster than the window
+  on:     '#4f7a52', // within the window
+  behind: '#c75b33', // slower than the window
+};
+
+export function segmentPerformance(seg: NormSegment): SegmentPerf | null {
+  if (seg.actualPaceSec == null) return null;
+  const fast = paceToSeconds(seg.paceMin);
+  const slow = paceToSeconds(seg.paceMax);
+  if (fast == null || slow == null) return null;
+  const lo = Math.min(fast, slow);
+  const hi = Math.max(fast, slow);
+  if (seg.actualPaceSec < lo) return 'ahead';
+  if (seg.actualPaceSec > hi) return 'behind';
+  return 'on';
 }

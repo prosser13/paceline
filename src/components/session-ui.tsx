@@ -2,6 +2,7 @@
 // segments and metrics. Pure components (no hooks) so they can be used by both
 // the plan page (client) and the dashboard (server) — keeping styling in sync.
 
+import { segmentPerformance, PERF_COLOR } from '@/lib/plan-structure';
 import type { NormSegment, NormStep } from '@/lib/plan-structure';
 
 // Intensity → on-brand colour (drives the profile chart) + nominal zone
@@ -89,14 +90,28 @@ function PhaseLine({ seg }: { seg: NormSegment }) {
     ? (seg.paceMin === seg.paceMax ? `${seg.paceMin}/km` : `${seg.paceMin}–${seg.paceMax}/km`)
     : '—';
 
+  const perf      = segmentPerformance(seg);
+  const perfColor = perf ? PERF_COLOR[perf] : undefined;
+  const actual    = seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : null;
+
   return (
     <div className="py-[6px]">
       <div className="grid items-center gap-x-[10px]" style={{ gridTemplateColumns: DETAIL_COLS }}>
-        <span className="text-[14.5px] font-medium text-ink truncate">{seg.label}</span>
+        <span className="text-[14.5px] font-medium text-ink truncate flex items-center gap-[7px]">
+          {perfColor && (
+            <i className="inline-block w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perfColor }} aria-hidden="true" />
+          )}
+          {seg.label}
+        </span>
         <span className="font-mono text-[14px] text-ink text-right tabular-nums">
           {seg.distanceKm ? `${seg.distanceKm} km` : '—'}
         </span>
-        <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{paceStr}</span>
+        <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
+          <span className="block text-ink">{paceStr}</span>
+          {actual && (
+            <span className="block text-[12px]" style={{ color: perfColor }}>ran {actual}</span>
+          )}
+        </span>
         <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">
           {time ? `~${time}` : '—'}
         </span>
