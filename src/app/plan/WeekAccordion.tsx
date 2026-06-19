@@ -200,7 +200,7 @@ export default function WeekAccordion({
   }
 
   return (
-    <div className="border border-fog rounded-[14px] overflow-hidden bg-paper" style={{ borderTop: `4px solid ${phaseHex}` }}>
+    <div className="rounded-[14px] overflow-hidden bg-paper" style={{ border: `4px solid ${phaseHex}` }}>
 
       {/* Accordion header — Week · Phase and date on one line, same size */}
       <button
@@ -238,7 +238,7 @@ export default function WeekAccordion({
 
       {/* Expanded content */}
       {open && (
-        <div className="border-t border-fog">
+        <div style={{ borderTop: `4px solid ${phaseHex}` }}>
           {week.purpose && (
             <div className="px-[18px] py-[9px] text-[13px] text-stone/80 italic border-b border-fog/50">
               {week.purpose}

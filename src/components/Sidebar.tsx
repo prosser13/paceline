@@ -1,16 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import PacelineMark from './PacelineMark';
 
-const NAV = [
-  { href: '/',      label: 'Dashboard' },
-  { href: '/plan',  label: 'Plan' },
+const PLANS = [
+  { slug: 'dragon-50',       label: 'Dragon 50' },
+  { slug: 'malaga-marathon', label: 'Malaga Marathon' },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const planParam = useSearchParams().get('plan');
 
   function navClass(href: string) {
     const active = pathname === href;
@@ -23,6 +24,13 @@ export default function Sidebar() {
     return `w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname === href ? 'bg-bone' : 'bg-fog'}`;
   }
 
+  function planClass(slug: string) {
+    const active = pathname === '/plan' && planParam === slug;
+    return `flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-colors ${
+      active ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+    }`;
+  }
+
   return (
     <aside className="w-[180px] bg-paper border-r border-fog flex flex-col gap-1.5 p-[18px_14px] shrink-0 h-full">
       {/* Brand */}
@@ -31,12 +39,23 @@ export default function Sidebar() {
         paceline
       </div>
 
-      {NAV.map(({ href, label }) => (
-        <Link key={href} href={href} className={navClass(href)}>
-          <span className={dot(href)} />
-          {label}
-        </Link>
-      ))}
+      <Link href="/" className={navClass('/')}>
+        <span className={dot('/')} />
+        Dashboard
+      </Link>
+
+      <Link href="/plan" className={navClass('/plan')}>
+        <span className={dot('/plan')} />
+        Plan
+      </Link>
+      <div className="ml-[18px] flex flex-col gap-1">
+        {PLANS.map(p => (
+          <Link key={p.slug} href={`/plan?plan=${p.slug}`} className={planClass(p.slug)}>
+            <span className="w-[6px] h-[6px] rounded-[2px] bg-oxblood/60 flex-shrink-0" />
+            {p.label}
+          </Link>
+        ))}
+      </div>
 
       <div className="mt-auto">
         <Link href="/settings" className={navClass('/settings')}>

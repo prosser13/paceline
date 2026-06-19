@@ -63,7 +63,8 @@ function eachDate(from: string, to: string): string[] {
   return out;
 }
 
-export default async function PlanPage() {
+export default async function PlanPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
+  const { plan: planParam } = await searchParams;
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
@@ -200,9 +201,30 @@ export default async function PlanPage() {
     />
   );
 
+  // ?plan=<slug> filters the page: a future plan's slug shows only that plan;
+  // no param shows the full current plan (Dragon 50) + future race blocks.
+  const selectedFuture = planParam ? (plans ?? []).find(p => p.slug === planParam) ?? null : null;
+  const showFutureBlocks = !planParam;
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
+
+      {selectedFuture ? (
+        <>
+          <RaceBlock
+            name={selectedFuture.name}
+            raceDate={selectedFuture.race_date}
+            distanceKm={selectedFuture.distance_km}
+            targetTime={selectedFuture.target_time}
+            targetPace={selectedFuture.target_pace}
+          />
+          <div className="mt-6 border border-fog rounded-[14px] bg-paper px-[22px] py-[44px] text-center">
+            <p className="text-stone text-[15px]">This plan hasn&apos;t been built yet.</p>
+          </div>
+        </>
+      ) : (
+        <>
 
         {/* A-race block (current plan) */}
         {aRace && (
@@ -266,7 +288,7 @@ export default async function PlanPage() {
         </div>
 
         {/* Future A-race blocks (their own plans, built later) */}
-        {(plans ?? []).map(p => (
+        {showFutureBlocks && (plans ?? []).map(p => (
           <div key={p.id} className="mt-8">
             <RaceBlock
               name={p.name}
@@ -277,6 +299,9 @@ export default async function PlanPage() {
             />
           </div>
         ))}
+
+        </>
+      )}
 
       </div>
     </AppShell>
