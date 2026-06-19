@@ -41,6 +41,7 @@ interface PlanSession {
 
 interface CompletedData {
   durationStr: string;
+  distanceKm?: number | null;
   tss: number | null;
   segmentActuals?: (number | null)[] | null;
 }
@@ -353,6 +354,7 @@ export default function WeekAccordion({
                   {/* Metric */}
                   <MetricBlock
                     duration={displayDuration}
+                    distanceKm={isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null)}
                     tss={displayTss}
                     estimated={!isDone}
                   />

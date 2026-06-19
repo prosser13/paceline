@@ -174,9 +174,10 @@ const METRIC_SIZE = {
 } as const;
 
 export function MetricBlock({
-  duration, tss, estimated, size = 'sm',
+  duration, distanceKm, tss, estimated, size = 'sm',
 }: {
   duration: string | null;
+  distanceKm?: number | null;
   tss: number | null;
   estimated: boolean;
   size?: 'sm' | 'lg';
@@ -187,7 +188,10 @@ export function MetricBlock({
       <div className={`font-display font-semibold leading-none ${s.dur} ${duration ? 'text-ink' : 'text-stone'}`}>
         {duration ?? '—'}
       </div>
-      <div className={`font-mono font-medium text-ink mt-[4px] ${s.tss}`}>
+      {distanceKm != null && (
+        <div className={`font-mono text-ink mt-[3px] ${s.tss}`}>{distanceKm.toFixed(1)} km</div>
+      )}
+      <div className={`font-mono font-medium text-ink mt-[2px] ${s.tss}`}>
         {tss != null ? `${estimated ? '~' : ''}${tss} TSS` : '— TSS'}
       </div>
     </div>

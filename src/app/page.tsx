@@ -440,7 +440,13 @@ function SessionHero({
               color={INTENSITY[intensity]?.hex ?? '#17191e'}
               opacity={segActuals ? 0.9 : 0.6}
             />
-            <MetricBlock duration={displayDuration} tss={displayTss} estimated={!isDone} size="lg" />
+            <MetricBlock
+              duration={displayDuration}
+              distanceKm={isDone ? distActual : distPlanned}
+              tss={displayTss}
+              estimated={!isDone}
+              size="lg"
+            />
           </div>
 
           {isDone && (

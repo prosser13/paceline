@@ -103,7 +103,12 @@ export default function ExpandableSessionRow({
           opacity={0.6}
         />
 
-        <MetricBlock duration={duration} tss={session.estimated_tss ?? null} estimated />
+        <MetricBlock
+        duration={duration}
+        distanceKm={session.distance_km != null ? Number(session.distance_km) : null}
+        tss={session.estimated_tss ?? null}
+        estimated
+      />
       </div>
 
       {expanded && <WorkoutDetail steps={steps} />}
