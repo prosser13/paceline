@@ -4,8 +4,9 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS,
 } from '@/components/session-ui';
+import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
@@ -38,16 +39,6 @@ function addDays(date: Date, n: number) {
 
 function isoDate(d: Date) {
   return d.toISOString().split('T')[0];
-}
-
-function formatDay(dateStr: string) {
-  const d = new Date(dateStr + 'T00:00:00');
-  return {
-    short: d.toLocaleDateString('en-GB', { weekday: 'short' }),
-    long:  d.toLocaleDateString('en-GB', { weekday: 'long' }),
-    date:  d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-    full:  d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
-  };
 }
 
 function greet() {
@@ -183,6 +174,20 @@ export default async function DashboardPage() {
     .gte('date_to', todayStr)
     .single();
 
+  // Planned km this week — actual sum of Mon–Fri sessions (not the stored estimate)
+  let weekPlannedKm: number | null = null;
+  if (weekRow?.date_from) {
+    const friD = new Date(weekRow.date_from + 'T12:00:00');
+    friD.setDate(friD.getDate() + 4);
+    const friStr = `${friD.getFullYear()}-${String(friD.getMonth() + 1).padStart(2, '0')}-${String(friD.getDate()).padStart(2, '0')}`;
+    const { data: weekSessions } = await supabaseAdmin
+      .from('plan_sessions')
+      .select('distance_km')
+      .gte('scheduled_date', weekRow.date_from)
+      .lte('scheduled_date', friStr);
+    weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
+  }
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
@@ -208,7 +213,7 @@ export default async function DashboardPage() {
                   <p className="text-[15.5px] text-ink m-0">{weekRow.purpose}</p>
                 )}
                 <span className="font-mono text-[13px] text-stone mt-auto">
-                  {weekRow.planned_volume_km} km planned this week
+                  {weekPlannedKm ?? weekRow.planned_volume_km} km planned this week
                 </span>
               </>
             ) : (
@@ -392,7 +397,6 @@ function SessionHero({
   zones: ZoneMap;
   completed: { durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null; segmentActuals: (number | null)[] | null } | null;
 }) {
-  const d         = formatDay(session.scheduled_date);
   const intensity = (session.intensity as string | null) ?? 'easy';
   const segActuals = completed?.segmentActuals ?? null;
   const steps     = normalizeStructure(
@@ -430,7 +434,6 @@ function SessionHero({
       <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         <div className="flex items-center gap-[12px] font-mono text-[13px]">
-          <span style={{ opacity: 0.8 }}>{d.long}</span>
           {isDone && <span>✓ Completed</span>}
         </div>
       </div>
@@ -511,12 +514,7 @@ function SessionHero({
         </p>
       )}
 
-      {steps.length > 0 && (
-        <div className="mt-[18px]">
-          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">The session</p>
-          <WorkoutDetail steps={steps} variant="card" />
-        </div>
-      )}
+      <CollapsibleSession steps={steps} defaultOpen={!isDone} />
 
       {isDone ? (
         <div className="mt-[18px] font-mono text-[13px] text-stone">Logged from Strava</div>

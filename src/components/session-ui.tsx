@@ -185,8 +185,8 @@ function RestBed() {
 
 export function RestDayRow({ short, date }: { short: string; date: string }) {
   return (
-    <div className="px-[10px] py-[6px]">
-      <div className="relative overflow-hidden flex items-center gap-[14px] rounded-[8px] px-[14px] py-[12px]"
+    <div className="px-[2px] py-[5px]">
+      <div className="relative overflow-hidden flex items-center gap-[14px] rounded-[8px] px-[16px] py-[12px]"
            style={{ border: '1px dashed #c9c2b2', background: REST_SHEETS }}>
         <div className="absolute right-[-6px] top-1/2 -translate-y-1/2 pointer-events-none">
           <RestBed />
@@ -224,7 +224,9 @@ export function MetricBlock({
         {duration ?? '—'}
       </div>
       {distanceKm != null && (
-        <div className={`font-mono text-ink mt-[3px] ${s.tss}`}>{distanceKm.toFixed(1)} km</div>
+        <div className={`font-mono text-ink mt-[3px] ${s.tss}`}>
+          {distanceKm % 1 === 0 ? distanceKm : distanceKm.toFixed(1)} km
+        </div>
       )}
       <div className={`font-mono font-medium text-ink mt-[2px] ${s.tss}`}>
         {tss != null ? `${estimated ? '~' : ''}${tss} TSS` : '— TSS'}
