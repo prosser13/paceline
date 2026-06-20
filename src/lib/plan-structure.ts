@@ -86,6 +86,26 @@ export function resolveZone(
   return zoneFromPace(fallbackPace, zones);
 }
 
+// Every zone whose window overlaps the pace band [fastPace, slowPace], in
+// zone order (e.g. a 3:20–3:32 band returns [Z4, Z5]).
+export function zonesForPaceRange(
+  fastPace: string | null | undefined,
+  slowPace: string | null | undefined,
+  zones: ZoneMap,
+): PaceZone[] {
+  const a = paceToSeconds(fastPace);
+  const b = paceToSeconds(slowPace);
+  if (a == null || b == null) return [];
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  return zonesSorted(zones).filter(z => {
+    const zf = paceToSeconds(z.paceMin);
+    const zs = paceToSeconds(z.paceMax);
+    if (zf == null || zs == null) return false;
+    return Math.min(zf, zs) <= hi && Math.max(zf, zs) >= lo;
+  });
+}
+
 // HR zone target ranges, keyed by zone (Z1..Zn)
 export type HrZoneMap = Record<string, { min: number; max: number }>;
 
@@ -95,6 +115,7 @@ export interface NormSegment {
   kind: 'segment';
   label: string;
   zoneKey: string | null;
+  zoneKeys?: string[];      // >1 when a custom pace band spans multiple zones (e.g. Z4 + Z5)
   paceMin: string;          // display window — zone's if resolved, else authored
   paceMax: string;
   midSeconds: number | null; // for approx time + effort
@@ -134,6 +155,27 @@ function avgSeconds(a: string | null | undefined, b: string | null | undefined):
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function segmentNew(s: any, zones: ZoneMap): NormSegment {
+  // Custom pace band: an explicit pace_min–pace_max with no fixed zone (e.g. a
+  // race target). Shown as authored (not snapped to a zone window); the zone
+  // chip reflects whichever zone(s) the band spans, and the time estimate uses
+  // the true midpoint.
+  if (!s.zone && s.pace_min && s.pace_max && s.pace_min !== s.pace_max) {
+    const spanned = zonesForPaceRange(s.pace_min, s.pace_max, zones);
+    const a = paceToSeconds(s.pace_min);
+    const b = paceToSeconds(s.pace_max);
+    return {
+      kind: 'segment',
+      label: s.label ?? 'Run',
+      zoneKey: spanned[0]?.key ?? null,
+      zoneKeys: spanned.length > 1 ? spanned.map(z => z.key) : undefined,
+      paceMin: s.pace_min,
+      paceMax: s.pace_max,
+      midSeconds: a != null && b != null ? (a + b) / 2 : avgSeconds(s.pace_min, s.pace_max),
+      distanceKm: Number(s.distance_km) || 0,
+      note: s.description ?? s.note ?? undefined,
+    };
+  }
+
   const zone = resolveZone(s.zone, s.pace_min, zones);
   return {
     kind: 'segment',
@@ -143,6 +185,7 @@ function segmentNew(s: any, zones: ZoneMap): NormSegment {
     paceMax: zone?.paceMax ?? s.pace_max ?? '',
     midSeconds: zone ? zoneMidSeconds(zone) : avgSeconds(s.pace_min, s.pace_max),
     distanceKm: Number(s.distance_km) || 0,
+    note: s.description ?? s.note ?? undefined,
   };
 }
 

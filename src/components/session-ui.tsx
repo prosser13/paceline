@@ -22,7 +22,7 @@ const ZONE_STYLE: Record<string, { background: string; color: string }> = {
   Z2:     { background: 'rgba(20,97,126,.12)',   color: '#14617e' },
   Z3:     { background: 'rgba(79,122,82,.13)',   color: '#3b6343' },
   Z4:     { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  Z5:     { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
+  Z5:     { background: 'rgba(140,43,43,.16)',   color: '#8c2b2b' },
   'Z4-5': { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
   'Z1-2': { background: 'rgba(20,97,126,.10)',   color: '#14617e' },
 };
@@ -32,6 +32,21 @@ export function ZoneChip({ zone }: { zone: string }) {
   return (
     <span className="font-mono text-[12px] px-[5px] py-[1px] rounded-[3px] shrink-0 text-center" style={s}>
       {zone}
+    </span>
+  );
+}
+
+// A pace band spanning two zones — e.g. "Z4/5", box split half-and-half.
+export function MultiZoneChip({ zones }: { zones: string[] }) {
+  const a = ZONE_STYLE[zones[0]] ?? ZONE_STYLE.Z2;
+  const b = ZONE_STYLE[zones[1]] ?? ZONE_STYLE.Z2;
+  const label = `Z${zones.map(z => z.replace(/\D/g, '')).join('/')}`;
+  return (
+    <span
+      className="font-mono text-[12px] px-[5px] py-[1px] rounded-[3px] shrink-0 text-center"
+      style={{ background: `linear-gradient(90deg, ${a.background} 0 50%, ${b.background} 50% 100%)`, color: a.color }}
+    >
+      {label}
     </span>
   );
 }
@@ -156,7 +171,9 @@ function SegLabel({ seg, suffix }: { seg: NormSegment; suffix?: string }) {
         <i className="inline-block w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perfColor }} aria-hidden="true" />
       )}
       <span className="truncate">{seg.label}{suffix}</span>
-      {seg.zoneKey && <ZoneChip zone={seg.zoneKey} />}
+      {seg.zoneKeys && seg.zoneKeys.length > 1
+        ? <MultiZoneChip zones={seg.zoneKeys} />
+        : seg.zoneKey && <ZoneChip zone={seg.zoneKey} />}
     </span>
   );
 }
