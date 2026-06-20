@@ -9,6 +9,7 @@ import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 
 interface PlanSession {
   id: string;
+  plan_id?: number | null;
   week_number: number;
   session_type: string;
   name: string;
@@ -161,7 +162,10 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const viewPlan  = selectedPlan ?? activePlan;
   const viewWeeks = viewPlan ? allWeeks.filter(w => w.plan_id === viewPlan.id) : [];
 
-  const byWeek = allSessions.reduce<Record<number, PlanSession[]>>((acc, s) => {
+  // Sessions for the viewed plan only — week_number is per-plan, so grouping
+  // without this filter would merge same-numbered weeks from other plans.
+  const planSessions = viewPlan ? allSessions.filter(s => s.plan_id === viewPlan.id) : [];
+  const byWeek = planSessions.reduce<Record<number, PlanSession[]>>((acc, s) => {
     (acc[s.week_number] ??= []).push(s);
     return acc;
   }, {});
