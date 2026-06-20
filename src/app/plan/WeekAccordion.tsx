@@ -178,8 +178,13 @@ interface Props {
 export default function WeekAccordion({
   week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones, hrZones,
 }: Props) {
-  const [open, setOpen]             = useState(defaultOpen);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [open, setOpen]               = useState(defaultOpen);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggleExpanded = (id: string) => setExpandedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const totalKm    = sessions.reduce((s, sess) => s + (Number(sess.distance_km) || 0), 0);
   const phaseHex   = PHASE_HEX[week.phase] ?? '#8a857a';
@@ -263,7 +268,7 @@ export default function WeekAccordion({
             const isToday    = status === 'today';
             const isNext     = session.id === nextSessionId;
             const isFocus    = isToday || isNext;
-            const isExpanded = expandedId === session.id;
+            const isExpanded = expandedIds.has(session.id);
             const completed  = completedMap[session.id];
 
             // Every (non-rest) session is expandable — structured or synthesised.
@@ -322,7 +327,7 @@ export default function WeekAccordion({
               <div key={session.id}>
                 <div
                   className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${railClass} ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
-                  onClick={() => setExpandedId(isExpanded ? null : session.id)}
+                  onClick={() => toggleExpanded(session.id)}
                 >
                   {/* Day */}
                   <div className="w-[46px] shrink-0">
