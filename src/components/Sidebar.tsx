@@ -69,6 +69,16 @@ export default function Sidebar({
         )}
       </div>
 
+      <Link
+        href="/strength"
+        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
+          pathname.startsWith('/strength') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname.startsWith('/strength') ? 'bg-bone' : 'bg-fog'}`} />
+        Strength
+      </Link>
+
       <div className="mt-auto">
         <Link href="/settings" className={navClass('/settings')}>
           <span className={dot('/settings')} />

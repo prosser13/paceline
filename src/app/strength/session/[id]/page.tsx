@@ -1,0 +1,51 @@
+export const dynamic = 'force-dynamic';
+
+import AppShell from '@/components/AppShell';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { notFound } from 'next/navigation';
+import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import ActiveSessionClient, { type ActiveItem } from './ActiveSessionClient';
+
+export default async function ActiveSessionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  const { data: sess } = await supabaseAdmin
+    .from('strength_sessions').select('*').eq('short_id', id).maybeSingle();
+  if (!sess) notFound();
+
+  const { data: rows } = await supabaseAdmin
+    .from('strength_session_exercises').select('*').eq('session_id', sess.id).order('position');
+
+  const lib = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
+  const items: ActiveItem[] = (rows ?? []).map(r => {
+    const ex = lib.get(r.exercise_id);
+    return {
+      id: r.id,
+      exerciseId: r.exercise_id,
+      name: r.exercise_name,
+      group: ex?.group ?? null,
+      repsType: r.reps_type as 'reps' | 'secs',
+      sets: r.sets,
+      repsValue: r.reps_value,
+      weightKg: r.weight_kg != null ? Number(r.weight_kg) : null,
+      isSingleLeg: ex?.isSingleLeg ?? false,
+      cue: ex?.cue ?? '',
+      youtubeUrl: ex?.youtubeUrl ?? null,
+      difficulty: r.difficulty,
+      isDone: r.is_done,
+    };
+  });
+
+  return (
+    <AppShell>
+      <div className="px-[26px] py-[22px] max-w-[640px]">
+        <ActiveSessionClient
+          sessionId={sess.id}
+          intent={sess.intent}
+          completedAt={sess.completed_at}
+          items={items}
+        />
+      </div>
+    </AppShell>
+  );
+}
