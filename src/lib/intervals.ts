@@ -1,4 +1,5 @@
 import type { PlanSession, WorkoutStep } from '@/data/sessions';
+import { supabaseAdmin } from './supabase-admin';
 
 const ATHLETE_ID = 'i330821';
 const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
@@ -109,57 +110,31 @@ function isoDay(d: Date) {
   return d.toISOString().split('T')[0];
 }
 
-/**
- * Fetches the latest fitness (CTL), fatigue (ATL) and form (TSB) from
- * intervals.icu wellness. Returns null if the key is missing or the API
- * call fails, so the dashboard can fall back to its placeholder state.
- */
-export async function getFitnessForm(): Promise<FitnessForm | null> {
-  if (!process.env.INTERVALS_API_KEY) return null;
-
-  const today  = new Date();
-  const newest = isoDay(today);
-  const oldest = isoDay(new Date(today.getTime() - 7 * 86_400_000));
-
-  try {
-    const res = await fetch(
-      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
-      { headers: authHeaders(), cache: 'no-store' },
-    );
-    if (!res.ok) return null;
-
-    const days = (await res.json()) as Array<{ ctl?: number | null; atl?: number | null }>;
-    // wellness is returned ascending by date — take the most recent day with load data
-    const latest = [...days].reverse().find(d => d.ctl != null && d.atl != null);
-    if (!latest || latest.ctl == null || latest.atl == null) return null;
-
-    return {
-      fitness: Math.round(latest.ctl),
-      fatigue: Math.round(latest.atl),
-      form:    Math.round(latest.ctl - latest.atl),
-    };
-  } catch {
-    return null;
-  }
-}
-
 export interface FitnessPoint {
   date: string; // yyyy-mm-dd
   ctl: number;  // fitness
   atl: number;  // fatigue
 }
 
+export interface WellnessSnapshot {
+  form: FitnessForm | null;       // latest fitness/fatigue/form (null if no load data)
+  history: FitnessPoint[] | null; // daily CTL/ATL series for the trend chart
+}
+
+const WELLNESS_HISTORY_DAYS = 42;
+
 /**
- * Daily fitness (CTL) / fatigue (ATL) series for the last `days` days, oldest
- * first. Returns null if the key is missing or the API call fails. Used for the
- * dashboard fitness-vs-fatigue trend chart.
+ * One intervals.icu wellness call covering the last 42 days — both the latest
+ * form snapshot and the trend series derive from it (the old code made two
+ * separate calls to the same endpoint). Returns null if the key is missing or
+ * the API call fails.
  */
-export async function getFitnessHistory(days = 42): Promise<FitnessPoint[] | null> {
+async function fetchWellnessFromApi(): Promise<WellnessSnapshot | null> {
   if (!process.env.INTERVALS_API_KEY) return null;
 
   const today  = new Date();
   const newest = isoDay(today);
-  const oldest = isoDay(new Date(today.getTime() - days * 86_400_000));
+  const oldest = isoDay(new Date(today.getTime() - WELLNESS_HISTORY_DAYS * 86_400_000));
 
   try {
     const res = await fetch(
@@ -169,13 +144,84 @@ export async function getFitnessHistory(days = 42): Promise<FitnessPoint[] | nul
     if (!res.ok) return null;
 
     const rows = (await res.json()) as Array<{ id?: string; ctl?: number | null; atl?: number | null }>;
-    const pts = rows
-      .filter(d => d.ctl != null && d.atl != null)
-      .map(d => ({ date: String(d.id ?? ''), ctl: Math.round(d.ctl as number), atl: Math.round(d.atl as number) }));
-    return pts.length > 1 ? pts : null;
+    // wellness is returned ascending by date
+    const valid = rows.filter(d => d.ctl != null && d.atl != null);
+
+    const history = valid.map(d => ({
+      date: String(d.id ?? ''),
+      ctl: Math.round(d.ctl as number),
+      atl: Math.round(d.atl as number),
+    }));
+
+    const latest = valid[valid.length - 1];
+    const form = latest
+      ? {
+          fitness: Math.round(latest.ctl as number),
+          fatigue: Math.round(latest.atl as number),
+          form:    Math.round((latest.ctl as number) - (latest.atl as number)),
+        }
+      : null;
+
+    return { form, history: history.length > 1 ? history : null };
   } catch {
     return null;
   }
+}
+
+function snapshotFromCacheRow(row: {
+  form: number | null; fitness: number | null; fatigue: number | null; history: unknown;
+}): WellnessSnapshot {
+  return {
+    form: row.fitness != null && row.fatigue != null
+      ? { fitness: row.fitness, fatigue: row.fatigue, form: row.form ?? 0 }
+      : null,
+    history: (row.history as FitnessPoint[] | null) ?? null,
+  };
+}
+
+/**
+ * Wellness snapshot for the dashboard, served from the `intervals_wellness_cache`
+ * table. The intervals.icu API is only hit when the cached row is from an earlier
+ * day (first visit of the day) or has been flagged stale by the Strava sync (a new
+ * run was detected). On API failure we fall back to the last cached value.
+ */
+export async function getWellnessCached(): Promise<WellnessSnapshot> {
+  const todayStr = isoDay(new Date());
+
+  const { data: cached } = await supabaseAdmin
+    .from('intervals_wellness_cache')
+    .select('fetched_date, form, fitness, fatigue, history, stale')
+    .eq('id', 1)
+    .maybeSingle();
+
+  const fresh = cached && cached.fetched_date === todayStr && !cached.stale;
+  if (fresh) return snapshotFromCacheRow(cached);
+
+  const snapshot = await fetchWellnessFromApi();
+
+  // API unavailable — serve the last known value rather than nothing.
+  if (!snapshot) return cached ? snapshotFromCacheRow(cached) : { form: null, history: null };
+
+  await supabaseAdmin.from('intervals_wellness_cache').upsert({
+    id: 1,
+    fetched_date: todayStr,
+    form:    snapshot.form?.form ?? null,
+    fitness: snapshot.form?.fitness ?? null,
+    fatigue: snapshot.form?.fatigue ?? null,
+    history: snapshot.history,
+    stale:   false,
+    updated_at: new Date().toISOString(),
+  });
+
+  return snapshot;
+}
+
+/** Flag the wellness cache stale so the next dashboard load refetches from intervals.icu. */
+export async function invalidateWellnessCache(): Promise<void> {
+  await supabaseAdmin
+    .from('intervals_wellness_cache')
+    .update({ stale: true })
+    .eq('id', 1);
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {

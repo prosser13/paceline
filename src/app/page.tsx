@@ -14,7 +14,7 @@ import {
 } from '@/components/dashboard-graphics';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
-import { getFitnessForm, getFitnessHistory } from '@/lib/intervals';
+import { getWellnessCached } from '@/lib/intervals';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,39 +65,69 @@ function greet() {
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
 
-  const today     = new Date();
-  const todayStr  = isoDate(today);
-  const todayFull = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-
-  // Today's session
-  const { data: todaySessions } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('*')
-    .eq('scheduled_date', todayStr)
-    .order('am_pm', { ascending: true });
-
-  const todaySession = (todaySessions?.[0] ?? null) as PlanSession | null;
-
-  // Tomorrow's session — its own hero card
+  const today       = new Date();
+  const todayStr    = isoDate(today);
   const tomorrowStr = isoDate(addDays(today, 1));
-  const { data: tomorrowSessions } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('*')
-    .eq('scheduled_date', tomorrowStr)
-    .order('am_pm', { ascending: true });
-  const tomorrowSession = (tomorrowSessions?.[0] ?? null) as PlanSession | null;
+  const weekAgoStr  = isoDate(addDays(today, -7));
+  const weekEndStr  = isoDate(addDays(today, 7));
+  const todayFull   = today.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  // Coming up — the days after tomorrow
-  const { data: upcoming } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('*')
-    .gt('scheduled_date', tomorrowStr)
-    .lte('scheduled_date', isoDate(addDays(today, 7)))
-    .order('scheduled_date', { ascending: true })
-    .order('am_pm', { ascending: true });
+  // ── Tier 1 — every query with no dependency on another, fired in parallel ──
+  const [
+    { data: { user } },
+    { data: todaySessions },
+    { data: tomorrowSessions },
+    { data: upcoming },
+    { data: recent },
+    { data: appConfig },
+    { data: paceZones },
+    { data: hrZoneRows },
+    { data: weekRow },
+    { data: raceRow },
+    wellness,
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabaseAdmin.from('plan_sessions').select('*').eq('scheduled_date', todayStr).order('am_pm', { ascending: true }),
+    supabaseAdmin.from('plan_sessions').select('*').eq('scheduled_date', tomorrowStr).order('am_pm', { ascending: true }),
+    supabaseAdmin.from('plan_sessions').select('*')
+      .gt('scheduled_date', tomorrowStr).lte('scheduled_date', weekEndStr)
+      .order('scheduled_date', { ascending: true }).order('am_pm', { ascending: true }),
+    supabaseAdmin.from('completed_workouts')
+      .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
+      .gte('completed_date', weekAgoStr).lte('completed_date', todayStr),
+    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
+    supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('plan_weeks').select('*').lte('date_from', todayStr).gte('date_to', todayStr).single(),
+    supabaseAdmin.from('plan_sessions').select('scheduled_date')
+      .eq('session_type', 'RACE').ilike('name', '%Dragon 50%')
+      .order('scheduled_date').limit(1).maybeSingle(),
+    getWellnessCached(),
+  ]);
+
+  const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
+  const todaySession    = (todaySessions?.[0] ?? null) as PlanSession | null;
+  const tomorrowSession = (tomorrowSessions?.[0] ?? null) as PlanSession | null;
+  const fitnessForm    = wellness.form;
+  const fitnessHistory = wellness.history;
+
+  // Threshold pace for profile chart effort + TSS calculations
+  const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
+  const threshParts   = thresholdPace.split(':').map(Number);
+  const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
+
+  // Pace zones — paces/times across the dashboard derive from these (same as the plan page)
+  const zones: ZoneMap = {};
+  for (const z of paceZones ?? []) {
+    zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
+  }
+
+  // HR zones — target HR windows shown per segment
+  const hrZones: HrZoneMap = {};
+  for (const z of hrZoneRows ?? []) {
+    hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
+  }
 
   // Fill empty days with rest days (render-only, not persisted)
   const upcomingReal = (upcoming ?? []) as PlanSession[];
@@ -119,29 +149,13 @@ export default async function DashboardPage() {
   }
 
   // Last 7 days stats
-  const { data: recent } = await supabaseAdmin
-    .from('completed_workouts')
-    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
-    .gte('completed_date', isoDate(addDays(today, -7)))
-    .lte('completed_date', todayStr);
-
   const totalKm   = recent?.reduce((s, w) => s + (w.actual_distance_km ?? 0), 0) ?? 0;
   const totalMins = recent?.reduce((s, w) => s + (w.actual_duration_mins ?? 0), 0) ?? 0;
   const sessions  = recent?.length ?? 0;
   const h = Math.floor(totalMins / 60);
   const m = Math.round(totalMins % 60);
 
-  // Threshold pace for profile chart effort calculation
-  const { data: appConfig } = await supabaseAdmin
-    .from('app_config')
-    .select('threshold_pace_per_km')
-    .limit(1)
-    .maybeSingle();
-  const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
-
   // 7-day training load = Σ TSS (duration × IF², IF = threshold ÷ actual pace)
-  const threshParts   = thresholdPace.split(':').map(Number);
-  const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
   const totalTss = Math.round((recent ?? []).reduce((s, w) => {
     const mins = w.actual_duration_mins ? Number(w.actual_duration_mins) : null;
     const pace = w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
@@ -150,6 +164,42 @@ export default async function DashboardPage() {
     return s + (mins / 60) * IF * IF * 100;
   }, 0));
 
+  const weekLabel   = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
+  const weekPurpose = (weekRow?.purpose as string | null) ?? null;
+  const planId      = (weekRow?.plan_id as number | null) ?? null;
+
+  // Countdown to the A-race (Dragon 50)
+  let daysToRace: number | null = null;
+  if (raceRow?.scheduled_date) {
+    const t = new Date(); t.setHours(0, 0, 0, 0);
+    daysToRace = Math.ceil((new Date(raceRow.scheduled_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
+  }
+  const raceName = 'Dragon 50';
+  const raceDateStr = raceRow?.scheduled_date
+    ? new Date(raceRow.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null;
+
+  // ── Tier 2 — queries that depend on Tier 1 results, fired in parallel ──
+  const [{ data: cw }, weekData, { data: planWeeks }] = await Promise.all([
+    todaySession
+      ? supabaseAdmin.from('completed_workouts')
+          .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
+          .eq('plan_session_id', todaySession.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    weekRow?.date_from && weekRow?.date_to
+      ? Promise.all([
+          supabaseAdmin.from('plan_sessions').select('scheduled_date, distance_km')
+            .gte('scheduled_date', weekRow.date_from).lte('scheduled_date', weekRow.date_to),
+          supabaseAdmin.from('completed_workouts').select('completed_date, actual_distance_km')
+            .gte('completed_date', weekRow.date_from).lte('completed_date', weekRow.date_to),
+        ])
+      : Promise.resolve(null),
+    planId
+      ? supabaseAdmin.from('plan_weeks').select('phase, date_from, date_to, week_number')
+          .eq('plan_id', planId).order('week_number')
+      : Promise.resolve({ data: null }),
+  ]);
+
   // Is today's session already completed (matched to a Strava activity)?
   let todayCompleted: {
     durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null;
@@ -157,78 +207,33 @@ export default async function DashboardPage() {
     segmentActuals: (number | null)[] | null;
     segmentHr: (number | null)[] | null;
   } | null = null;
-  if (todaySession) {
-    const { data: cw } = await supabaseAdmin
-      .from('completed_workouts')
-      .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
-      .eq('plan_session_id', todaySession.id)
-      .maybeSingle();
-    if (cw) {
-      const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
-      const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
-      const durationStr = mins != null
-        ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
-        : '';
-      let tss: number | null = null;
-      if (mins != null && pace != null && pace > 0) {
-        const parts = thresholdPace.split(':').map(Number);
-        const threshMinKm = parts[0] + parts[1] / 60;
-        const IF = threshMinKm / pace;
-        tss = Math.round((mins / 60) * IF * IF * 100);
-      }
-      todayCompleted = {
-        durationStr, mins, tss,
-        distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
-        avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
-        segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
-        segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
-      };
+  if (cw) {
+    const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
+    const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+    const durationStr = mins != null
+      ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
+      : '';
+    let tss: number | null = null;
+    if (mins != null && pace != null && pace > 0) {
+      const IF = threshMinKm / pace;
+      tss = Math.round((mins / 60) * IF * IF * 100);
     }
+    todayCompleted = {
+      durationStr, mins, tss,
+      distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
+      avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+      segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+      segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
+    };
   }
-
-  // Pace zones — paces/times across the dashboard derive from these (same as the plan page)
-  const { data: paceZones } = await supabaseAdmin.from('pace_zones').select('*').order('sort_order');
-  const zones: ZoneMap = {};
-  for (const z of paceZones ?? []) {
-    zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
-  }
-
-  // HR zones — target HR windows shown per segment
-  const { data: hrZoneRows } = await supabaseAdmin.from('hr_zones').select('*').order('sort_order');
-  const hrZones: HrZoneMap = {};
-  for (const z of hrZoneRows ?? []) {
-    hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
-  }
-
-  // Fitness / fatigue / form from intervals.icu (null if unconfigured or API down)
-  const fitnessForm = await getFitnessForm();
-
-  // Current week from plan_weeks
-  const { data: weekRow } = await supabaseAdmin
-    .from('plan_weeks')
-    .select('*')
-    .lte('date_from', todayStr)
-    .gte('date_to', todayStr)
-    .single();
 
   // Planned km this week — actual sum of the full week's sessions (not the stored
   // estimate) — plus per-day volume and completed-so-far for the graphical panels.
   let weekPlannedKm: number | null = null;
   let weekDoneKm = 0;
   let weekDays: WeekDay[] = [];
-  if (weekRow?.date_from && weekRow?.date_to) {
-    const [{ data: weekSessions }, { data: weekCompleted }] = await Promise.all([
-      supabaseAdmin
-        .from('plan_sessions')
-        .select('scheduled_date, distance_km')
-        .gte('scheduled_date', weekRow.date_from)
-        .lte('scheduled_date', weekRow.date_to),
-      supabaseAdmin
-        .from('completed_workouts')
-        .select('completed_date, actual_distance_km')
-        .gte('completed_date', weekRow.date_from)
-        .lte('completed_date', weekRow.date_to),
-    ]);
+  if (weekData && weekRow?.date_from && weekRow?.date_to) {
+    const [{ data: weekSessions }, { data: weekCompleted }] = weekData;
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
 
     const plannedByDate = new Map<string, number>();
@@ -257,40 +262,13 @@ export default async function DashboardPage() {
       return { label, km, state };
     });
   }
-  const weekLabel = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
-  const weekPurpose = (weekRow?.purpose as string | null) ?? null;
-
-  // Countdown to the A-race (Dragon 50)
-  const { data: raceRow } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('scheduled_date')
-    .eq('session_type', 'RACE')
-    .ilike('name', '%Dragon 50%')
-    .order('scheduled_date')
-    .limit(1)
-    .maybeSingle();
-  let daysToRace: number | null = null;
-  if (raceRow?.scheduled_date) {
-    const t = new Date(); t.setHours(0, 0, 0, 0);
-    daysToRace = Math.ceil((new Date(raceRow.scheduled_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
-  }
-  const raceName = 'Dragon 50';
-  const raceDateStr = raceRow?.scheduled_date
-    ? new Date(raceRow.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    : null;
 
   // Phase timeline — merge consecutive same-phase weeks of the active plan into
   // proportional segments; mark today's position along the block.
-  const planId = (weekRow?.plan_id as number | null) ?? null;
   const phaseSegments: PhaseSeg[] = [];
   let todayPct: number | null = null;
   let ringPct = 0;
-  if (planId) {
-    const { data: planWeeks } = await supabaseAdmin
-      .from('plan_weeks')
-      .select('phase, date_from, date_to, week_number')
-      .eq('plan_id', planId)
-      .order('week_number');
+  {
     const wks = planWeeks ?? [];
     const pStart = wks[0]?.date_from ?? null;
     const pEnd   = wks[wks.length - 1]?.date_to ?? null;
@@ -309,9 +287,6 @@ export default async function DashboardPage() {
       ringPct = 100 - todayPct; // proportion of the block still to run
     }
   }
-
-  // Fitness / fatigue trend series for the chart panel
-  const fitnessHistory = await getFitnessHistory(42);
 
   return (
     <AppShell>

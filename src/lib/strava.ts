@@ -1,5 +1,6 @@
 import { supabaseAdmin } from './supabase-admin';
 import { expandSegmentDistances } from './plan-structure';
+import { invalidateWellnessCache } from './intervals';
 
 export interface StravaActivity {
   id: number;
@@ -288,6 +289,10 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
 
   await supabaseAdmin.from('strava_connection')
     .update({ last_synced_at: new Date().toISOString() }).eq('id', 1);
+
+  // A newly-detected run changes fitness/fatigue/form on intervals.icu — force
+  // the dashboard to refetch wellness on its next load.
+  if (matched > 0) await invalidateWellnessCache();
 
   return { synced: runs.length, matched };
 }
