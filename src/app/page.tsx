@@ -8,9 +8,13 @@ import {
 } from '@/components/session-ui';
 import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
+import {
+  PhaseTimeline, FormMeter, CountdownRing, WeeklyBars, FitnessChart,
+  type PhaseSeg, type WeekDay,
+} from '@/components/dashboard-graphics';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
-import { getFitnessForm } from '@/lib/intervals';
+import { getFitnessForm, getFitnessHistory } from '@/lib/intervals';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +43,17 @@ function addDays(date: Date, n: number) {
 
 function isoDate(d: Date) {
   return d.toISOString().split('T')[0];
+}
+
+function eachDate(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  while (d <= end) {
+    out.push(isoDate(d));
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }
 
 function greet() {
@@ -196,16 +211,54 @@ export default async function DashboardPage() {
     .gte('date_to', todayStr)
     .single();
 
-  // Planned km this week — actual sum of the full week's sessions (not the stored estimate)
+  // Planned km this week — actual sum of the full week's sessions (not the stored
+  // estimate) — plus per-day volume and completed-so-far for the graphical panels.
   let weekPlannedKm: number | null = null;
+  let weekDoneKm = 0;
+  let weekDays: WeekDay[] = [];
   if (weekRow?.date_from && weekRow?.date_to) {
-    const { data: weekSessions } = await supabaseAdmin
-      .from('plan_sessions')
-      .select('distance_km')
-      .gte('scheduled_date', weekRow.date_from)
-      .lte('scheduled_date', weekRow.date_to);
+    const [{ data: weekSessions }, { data: weekCompleted }] = await Promise.all([
+      supabaseAdmin
+        .from('plan_sessions')
+        .select('scheduled_date, distance_km')
+        .gte('scheduled_date', weekRow.date_from)
+        .lte('scheduled_date', weekRow.date_to),
+      supabaseAdmin
+        .from('completed_workouts')
+        .select('completed_date, actual_distance_km')
+        .gte('completed_date', weekRow.date_from)
+        .lte('completed_date', weekRow.date_to),
+    ]);
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
+
+    const plannedByDate = new Map<string, number>();
+    for (const s of weekSessions ?? []) {
+      plannedByDate.set(s.scheduled_date, (plannedByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
+    }
+    const doneByDate = new Map<string, number>();
+    for (const c of weekCompleted ?? []) {
+      if (!c.completed_date) continue;
+      const km = Number(c.actual_distance_km) || 0;
+      doneByDate.set(c.completed_date, (doneByDate.get(c.completed_date) ?? 0) + km);
+      if (c.completed_date <= todayStr) weekDoneKm += km;
+    }
+
+    weekDays = eachDate(weekRow.date_from, weekRow.date_to).map(date => {
+      const d = new Date(date + 'T00:00:00');
+      const label = ['M', 'T', 'W', 'T', 'F', 'S', 'S'][(d.getDay() + 6) % 7];
+      const done = doneByDate.get(date) ?? 0;
+      const planned = plannedByDate.get(date) ?? 0;
+      let state: WeekDay['state'];
+      let km: number;
+      if (date === todayStr) { state = 'today'; km = done > 0 ? done : planned; }
+      else if (done > 0 && date < todayStr) { state = 'done'; km = done; }
+      else if (planned > 0) { state = 'plan'; km = planned; }
+      else { state = 'rest'; km = 0; }
+      return { label, km, state };
+    });
   }
+  const weekLabel = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
+  const weekPurpose = (weekRow?.purpose as string | null) ?? null;
 
   // Countdown to the A-race (Dragon 50)
   const { data: raceRow } = await supabaseAdmin
@@ -221,6 +274,44 @@ export default async function DashboardPage() {
     const t = new Date(); t.setHours(0, 0, 0, 0);
     daysToRace = Math.ceil((new Date(raceRow.scheduled_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
   }
+  const raceName = 'Dragon 50';
+  const raceDateStr = raceRow?.scheduled_date
+    ? new Date(raceRow.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+    : null;
+
+  // Phase timeline — merge consecutive same-phase weeks of the active plan into
+  // proportional segments; mark today's position along the block.
+  const planId = (weekRow?.plan_id as number | null) ?? null;
+  const phaseSegments: PhaseSeg[] = [];
+  let todayPct: number | null = null;
+  let ringPct = 0;
+  if (planId) {
+    const { data: planWeeks } = await supabaseAdmin
+      .from('plan_weeks')
+      .select('phase, date_from, date_to, week_number')
+      .eq('plan_id', planId)
+      .order('week_number');
+    const wks = planWeeks ?? [];
+    const pStart = wks[0]?.date_from ?? null;
+    const pEnd   = wks[wks.length - 1]?.date_to ?? null;
+    if (pStart && pEnd) {
+      const totalMs = new Date(pEnd + 'T00:00:00').getTime() - new Date(pStart + 'T00:00:00').getTime() + 86400000;
+      for (const w of wks) {
+        const wMs = new Date(w.date_to + 'T00:00:00').getTime() - new Date(w.date_from + 'T00:00:00').getTime() + 86400000;
+        const pct = (wMs / totalMs) * 100;
+        const last = phaseSegments[phaseSegments.length - 1];
+        if (last?.phase === w.phase) last.pct += pct;
+        else phaseSegments.push({ phase: w.phase, pct });
+      }
+      todayPct = Math.max(0, Math.min(100,
+        ((new Date(todayStr + 'T00:00:00').getTime() - new Date(pStart + 'T00:00:00').getTime()) / totalMs) * 100,
+      ));
+      ringPct = 100 - todayPct; // proportion of the block still to run
+    }
+  }
+
+  // Fitness / fatigue trend series for the chart panel
+  const fitnessHistory = await getFitnessHistory(42);
 
   return (
     <AppShell>
@@ -236,72 +327,35 @@ export default async function DashboardPage() {
 
         {/* Context row */}
         <div className="grid grid-cols-[1.5fr_1fr] gap-[14px] mb-5">
-          {/* Block banner */}
-          <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
-            <div className="px-[18px] py-[10px]" style={{ background: '#8c2b2b', color: BONE }}>
-              <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">
-                {weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'Plan'}
-              </span>
+          {/* Block banner — phase timeline */}
+          {weekRow ? (
+            <PhaseTimeline
+              headerLabel={weekLabel}
+              purpose={weekPurpose}
+              segments={phaseSegments}
+              todayPct={todayPct}
+              daysToRace={daysToRace}
+              raceName={raceName}
+              raceDateStr={raceDateStr}
+            />
+          ) : (
+            <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
+              <div className="px-[18px] py-[10px]" style={{ background: '#8c2b2b', color: BONE }}>
+                <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">Plan</span>
+              </div>
+              <div className="flex flex-col gap-2 px-[18px] py-[15px] flex-1">
+                <p className="text-[15.5px] text-stone m-0">Plan starts 17 Aug 2026 · Pfitz 12/70</p>
+                <span className="font-mono text-[13px] text-stone mt-auto">Marathon — 8 Nov 2026</span>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 px-[18px] py-[15px] flex-1">
-              {weekRow ? (
-                <>
-                  {weekRow.purpose && (
-                    <p className="text-[15.5px] text-ink m-0">{weekRow.purpose}</p>
-                  )}
-                  <span className="font-mono text-[13px] text-stone mt-auto">
-                    {weekPlannedKm ?? weekRow.planned_volume_km} km planned this week
-                  </span>
-                  {daysToRace != null && daysToRace >= 0 && (
-                    <span className="font-mono text-[13px] text-oxblood">
-                      {daysToRace} days to Dragon 50
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>
-                  <p className="text-[15.5px] text-stone m-0">Plan starts 17 Aug 2026 · Pfitz 12/70</p>
-                  <span className="font-mono text-[13px] text-stone mt-auto">Marathon — 8 Nov 2026</span>
-                </>
-              )}
-            </div>
-          </div>
+          )}
 
-          {/* Status card — live intervals.icu fitness/fatigue/form */}
-          <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
-            <div className="px-[18px] py-[10px]" style={{ background: '#4f7a52', color: BONE }}>
-              <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">
-                Current status · intervals.icu
-              </span>
-            </div>
-            <div className="flex flex-col flex-1 px-[18px] py-[15px]">
-              {fitnessForm ? (
-                <>
-                  <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">
-                    {fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}
-                  </div>
-                  <p className="text-[15px] text-ink mb-[10px]">{formLabel(fitnessForm.form)}</p>
-                  <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
-                    <span>Fitness <b className="text-marine">{fitnessForm.fitness}</b></span>
-                    <span>Fatigue <b className="text-marine">{fitnessForm.fatigue}</b></span>
-                    <span>Form <b className="text-marine">{fitnessForm.form > 0 ? '+' : ''}{fitnessForm.form}</b></span>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="font-display font-semibold text-[28px] text-fern my-[3px_2px]">—</div>
-                  <p className="text-[15px] text-ink mb-[10px]">
-                    Connect intervals.icu in Settings to see your fitness, fatigue &amp; form.
-                  </p>
-                  <div className="mt-auto font-mono text-[14px] text-ink flex gap-[14px] border-t border-fog pt-[9px]">
-                    <span>Fitness <b className="text-marine">—</b></span>
-                    <span>Fatigue <b className="text-marine">—</b></span>
-                    <span>Form <b className="text-marine">—</b></span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          {/* Status card — live intervals.icu form meter */}
+          <FormMeter
+            form={fitnessForm?.form ?? null}
+            fitness={fitnessForm?.fitness ?? null}
+            fatigue={fitnessForm?.fatigue ?? null}
+          />
         </div>
 
         {/* Today hero */}
@@ -341,6 +395,36 @@ export default async function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* At a glance — graphical panels */}
+        <div className="mb-6 mt-2">
+          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">At a glance</p>
+          <div className="grid grid-cols-2 gap-[14px]">
+            <CountdownRing
+              headerLabel={weekLabel}
+              purpose={weekPurpose}
+              daysToRace={daysToRace}
+              ringPct={ringPct}
+              weekPlannedKm={weekPlannedKm}
+              weekDoneKm={weekDoneKm}
+            />
+            <WeeklyBars
+              headerLabel={weekLabel}
+              days={weekDays}
+              weekDoneKm={weekDoneKm}
+              weekPlannedKm={weekPlannedKm}
+              daysToRace={daysToRace}
+            />
+            <div className="col-span-2">
+              <FitnessChart
+                history={fitnessHistory}
+                form={fitnessForm?.form ?? null}
+                fitness={fitnessForm?.fitness ?? null}
+                fatigue={fitnessForm?.fatigue ?? null}
+              />
+            </div>
+          </div>
+        </div>
 
         {/* Last 7 days */}
         {sessions > 0 && (
@@ -384,14 +468,6 @@ export default async function DashboardPage() {
 }
 
 /* ── Helpers ───────────────────────────────────────────────── */
-
-// Interpret TSB / form per the usual intervals.icu bands.
-function formLabel(form: number): string {
-  if (form > 5)    return 'Fresh — well rested';
-  if (form >= -10) return 'Neutral — balanced load';
-  if (form >= -30) return 'Productive — building fitness';
-  return 'Fatigued — ease off soon';
-}
 
 // Magnitude-based delta colour (neutral when close to plan)
 function devClass(pct: number | null): string {

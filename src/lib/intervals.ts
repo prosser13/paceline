@@ -143,6 +143,41 @@ export async function getFitnessForm(): Promise<FitnessForm | null> {
   }
 }
 
+export interface FitnessPoint {
+  date: string; // yyyy-mm-dd
+  ctl: number;  // fitness
+  atl: number;  // fatigue
+}
+
+/**
+ * Daily fitness (CTL) / fatigue (ATL) series for the last `days` days, oldest
+ * first. Returns null if the key is missing or the API call fails. Used for the
+ * dashboard fitness-vs-fatigue trend chart.
+ */
+export async function getFitnessHistory(days = 42): Promise<FitnessPoint[] | null> {
+  if (!process.env.INTERVALS_API_KEY) return null;
+
+  const today  = new Date();
+  const newest = isoDay(today);
+  const oldest = isoDay(new Date(today.getTime() - days * 86_400_000));
+
+  try {
+    const res = await fetch(
+      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
+      { headers: authHeaders(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+
+    const rows = (await res.json()) as Array<{ id?: string; ctl?: number | null; atl?: number | null }>;
+    const pts = rows
+      .filter(d => d.ctl != null && d.atl != null)
+      .map(d => ({ date: String(d.id ?? ''), ctl: Math.round(d.ctl as number), atl: Math.round(d.atl as number) }));
+    return pts.length > 1 ? pts : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
   const res = await fetch(`${BASE}/events/${eventId}`, {
     method: 'DELETE',
