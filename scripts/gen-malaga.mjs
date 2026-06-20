@@ -11,6 +11,7 @@ const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE
 const PLAN_ID = 1;
 const BASE = new Date('2026-08-17T00:00:00Z'); // Week 1 Monday
 const r1 = x => Math.round(x * 10) / 10;
+const finishKm = total => Math.min(16, Math.max(8, Math.round(total * 0.4)));
 const ps = s => { const [m, x] = s.split(':').map(Number); return m * 60 + x; };
 const ZONES = { Z1: [300, 360], Z2: [255, 299], Z3: [225, 254], Z4: [212, 224], Z5: [170, 211] };
 const zmid = z => { const [a, b] = ZONES[z]; return a + 0.75 * (b - a); };
@@ -32,19 +33,34 @@ function stats(structure, fb) {
 // ── session builders ──
 const rec = d => ({ st: 'REC', name: 'Recovery run', intensity: 'recovery', distance_km: d, target_pace: null, structure: null, fb: { zone: 'Z1', distance: d }, desc: `${d}km recovery (Z1)` });
 const ga = d => ({ st: 'GA', name: 'General aerobic run', intensity: 'easy', distance_km: d, target_pace: null, structure: null, fb: { zone: 'Z2', distance: d }, desc: `${d}km general aerobic (Z2)` });
-const mlr = d => ({ st: 'MLR', name: 'Medium-long run', intensity: 'easy', distance_km: d, target_pace: null, structure: null, fb: { zone: 'Z2', distance: d }, desc: `${d}km medium-long (Z2)` });
-
-function lr(d) {
-  const last = Math.min(8, d), top = r1(d - last);
-  return { st: 'LR', name: 'Long run', intensity: 'steady', distance_km: d, target_pace: null, desc: `${d}km — top of Z2, last ${last}km at bottom of Z3`, structure: [
-    { type: 'phase', label: 'Steady aerobic', pace_min: '4:15', pace_max: '4:37', distance_km: top, description: `${top}km at top of Z2` },
-    { type: 'phase', label: 'Pick-up', pace_min: '4:00', pace_max: '4:14', distance_km: last, description: `Final ${last}km (≈5mi) at bottom of Z3` },
-  ] };
+// Long / medium-long progression: open at the slow end of the beneficial range
+// (15–20% slower than MP = 4:21–4:32), then pick up for the last 8–16km to
+// ~10% slower than MP (4:08–4:14). 2 segments.
+function progressive(st, name, intensity, d) {
+  const fin = finishKm(d), open = r1(d - fin);
+  return { st, name, intensity, distance_km: d, target_pace: null,
+    desc: `${d}km — ${open}km @ 4:21–4:32, last ${fin}km @ 4:08–4:14`,
+    structure: [
+      { type: 'phase', label: 'Steady', pace_min: '4:21', pace_max: '4:32', distance_km: open, description: `${open}km steady (start at the slow end of the range)` },
+      { type: 'phase', label: 'Pick-up', pace_min: '4:08', pace_max: '4:14', distance_km: fin, description: `Last ${fin}km ~10% slower than MP` },
+    ] };
 }
+const lr = d => progressive('LR', 'Long run', 'steady', d);
+function mlr(d, opts = {}) {
+  // Day after a hard session → hold the slow end of the range the whole way.
+  if (opts.afterHard) {
+    return { st: 'MLR', name: 'Medium-long run', intensity: 'easy', distance_km: d, target_pace: null,
+      desc: `${d}km — slow end of range (day after a hard session)`,
+      structure: [{ type: 'phase', label: 'Steady', pace_min: '4:21', pace_max: '4:32', distance_km: d, description: `${d}km at the slow end of the range` }] };
+  }
+  return progressive('MLR', 'Medium-long run', 'easy', d);
+}
+// Marathon-pace run: open at long-run pace (slow end of the range), then the
+// marathon-pace block at 3:47.
 function mp(d, mpKm) {
-  const easy = r1(d - mpKm);
+  const open = r1(d - mpKm);
   return { st: 'MP', name: 'Marathon-pace run', intensity: 'steady', distance_km: d, target_pace: '3:47', desc: `${d}km with ${mpKm}km at marathon pace`, structure: [
-    { type: 'phase', zone: 'Z2', distance_km: easy, description: `${easy}km easy (Z2)` },
+    { type: 'phase', label: 'Long-run pace', pace_min: '4:21', pace_max: '4:32', distance_km: open, description: `${open}km at long-run pace` },
     { type: 'phase', label: 'Marathon pace', pace_min: '3:47', pace_max: '3:47', distance_km: mpKm, description: `${mpKm}km at marathon pace` },
   ] };
 }
@@ -117,10 +133,10 @@ const WEEKS = [
   { phase: 'Endurance', purpose: 'Volume build + marathon pace',       days: { 2: speed(14, { hills: 6, strides: 8 }), 3: mlr(23), 4: rec(10), 5: ga(16), 6: rec(10), 7: mp(29, 16) } },
   { phase: 'Endurance', purpose: 'Peak endurance + LT',                days: { 2: ga(16), 3: mlr(24), 4: rec(10), 5: lt(18, 30), 6: rec(10), 7: lr(31) } },
   { phase: 'Endurance', purpose: 'Endurance, LT sharpening',           days: { 2: speed(13, { strides: 10 }), 3: mlr(19), 4: rec(8), 5: lt(16, 30), 6: rec(10), 7: lr(26) } },
-  { phase: 'Race prep', purpose: 'VO₂max introduced, big MP run', days: { 2: rec(11), 3: vo2(19, 6, 1), 4: mlr(24), 5: ga(16), 6: rec(11), 7: mp(31, 19) } },
+  { phase: 'Race prep', purpose: 'VO₂max introduced, big MP run', days: { 2: rec(11), 3: vo2(19, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(16), 6: rec(11), 7: mp(31, 19) } },
   { phase: 'Race prep', purpose: 'Peak volume + long LT',              days: { 2: speed(14, { strides: 8 }), 3: mlr(24), 4: rec(11), 5: lt(19, 40), 6: rec(10), 7: lr(34) } },
   { phase: 'Race prep', purpose: 'VO₂ + first tune-up race',      days: { 2: ga(16), 3: vo2(16, 5, 0.6), 4: speed(11, { base: 'Z1', strides: 6 }), 5: rec(10), 6: tuneup(10), 7: lr(27) } },
-  { phase: 'Race prep', purpose: 'Final big block, peak long run',     days: { 2: rec(11), 3: vo2(18, 6, 1), 4: mlr(24), 5: ga(14), 6: rec(10), 7: lr(34) } },
+  { phase: 'Race prep', purpose: 'Final big block, peak long run',     days: { 2: rec(11), 3: vo2(18, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(14), 6: rec(10), 7: lr(34) } },
   { phase: 'Taper',     purpose: 'Taper begins, tune-up race',         days: { 2: speed(16, { hills: 6, strides: 12 }), 3: ga(14), 4: speed(10, { base: 'Z1', strides: 6 }), 5: rec(8), 6: tuneup(10), 7: lr(27) } },
   { phase: 'Taper',     purpose: 'Sharpening taper',                   days: { 2: speed(11, { base: 'Z1', strides: 10 }), 3: rec(8), 4: vo2(14, 5, 1), 5: rec(10), 6: speed(10, { base: 'Z1', strides: 10 }), 7: mlr(21) } },
   { phase: 'Taper',     purpose: 'Race week',                          days: { 2: rec(11), 3: dress(11, 3), 4: rec(6), 5: speed(8, { base: 'Z1', strides: 6 }), 6: rec(6), 7: marathon() } },
