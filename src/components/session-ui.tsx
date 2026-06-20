@@ -118,33 +118,24 @@ function Chip({ color, label }: { color: string; label: string }) {
   );
 }
 
-const PACE_WORD: Record<SegmentPerf, string> = { ahead: 'faster', on: 'in range', behind: 'slower', missed: 'missed' };
-
-function paceChip(perf: SegmentPerf | null): { color: string; label: string } | null {
-  if (!perf) return null;
-  return { color: PERF_COLOR[perf], label: PACE_WORD[perf] };
-}
-
-// HR verdict — signed delta to the nearest bound when out of the window.
-function hrChip(seg: NormSegment): { color: string; label: string } | null {
-  const perf = segmentHrPerformance(seg);
-  if (!perf || seg.actualHr == null || seg.hrMin == null || seg.hrMax == null) return null;
-  const lo = Math.min(seg.hrMin, seg.hrMax);
-  const hi = Math.max(seg.hrMin, seg.hrMax);
-  if (perf === 'on') return { color: PERF_COLOR.on, label: 'in range' };
-  if (perf === 'ahead') return { color: PERF_COLOR.ahead, label: `−${lo - seg.actualHr}` };
-  return { color: PERF_COLOR.behind, label: `+${seg.actualHr - hi}` };
-}
-
-// Time verdict — signed delta vs the planned (zone-mid) estimate for the segment.
-function timeChip(seg: NormSegment): { color: string; label: string } | null {
-  if (seg.actualPaceSec == null || seg.midSeconds == null || !seg.distanceKm) return null;
-  const actualSec  = seg.actualPaceSec * seg.distanceKm;
+// Colour for the actual time vs the planned (zone-mid) estimate.
+function timeColorFor(seg: NormSegment): string | undefined {
+  if (seg.actualPaceSec == null || seg.midSeconds == null || !seg.distanceKm) return undefined;
   const plannedSec = seg.midSeconds * seg.distanceKm;
-  const delta = actualSec - plannedSec;
-  if (Math.abs(delta) < Math.max(5, plannedSec * 0.04)) return { color: PERF_COLOR.on, label: 'on time' };
-  const sign = delta > 0 ? '+' : '−';
-  return { color: delta > 0 ? PERF_COLOR.behind : PERF_COLOR.ahead, label: `${sign}${fmtMMSS(Math.abs(delta))}` };
+  const delta = seg.actualPaceSec * seg.distanceKm - plannedSec;
+  if (Math.abs(delta) < Math.max(5, plannedSec * 0.04)) return PERF_COLOR.on;
+  return delta > 0 ? PERF_COLOR.behind : PERF_COLOR.ahead;
+}
+
+// One metric: the actual value on top (colour-coded by performance), the
+// planned target on the line below so the magnitude of the gap is visible.
+function StatCell({ main, color, muted, sub }: { main: string; color?: string; muted?: boolean; sub?: string | null }) {
+  return (
+    <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
+      <span className={`block ${muted ? 'text-stone' : color ? '' : 'text-ink'}`} style={color ? { color } : undefined}>{main}</span>
+      {sub && <span className="block text-[11.5px] text-stone mt-[1px]">{sub}</span>}
+    </span>
+  );
 }
 
 function MetricCell({ main, muted, chip }: { main: string; muted?: boolean; chip?: { color: string; label: string } | null }) {
@@ -170,42 +161,43 @@ function SegLabel({ seg, suffix }: { seg: NormSegment; suffix?: string }) {
   );
 }
 
-// One segment row — actual-led when completed (value + verdict chip), planned-only otherwise.
+// One segment row — actual value on top (colour-coded), planned target below.
+// Planned-only (muted, no second line) when the session hasn't been run.
 export function PhaseLine({ seg }: { seg: NormSegment }) {
   const completed = seg.actualPaceSec !== undefined;
   const perf   = segmentPerformance(seg);
+  const hrPerf = segmentHrPerformance(seg);
   const missed = perf === 'missed';
 
   const plannedPace = seg.paceMin
     ? (seg.paceMin === seg.paceMax ? seg.paceMin : `${seg.paceMin}–${seg.paceMax}`)
     : '—';
-  const plannedHr = seg.hrMin != null && seg.hrMax != null ? `${seg.hrMin}–${seg.hrMax}` : '—';
+  const plannedHr   = seg.hrMin != null && seg.hrMax != null ? `${seg.hrMin}–${seg.hrMax}` : '—';
+  const plannedTime = seg.midSeconds && seg.distanceKm ? `~${fmtMMSS(seg.midSeconds * seg.distanceKm)}` : '—';
 
-  const paceMain = !completed ? plannedPace : missed ? '—' : (seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : '—');
-  const paceCh   = completed ? paceChip(missed ? 'missed' : perf) : null;
+  let paceMain: string, paceColor: string | undefined;
+  if (!completed) paceMain = plannedPace;
+  else if (missed) { paceMain = 'missed'; paceColor = PERF_COLOR.missed; }
+  else { paceMain = seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : '—'; paceColor = perf ? PERF_COLOR[perf] : undefined; }
 
-  const hrMain = !completed ? plannedHr : (seg.actualHr != null ? `${seg.actualHr}` : '—');
-  const hrCh   = completed ? hrChip(seg) : null;
+  let hrMain: string, hrColor: string | undefined;
+  if (!completed) hrMain = plannedHr;
+  else if (seg.actualHr == null) { hrMain = '—'; hrColor = PERF_COLOR.missed; }
+  else { hrMain = `${seg.actualHr}`; hrColor = hrPerf ? PERF_COLOR[hrPerf] : undefined; }
 
-  let timeMain: string;
-  let timeCh: { color: string; label: string } | null = null;
-  if (!completed) {
-    timeMain = seg.midSeconds && seg.distanceKm ? `~${fmtMMSS(seg.midSeconds * seg.distanceKm)}` : '—';
-  } else if (missed || seg.actualPaceSec == null) {
-    timeMain = '—';
-  } else {
-    timeMain = fmtMMSS(seg.actualPaceSec * seg.distanceKm);
-    timeCh = timeChip(seg);
-  }
+  let timeMain: string, timeColor: string | undefined;
+  if (!completed) timeMain = plannedTime;
+  else if (missed || seg.actualPaceSec == null) { timeMain = '—'; timeColor = PERF_COLOR.missed; }
+  else { timeMain = fmtMMSS(seg.actualPaceSec * seg.distanceKm); timeColor = timeColorFor(seg); }
 
   return (
     <div className="py-[6px]">
       <div className="grid items-start gap-x-[10px]" style={{ gridTemplateColumns: DETAIL_COLS }}>
         <SegLabel seg={seg} />
         <span className="font-mono text-[14px] text-ink text-right tabular-nums">{seg.distanceKm ? `${seg.distanceKm} km` : '—'}</span>
-        <MetricCell main={paceMain} muted={!completed} chip={paceCh} />
-        <MetricCell main={hrMain} muted={!completed} chip={hrCh} />
-        <MetricCell main={timeMain} muted={!completed} chip={timeCh} />
+        <StatCell main={paceMain} color={paceColor} muted={!completed} sub={completed ? plannedPace : null} />
+        <StatCell main={hrMain}   color={hrColor}   muted={!completed} sub={completed ? plannedHr : null} />
+        <StatCell main={timeMain} color={timeColor} muted={!completed} sub={completed ? plannedTime : null} />
       </div>
       {seg.note && (
         <div className="text-[13.5px] text-stone leading-snug mt-[3px] pr-[2px]">{seg.note}</div>

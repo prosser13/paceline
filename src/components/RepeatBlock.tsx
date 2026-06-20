@@ -12,7 +12,7 @@ export default function RepeatBlock({ step }: { step: NormRepeat }) {
 
   if (!step.perRep) {
     return (
-      <div className="mt-[6px] pl-[12px] border-l-2 border-fog/60">
+      <div className="mt-[8px] mb-[14px] pl-[12px] border-l-2 border-fog/60">
         <div className="font-mono text-[12px] text-stone uppercase tracking-[.08em] mb-[2px]">
           {step.count}× repeat
         </div>
@@ -23,7 +23,7 @@ export default function RepeatBlock({ step }: { step: NormRepeat }) {
 
   const perRep = step.perRep;
   return (
-    <div className="mt-[6px] pl-[12px] border-l-2 border-fog/60">
+    <div className="mt-[8px] mb-[14px] pl-[12px] border-l-2 border-fog/60">
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -41,7 +41,8 @@ export default function RepeatBlock({ step }: { step: NormRepeat }) {
       </button>
 
       {open
-        ? perRep.map((reps, j) => reps.map((rep, r) => <PhaseLine key={`${j}-${r}`} seg={rep} />))
+        ? Array.from({ length: step.count }, (_, r) =>
+            perRep.map((reps, j) => <PhaseLine key={`${r}-${j}`} seg={reps[r]} />))
         : step.steps.map((s, j) => <AggregateLine key={j} sub={s} reps={perRep[j]} count={step.count} />)}
     </div>
   );
