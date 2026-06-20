@@ -114,9 +114,9 @@ function rewritePhasePace(phase: any, oldPace: string, newPace: string, oldSec: 
 }
 
 // Cascade a goal-pace change to a plan's linked sessions: every session whose
-// target_pace matched the old goal pace. Race-day sessions keep their bespoke
-// pacing strategy (only the target_pace field updates); training runs also get
-// their matching structure phases rewritten.
+// target_pace matched the old goal pace. Only structure phases run at that exact
+// goal pace are rewritten (durations recomputed to hold distance) — segments at
+// other paces, e.g. a bespoke race-day pacing strategy, are left untouched.
 async function cascadeGoalPace(planId: number, oldPace: string, newPace: string) {
   const oldSec = paceToSeconds(oldPace);
   const newSec = paceToSeconds(newPace);
@@ -132,7 +132,7 @@ async function cascadeGoalPace(planId: number, oldPace: string, newPace: string)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const update: Record<string, any> = { target_pace: newPace };
     if (s.target_pace_end === oldPace) update.target_pace_end = newPace;
-    if (s.session_type !== 'RACE' && Array.isArray(s.structure)) {
+    if (Array.isArray(s.structure)) {
       update.structure = s.structure.map(ph => rewritePhasePace(ph, oldPace, newPace, oldSec, newSec));
     }
     await supabaseAdmin.from('plan_sessions').update(update).eq('id', s.id);

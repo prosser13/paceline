@@ -90,8 +90,9 @@ export default function TargetTimesClient({ plans }: { plans: TargetTimeRow[] })
       })}
 
       <p className="font-mono text-[11px] text-stone/70 mt-1 leading-relaxed">
-        Updating a target time recalculates its pace and updates the goal-pace segments in that
-        plan&apos;s linked training runs. Race-day pacing strategies are left untouched.
+        Updating a target time recalculates its pace and rewrites any segments run at that goal
+        pace across the plan&apos;s sessions. Segments at other paces (bespoke pacing strategies) are
+        left untouched.
       </p>
     </div>
   );

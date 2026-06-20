@@ -155,22 +155,25 @@ function avgSeconds(a: string | null | undefined, b: string | null | undefined):
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function segmentNew(s: any, zones: ZoneMap): NormSegment {
-  // Custom pace band: an explicit pace_min–pace_max with no fixed zone (e.g. a
-  // race target). Shown as authored (not snapped to a zone window); the zone
-  // chip reflects whichever zone(s) the band spans, and the time estimate uses
-  // the true midpoint.
-  if (!s.zone && s.pace_min && s.pace_max && s.pace_min !== s.pace_max) {
-    const spanned = zonesForPaceRange(s.pace_min, s.pace_max, zones);
-    const a = paceToSeconds(s.pace_min);
-    const b = paceToSeconds(s.pace_max);
+  // Explicit pace with no fixed zone (e.g. a race target or marathon pace).
+  // Shown as authored rather than snapped to a zone window: a single pace
+  // (pace_min === pace_max) renders as that value, a range renders as a band.
+  // The zone chip reflects whichever zone(s) it spans; the time estimate uses
+  // the midpoint.
+  if (!s.zone && (s.pace_min || s.pace_max)) {
+    const fast = s.pace_min ?? s.pace_max;
+    const slow = s.pace_max ?? s.pace_min;
+    const spanned = zonesForPaceRange(fast, slow, zones);
+    const a = paceToSeconds(fast);
+    const b = paceToSeconds(slow);
     return {
       kind: 'segment',
       label: s.label ?? 'Run',
       zoneKey: spanned[0]?.key ?? null,
       zoneKeys: spanned.length > 1 ? spanned.map(z => z.key) : undefined,
-      paceMin: s.pace_min,
-      paceMax: s.pace_max,
-      midSeconds: a != null && b != null ? (a + b) / 2 : avgSeconds(s.pace_min, s.pace_max),
+      paceMin: fast,
+      paceMax: slow,
+      midSeconds: a != null && b != null ? (a + b) / 2 : avgSeconds(fast, slow),
       distanceKm: Number(s.distance_km) || 0,
       note: s.description ?? s.note ?? undefined,
     };
