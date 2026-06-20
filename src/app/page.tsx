@@ -4,7 +4,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
 } from '@/components/session-ui';
 import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
@@ -517,8 +517,14 @@ function SessionHero({
   completed: { durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null } | null;
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
-  const segActuals = completed?.segmentActuals ?? null;
-  const segHr      = completed?.segmentHr ?? null;
+  const { segActuals, segHr } = wholeRunActuals(
+    !!session.structure?.length,
+    completed
+      ? { totalSeconds: completed.mins != null ? completed.mins * 60 : null, distanceKm: completed.distanceKm, avgHr: completed.avgHr }
+      : null,
+    completed?.segmentActuals ?? null,
+    completed?.segmentHr ?? null,
+  );
   const steps     = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
     zones,

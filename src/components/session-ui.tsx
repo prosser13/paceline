@@ -80,6 +80,28 @@ export function syntheticStructure(
   }];
 }
 
+// A run with no planned `structure` renders as a single synthetic segment, so the
+// sync never stored per-segment actuals for it. Treat the whole run as that one
+// segment — its actual is just the overall average — so the delta still shows.
+export function wholeRunActuals(
+  hasStructure: boolean,
+  completed: { totalSeconds: number | null; distanceKm: number | null; avgHr: number | null } | null,
+  existingPace: (number | null)[] | null,
+  existingHr: (number | null)[] | null,
+): { segActuals: (number | null)[] | null; segHr: (number | null)[] | null } {
+  let segActuals = existingPace;
+  let segHr      = existingHr;
+  if (completed && !hasStructure) {
+    if (!segActuals && completed.totalSeconds != null && completed.distanceKm) {
+      segActuals = [Math.round(completed.totalSeconds / completed.distanceKm)];
+    }
+    if (!segHr && completed.avgHr != null) {
+      segHr = [completed.avgHr];
+    }
+  }
+  return { segActuals, segHr };
+}
+
 // ── Segment table ────────────────────────────────────────────
 
 const DETAIL_COLS = '1fr 54px 104px 92px 80px 40px';

@@ -87,7 +87,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
     supabaseAdmin.from('plan_weeks').select('*').order('week_number'),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, segment_actuals, segment_hr'),
+    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, segment_actuals, segment_hr'),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
     supabaseAdmin.from('plans').select('*').order('sort_order'),
@@ -108,7 +108,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   }
 
   // Build map of plan_session_id → actual display values for done sessions
-  const completedMap: Record<string, { durationStr: string; distanceKm: number | null; tss: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
+  const completedMap: Record<string, { durationStr: string; distanceKm: number | null; tss: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
   for (const cw of completed ?? []) {
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
@@ -127,6 +127,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       durationStr: durationStr ?? '',
       distanceKm: cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null,
       tss,
+      avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
       segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
       segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     };

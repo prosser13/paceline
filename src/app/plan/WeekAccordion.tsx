@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure,
+  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import type { SessionStatus } from '@/components/StatusMark';
 
@@ -44,6 +44,7 @@ interface CompletedData {
   durationStr: string;
   distanceKm?: number | null;
   tss: number | null;
+  avgHr?: number | null;
   segmentActuals?: (number | null)[] | null;
   segmentHr?: (number | null)[] | null;
 }
@@ -268,8 +269,18 @@ export default function WeekAccordion({
             // Every (non-rest) session is expandable — structured or synthesised.
             // Normalise both formats and derive paces from the Settings zones.
             // For completed sessions, attach per-segment actuals for colour-coding.
-            const segActuals = isDone ? completed?.segmentActuals ?? null : null;
-            const segHr      = isDone ? completed?.segmentHr ?? null : null;
+            const { segActuals, segHr } = isDone && completed
+              ? wholeRunActuals(
+                  !!session.structure?.length,
+                  {
+                    totalSeconds: (() => { const mins = parseDurationMins(completed.durationStr); return mins != null ? mins * 60 : null; })(),
+                    distanceKm: completed.distanceKm ?? null,
+                    avgHr: completed.avgHr ?? null,
+                  },
+                  completed.segmentActuals ?? null,
+                  completed.segmentHr ?? null,
+                )
+              : { segActuals: null, segHr: null };
             const detailSteps: NormStep[] = normalizeStructure(
               session.structure?.length ? session.structure : syntheticStructure(session, intensity),
               zones,
