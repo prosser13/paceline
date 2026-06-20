@@ -146,6 +146,8 @@ export default async function DashboardPage() {
     const date = isoDate(addDays(today, i));
     const daySessions = byDate.get(date);
     if (daySessions?.length) {
+      // Run/race first, strength after, within the same day.
+      daySessions.sort((a, b) => (a.session_type === 'STRENGTH' ? 1 : 0) - (b.session_type === 'STRENGTH' ? 1 : 0));
       upcomingWithRest.push(...daySessions);
     } else {
       upcomingWithRest.push({ id: `rest-${date}`, scheduled_date: date, name: 'Rest', status: 'rest' } as PlanSession);
