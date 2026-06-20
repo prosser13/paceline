@@ -109,7 +109,8 @@ export interface NormSegment {
 export interface NormRepeat {
   kind: 'repeat';
   count: number;
-  steps: NormSegment[];
+  steps: NormSegment[];           // one per sub-step; actuals = mean across reps
+  perRep?: NormSegment[][];       // [subStepIndex][repIndex] — individual reps; present only when completed
 }
 
 export type NormStep = NormSegment | NormRepeat;
@@ -191,21 +192,31 @@ export function normalizeStructure(
       if (raw.type === 'repeat' && Array.isArray(raw.steps)) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const steps: NormSegment[] = raw.steps.map((st: any) => segmentNew(st, zones));
+        steps.forEach(applyHr); // target HR windows before cloning per-rep
         const count = raw.count || 1;
+        const completed = Boolean(actuals || hrActuals);
+        const perRep: NormSegment[][] = steps.map(() => []);
         const pSum = steps.map(() => 0), pHit = steps.map(() => 0);
         const hSum = steps.map(() => 0), hHit = steps.map(() => 0);
         for (let r = 0; r < count; r++) {
           for (let j = 0; j < steps.length; j++) {
             const v = next();   if (v != null) { pSum[j] += v; pHit[j]++; }
             const h = nextHr(); if (h != null) { hSum[j] += h; hHit[j]++; }
+            if (completed) {
+              perRep[j].push({
+                ...steps[j],
+                label: `${steps[j].label} ${r + 1}`,
+                actualPaceSec: actuals ? v : undefined,
+                actualHr:      hrActuals ? h : undefined,
+              });
+            }
           }
         }
         steps.forEach((s, j) => {
-          applyHr(s);
           if (actuals)   s.actualPaceSec = pHit[j] ? Math.round(pSum[j] / pHit[j]) : null;
           if (hrActuals) s.actualHr      = hHit[j] ? Math.round(hSum[j] / hHit[j]) : null;
         });
-        out.push({ kind: 'repeat', count, steps });
+        out.push({ kind: 'repeat', count, steps, perRep: completed ? perRep : undefined });
       } else if (raw.type === 'phase') {
         const seg = segmentNew(raw, zones);
         applyHr(seg);
