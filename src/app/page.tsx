@@ -100,9 +100,9 @@ export default async function DashboardPage() {
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
     supabaseAdmin.from('plan_weeks').select('*').lte('date_from', todayStr).gte('date_to', todayStr).single(),
-    supabaseAdmin.from('plan_sessions').select('scheduled_date')
-      .eq('session_type', 'RACE').ilike('name', '%Dragon 50%')
-      .order('scheduled_date').limit(1).maybeSingle(),
+    supabaseAdmin.from('plans').select('name, race_date')
+      .eq('kind', 'race').gte('race_date', todayStr)
+      .order('race_date', { ascending: true }).limit(1).maybeSingle(),
     getWellnessCached(),
   ]);
 
@@ -168,15 +168,16 @@ export default async function DashboardPage() {
   const weekPurpose = (weekRow?.purpose as string | null) ?? null;
   const planId      = (weekRow?.plan_id as number | null) ?? null;
 
-  // Countdown to the A-race (Dragon 50)
+  // Countdown to the next upcoming A-race (currently Dragon 50; rolls over to
+  // the next race automatically once it has been run).
   let daysToRace: number | null = null;
-  if (raceRow?.scheduled_date) {
+  if (raceRow?.race_date) {
     const t = new Date(); t.setHours(0, 0, 0, 0);
-    daysToRace = Math.ceil((new Date(raceRow.scheduled_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
+    daysToRace = Math.ceil((new Date(raceRow.race_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
   }
-  const raceName = 'Dragon 50';
-  const raceDateStr = raceRow?.scheduled_date
-    ? new Date(raceRow.scheduled_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+  const raceName = (raceRow?.name as string | null) ?? null;
+  const raceDateStr = raceRow?.race_date
+    ? new Date(raceRow.race_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;
 
   // ── Tier 2 — queries that depend on Tier 1 results, fired in parallel ──
@@ -389,6 +390,7 @@ export default async function DashboardPage() {
               weekDoneKm={weekDoneKm}
               weekPlannedKm={weekPlannedKm}
               daysToRace={daysToRace}
+              raceName={raceName}
             />
             <div className="col-span-2">
               <FitnessChart

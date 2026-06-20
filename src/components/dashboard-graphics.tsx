@@ -241,20 +241,21 @@ export function CountdownRing({
 export interface WeekDay { label: string; km: number; state: 'done' | 'today' | 'plan' | 'rest' }
 
 export function WeeklyBars({
-  headerLabel, days, weekDoneKm, weekPlannedKm, daysToRace,
+  headerLabel, days, weekDoneKm, weekPlannedKm, daysToRace, raceName,
 }: {
   headerLabel: string;
   days: WeekDay[];
   weekDoneKm: number;
   weekPlannedKm: number | null;
   daysToRace: number | null;
+  raceName: string | null;
 }) {
   const maxKm = Math.max(...days.map(d => d.km), 1);
   const toGo = weekPlannedKm != null ? Math.max(0, Math.round(weekPlannedKm - weekDoneKm)) : null;
 
   return (
     <div className={cardClass}>
-      <CardHeader accent={OXBLOOD} right={daysToRace != null && daysToRace >= 0 ? `${daysToRace} d → Dragon 50` : undefined}>
+      <CardHeader accent={OXBLOOD} right={daysToRace != null && daysToRace >= 0 && raceName ? `${daysToRace} d → ${raceName}` : undefined}>
         {headerLabel}
       </CardHeader>
       <div className="flex flex-col flex-1 px-[18px] py-[15px]">
