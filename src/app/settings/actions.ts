@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { revalidatePath } from 'next/cache';
+import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
 export interface ZoneInput {
   name: string;
@@ -78,4 +79,92 @@ export async function saveHrZones(
   revalidatePath('/settings');
 
   return { ok: true };
+}
+
+// ── Target times (A-race goal times → derived pace, cascaded to linked sessions) ──
+
+// "h:mm:ss" or "h:mm" → seconds.
+function timeToSeconds(t: string): number | null {
+  const parts = t.trim().split(':').map(Number);
+  if (!parts.length || parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rewritePhasePace(phase: any, oldPace: string, newPace: string, oldSec: number, newSec: number) {
+  const p = { ...phase };
+  // Legacy phase ({ pace_per_km, duration_mins }) — recompute duration so the
+  // segment distance stays fixed when the pace moves.
+  if (p.pace_per_km === oldPace) {
+    p.pace_per_km = newPace;
+    if (typeof p.duration_mins === 'number') {
+      p.duration_mins = Math.round((p.duration_mins * newSec) / oldSec);
+    }
+  }
+  // New phase ({ pace_min, pace_max }) with an explicit distance — distance is
+  // unaffected, so just swap the pace bounds.
+  if (p.pace_min === oldPace) p.pace_min = newPace;
+  if (p.pace_max === oldPace) p.pace_max = newPace;
+  if (typeof p.description === 'string' && p.description.includes(oldPace)) {
+    p.description = p.description.split(oldPace).join(newPace);
+  }
+  return p;
+}
+
+// Cascade a goal-pace change to a plan's linked sessions: every session whose
+// target_pace matched the old goal pace. Race-day sessions keep their bespoke
+// pacing strategy (only the target_pace field updates); training runs also get
+// their matching structure phases rewritten.
+async function cascadeGoalPace(planId: number, oldPace: string, newPace: string) {
+  const oldSec = paceToSeconds(oldPace);
+  const newSec = paceToSeconds(newPace);
+  if (oldSec == null || newSec == null) return;
+
+  const { data: sessions } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, session_type, target_pace, target_pace_end, structure')
+    .eq('plan_id', planId)
+    .eq('target_pace', oldPace);
+
+  for (const s of sessions ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: Record<string, any> = { target_pace: newPace };
+    if (s.target_pace_end === oldPace) update.target_pace_end = newPace;
+    if (s.session_type !== 'RACE' && Array.isArray(s.structure)) {
+      update.structure = s.structure.map(ph => rewritePhasePace(ph, oldPace, newPace, oldSec, newSec));
+    }
+    await supabaseAdmin.from('plan_sessions').update(update).eq('id', s.id);
+  }
+}
+
+export async function saveTargetTime(planId: number, targetTime: string) {
+  const { data: plan } = await supabaseAdmin
+    .from('plans')
+    .select('id, distance_km, target_pace')
+    .eq('id', planId)
+    .single();
+  if (!plan) return { ok: false as const, error: 'Plan not found' };
+
+  const trimmed = targetTime.trim();
+  const secs = timeToSeconds(trimmed);
+  const dist = Number(plan.distance_km) || 0;
+  const newPace = secs != null && dist > 0 ? secondsToPace(Math.round(secs / dist)) : null;
+  const oldPace = plan.target_pace as string | null;
+
+  await supabaseAdmin
+    .from('plans')
+    .update({ target_time: trimmed || null, target_pace: newPace })
+    .eq('id', planId);
+
+  if (oldPace && newPace && oldPace !== newPace) {
+    await cascadeGoalPace(planId, oldPace, newPace);
+  }
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
+
+  return { ok: true as const, pace: newPace };
 }

@@ -5,10 +5,11 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
+import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import type { ZoneInput, HrZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [{ data: strava }, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }] = await Promise.all([
+  const [{ data: strava }, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, { data: racePlans }] = await Promise.all([
     supabaseAdmin
       .from('strava_connection')
       .select('athlete_name, connected_at, last_synced_at')
@@ -18,7 +19,15 @@ export default async function SettingsPage() {
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_config').select('*').eq('id', 1).maybeSingle(),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    supabaseAdmin.from('plans').select('id, name, distance_km, target_time').eq('kind', 'race').order('sort_order'),
   ]);
+
+  const targetTimePlans: TargetTimeRow[] = (racePlans ?? []).map(p => ({
+    id: p.id,
+    name: p.name,
+    distance_km: Number(p.distance_km) || 0,
+    target_time: p.target_time,
+  }));
 
   const threshold = config?.threshold_pace_per_km ?? '3:40';
   const zones: ZoneInput[] = (paceZones ?? []).map(z => ({
@@ -63,6 +72,21 @@ export default async function SettingsPage() {
                 <span className="font-mono text-[10px] uppercase tracking-[.1em] text-stone/50">coming soon</span>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Target times</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Goal finish time for each A-race. The target pace is derived from the time and
+              distance, and drives the goal-pace segments in that plan&apos;s sessions.
+            </p>
+            {targetTimePlans.length
+              ? <TargetTimesClient plans={targetTimePlans} />
+              : <p className="text-[14px] text-stone/70">No races yet.</p>}
           </div>
         </section>
 
