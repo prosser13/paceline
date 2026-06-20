@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, StrengthRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import type { SessionStatus } from '@/components/StatusMark';
 
@@ -262,6 +262,21 @@ export default function WeekAccordion({
             // Rest days — dashed "sheets" row with a bed watermark
             if (isRest) {
               return <RestDayRow key={session.id} short={d.short} date={d.date} />;
+            }
+
+            // Strength — duration + focus, no pace/distance/structure
+            if (session.session_type === 'STRENGTH') {
+              return (
+                <StrengthRow
+                  key={session.id}
+                  short={d.short}
+                  date={d.date}
+                  focus={session.description ?? null}
+                  duration={session.estimated_duration ?? null}
+                  today={status === 'today'}
+                  done={isDone}
+                />
+              );
             }
 
             const isRace     = session.session_type === 'RACE';

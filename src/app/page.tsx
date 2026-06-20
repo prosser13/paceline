@@ -4,7 +4,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
+  INTENSITY, MetricBlock, StrengthRow, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
 } from '@/components/session-ui';
 import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
@@ -21,6 +21,7 @@ export const dynamic = 'force-dynamic';
 interface PlanSession {
   id: string;
   scheduled_date: string;
+  session_type?: string | null;
   name: string;
   description?: string | null;
   distance_km?: number | null;
@@ -107,8 +108,11 @@ export default async function DashboardPage() {
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
-  const todaySession    = (todaySessions?.[0] ?? null) as PlanSession | null;
-  const tomorrowSession = (tomorrowSessions?.[0] ?? null) as PlanSession | null;
+  // The run is the hero; a strength session that day is shown alongside it.
+  const todaySession     = (todaySessions?.find(s => s.session_type !== 'STRENGTH') ?? null) as PlanSession | null;
+  const tomorrowSession  = (tomorrowSessions?.find(s => s.session_type !== 'STRENGTH') ?? null) as PlanSession | null;
+  const todayStrength    = (todaySessions?.find(s => s.session_type === 'STRENGTH') ?? null) as PlanSession | null;
+  const tomorrowStrength = (tomorrowSessions?.find(s => s.session_type === 'STRENGTH') ?? null) as PlanSession | null;
   const fitnessForm    = wellness.form;
   const fitnessHistory = wellness.history;
 
@@ -346,6 +350,18 @@ export default async function DashboardPage() {
           </div>
         )}
 
+        {todayStrength && (
+          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-[18px]">
+            <StrengthRow
+              short={today.toLocaleDateString('en-GB', { weekday: 'short' })}
+              date={today.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              focus={todayStrength.description ?? null}
+              duration={todayStrength.estimated_duration ?? null}
+              today
+            />
+          </div>
+        )}
+
         {/* Tomorrow hero */}
         {tomorrowSession ? (
           <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={null} />
@@ -355,6 +371,17 @@ export default async function DashboardPage() {
               <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Tomorrow</span>
             </div>
             <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
+          </div>
+        )}
+
+        {tomorrowStrength && (
+          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-[18px]">
+            <StrengthRow
+              short={addDays(today, 1).toLocaleDateString('en-GB', { weekday: 'short' })}
+              date={addDays(today, 1).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+              focus={tomorrowStrength.description ?? null}
+              duration={tomorrowStrength.estimated_duration ?? null}
+            />
           </div>
         )}
 

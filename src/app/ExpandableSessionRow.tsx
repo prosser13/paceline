@@ -6,12 +6,13 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, RestDayRow, syntheticStructure, sumSegmentSeconds, fmtHMM,
+  INTENSITY, MetricBlock, WorkoutDetail, RestDayRow, StrengthRow, syntheticStructure, sumSegmentSeconds, fmtHMM,
 } from '@/components/session-ui';
 
 interface Session {
   id: string;
   name: string;
+  session_type?: string | null;
   scheduled_date: string;
   description?: string | null;
   distance_km?: number | null;
@@ -48,6 +49,13 @@ export default function ExpandableSessionRow({
   // Rest day — dashed "sheets" row with a bed watermark (non-expandable)
   if (session.status === 'rest') {
     return <RestDayRow short={d.short} date={d.date} />;
+  }
+
+  // Strength — duration + focus, no pace/distance (non-expandable)
+  if (session.session_type === 'STRENGTH') {
+    return (
+      <StrengthRow short={d.short} date={d.date} focus={session.description ?? null} duration={session.estimated_duration ?? null} />
+    );
   }
 
   const steps      = normalizeStructure(

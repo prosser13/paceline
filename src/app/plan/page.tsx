@@ -187,7 +187,11 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         status:        'rest',
       } as PlanSession);
     }
-    wk.sort((a, b) => (a.scheduled_date < b.scheduled_date ? -1 : a.scheduled_date > b.scheduled_date ? 1 : 0));
+    wk.sort((a, b) => {
+      if (a.scheduled_date !== b.scheduled_date) return a.scheduled_date < b.scheduled_date ? -1 : 1;
+      // Same day: run/race first, strength after.
+      return (a.session_type === 'STRENGTH' ? 1 : 0) - (b.session_type === 'STRENGTH' ? 1 : 0);
+    });
   }
 
   // Phase bar — merge consecutive same-phase weeks into proportional segments
