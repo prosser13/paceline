@@ -6,8 +6,9 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, RestDayRow, StrengthRow, syntheticStructure, sumSegmentSeconds, fmtHMM,
+  INTENSITY, MetricBlock, WorkoutDetail, RestDayRow, syntheticStructure, sumSegmentSeconds, fmtHMM,
 } from '@/components/session-ui';
+import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 
 interface Session {
   id: string;
@@ -22,6 +23,7 @@ interface Session {
   estimated_duration?: string | null;
   target_pace?: string | null;
   target_pace_end?: string | null;
+  rationale?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
 }
@@ -51,10 +53,16 @@ export default function ExpandableSessionRow({
     return <RestDayRow short={d.short} date={d.date} />;
   }
 
-  // Strength — duration + focus, no pace/distance (non-expandable)
+  // Strength — duration + focus, expandable to the prescribed exercises
   if (session.session_type === 'STRENGTH') {
     return (
-      <StrengthRow short={d.short} date={d.date} focus={session.description ?? null} duration={session.estimated_duration ?? null} />
+      <StrengthRow
+        short={d.short} date={d.date}
+        focus={session.description ?? null}
+        duration={session.estimated_duration ?? null}
+        note={session.rationale ?? null}
+        exercises={(session.structure as StrengthEx[] | null) ?? []}
+      />
     );
   }
 

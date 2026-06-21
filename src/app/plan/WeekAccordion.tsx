@@ -6,8 +6,9 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, StrengthRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
+import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import type { SessionStatus } from '@/components/StatusMark';
 
 // ── Plan data types ──────────────────────────────────────────
@@ -36,6 +37,7 @@ interface PlanSession {
   target_pace?: string | null;
   target_pace_end?: string | null;
   priority?: string | null;
+  rationale?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
 }
@@ -264,7 +266,7 @@ export default function WeekAccordion({
               return <RestDayRow key={session.id} short={d.short} date={d.date} />;
             }
 
-            // Strength — duration + focus, no pace/distance/structure
+            // Strength — duration + focus, expandable to the prescribed exercises
             if (session.session_type === 'STRENGTH') {
               return (
                 <StrengthRow
@@ -275,6 +277,8 @@ export default function WeekAccordion({
                   duration={session.estimated_duration ?? null}
                   today={status === 'today'}
                   done={isDone}
+                  note={session.rationale ?? null}
+                  exercises={(session.structure as StrengthEx[] | null) ?? []}
                 />
               );
             }

@@ -336,50 +336,6 @@ export function RestDayRow({ short, date }: { short: string; date: string }) {
   );
 }
 
-// ── Strength row ─────────────────────────────────────────────
-
-function Dumbbell() {
-  return (
-    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-stone shrink-0" aria-hidden="true">
-      <path d="M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11" />
-    </svg>
-  );
-}
-
-// A strength session — duration + focus, no pace/distance. Same box model as a
-// session row so day columns and heights line up.
-export function StrengthRow({
-  short, date, focus, duration, today, done,
-}: {
-  short: string; date: string; focus: string | null; duration: string | null; today?: boolean; done?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-[14px] border-l-[3px] border-l-stone/40 px-[16px] py-[12px]">
-      <div className="w-[46px] shrink-0">
-        <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
-        <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-[7px] leading-tight">
-          {today && (
-            <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
-              Today
-            </span>
-          )}
-          {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-          <Dumbbell />
-          <span className="text-[16.5px] font-semibold text-ink">Strength</span>
-        </div>
-        {focus && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{focus}</div>}
-      </div>
-      <div className="shrink-0 text-right w-[78px]">
-        <div className="font-display font-semibold text-[19px] leading-none text-ink">{duration ?? '—'}</div>
-      </div>
-    </div>
-  );
-}
-
 // ── Metric block (time-led) ──────────────────────────────────
 
 const METRIC_SIZE = {

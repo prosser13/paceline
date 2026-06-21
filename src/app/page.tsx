@@ -4,8 +4,9 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, StrengthRow, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
 } from '@/components/session-ui';
+import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
 import {
@@ -360,6 +361,8 @@ export default async function DashboardPage() {
               focus={todayStrength.description ?? null}
               duration={todayStrength.estimated_duration ?? null}
               today
+              note={todayStrength.rationale ?? null}
+              exercises={(todayStrength.structure as unknown as StrengthEx[] | null) ?? []}
             />
           </div>
         )}
@@ -383,6 +386,8 @@ export default async function DashboardPage() {
               date={addDays(today, 1).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
               focus={tomorrowStrength.description ?? null}
               duration={tomorrowStrength.estimated_duration ?? null}
+              note={tomorrowStrength.rationale ?? null}
+              exercises={(tomorrowStrength.structure as unknown as StrengthEx[] | null) ?? []}
             />
           </div>
         )}
