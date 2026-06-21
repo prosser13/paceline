@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { humanHMM, ZoneChip } from './session-ui';
+import { ZoneChip } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
-  normalizeCyclingStructure, sumCyclingMinutes, fmtRideDuration, fmtPower, fmtHr,
+  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
   type PowerZoneMap, type BikeHrZoneMap, type CyclingSegment,
 } from '@/lib/cycling';
 
@@ -34,7 +34,7 @@ export function CyclingDetailTable({ segments }: { segments: CyclingSegment[] })
           </span>
           <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtPower(seg.powerMin, seg.powerMax)}</span>
           <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtHr(seg.hrMin, seg.hrMax)}</span>
-          <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{seg.durationMins ? `${seg.durationMins}m` : '—'}</span>
+          <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{seg.durationMins ? fmtRideClock(seg.durationMins) : '—'}</span>
         </div>
       ))}
     </>
@@ -61,7 +61,7 @@ export default function CyclingRow({
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
   const hasDetail = segments.length > 0;
   const totalMins = sumCyclingMinutes(segments);
-  const duration  = totalMins > 0 ? fmtRideDuration(totalMins) : session.estimated_duration ?? null;
+  const duration  = totalMins > 0 ? fmtRideClock(totalMins) : session.estimated_duration ?? null;
   // First segment's power window stands in as the headline target for simple rides.
   const lead = segments[0];
 
@@ -91,7 +91,6 @@ export default function CyclingRow({
             )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
             <span className="text-[16.5px] font-semibold text-ink truncate">{session.name}</span>
-            {lead?.zoneKey && <ZoneChip zone={lead.zoneKey} />}
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -102,7 +101,7 @@ export default function CyclingRow({
           {session.description && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>}
         </div>
         <div className="shrink-0 text-right w-[100px]">
-          <div className="font-display font-semibold text-[19px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
+          <div className="font-display font-semibold text-[19px] leading-none text-ink">{duration ?? '—'}</div>
           {lead && <div className="font-mono text-[12.5px] text-stone mt-[3px]">{fmtPower(lead.powerMin, lead.powerMax)}</div>}
         </div>
       </div>

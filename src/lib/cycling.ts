@@ -77,11 +77,9 @@ export function sumCyclingMinutes(segs: CyclingSegment[]): number {
   return segs.reduce((t, s) => t + s.durationMins, 0);
 }
 
-// Minutes → "H:MM" (matches the duration format stored on sessions).
-export function fmtRideDuration(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return `${h}:${String(m).padStart(2, '0')}`;
+// Whole-minute ride duration as MM:SS (e.g. 60 → "60:00", 120 → "120:00").
+export function fmtRideClock(mins: number): string {
+  return `${Math.round(mins)}:00`;
 }
 
 // Watt window → "149–202 W" (or a single value / em dash).
