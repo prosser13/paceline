@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { getStravaConnectionSummary } from '@/data/strava-connection';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
@@ -9,12 +10,8 @@ import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import type { ZoneInput, HrZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [{ data: strava }, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, { data: racePlans }] = await Promise.all([
-    supabaseAdmin
-      .from('strava_connection')
-      .select('athlete_name, connected_at, last_synced_at')
-      .eq('id', 1)
-      .single(),
+  const [strava, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, { data: racePlans }] = await Promise.all([
+    getStravaConnectionSummary(),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_config').select('*').eq('id', 1).maybeSingle(),
