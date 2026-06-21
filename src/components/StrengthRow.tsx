@@ -8,6 +8,7 @@ export interface StrengthEx {
   reps: number;
   reps_type?: string;
   weight?: number | null;
+  target?: string | null;
 }
 
 function fmtEx(ex: StrengthEx): string {

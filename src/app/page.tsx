@@ -6,7 +6,8 @@ import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
 } from '@/components/session-ui';
-import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
+import StrengthHero from '@/components/StrengthHero';
+import { type StrengthEx } from '@/components/StrengthRow';
 import CollapsibleSession from './CollapsibleSession';
 import ExpandableSessionRow from './ExpandableSessionRow';
 import {
@@ -354,17 +355,13 @@ export default async function DashboardPage() {
         )}
 
         {todayStrength && (
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-[18px]">
-            <StrengthRow
-              short={today.toLocaleDateString('en-GB', { weekday: 'short' })}
-              date={today.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-              focus={todayStrength.description ?? null}
-              duration={todayStrength.estimated_duration ?? null}
-              today
-              note={todayStrength.rationale ?? null}
-              exercises={(todayStrength.structure as unknown as StrengthEx[] | null) ?? []}
-            />
-          </div>
+          <StrengthHero
+            label="Today"
+            focus={todayStrength.description ?? null}
+            duration={todayStrength.estimated_duration ?? null}
+            note={todayStrength.rationale ?? null}
+            exercises={(todayStrength.structure as unknown as StrengthEx[] | null) ?? []}
+          />
         )}
 
         {/* Tomorrow hero */}
@@ -380,16 +377,13 @@ export default async function DashboardPage() {
         )}
 
         {tomorrowStrength && (
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-[18px]">
-            <StrengthRow
-              short={addDays(today, 1).toLocaleDateString('en-GB', { weekday: 'short' })}
-              date={addDays(today, 1).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-              focus={tomorrowStrength.description ?? null}
-              duration={tomorrowStrength.estimated_duration ?? null}
-              note={tomorrowStrength.rationale ?? null}
-              exercises={(tomorrowStrength.structure as unknown as StrengthEx[] | null) ?? []}
-            />
-          </div>
+          <StrengthHero
+            label="Tomorrow"
+            focus={tomorrowStrength.description ?? null}
+            duration={tomorrowStrength.estimated_duration ?? null}
+            note={tomorrowStrength.rationale ?? null}
+            exercises={(tomorrowStrength.structure as unknown as StrengthEx[] | null) ?? []}
+          />
         )}
 
         {/* Coming up */}

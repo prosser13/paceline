@@ -11,12 +11,19 @@ const env = Object.fromEntries(
 );
 const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-// name -> { id, repsType } from the hardcoded library
+// name -> { id, repsType, group, pattern } from the hardcoded library
 const lib = Object.fromEntries(
   readFileSync(new URL('../src/data/strength-exercises.ts', import.meta.url), 'utf8')
     .split('\n').filter(l => l.trim().startsWith('{')).map(l => JSON.parse(l.trim().replace(/,$/, '')))
-    .map(o => [o.name, { id: o.id, repsType: o.repsType }]),
+    .map(o => [o.name, { id: o.id, repsType: o.repsType, group: o.group, pattern: o.movementPattern }]),
 );
+
+// Rehab target bucket for grouping in the hero card.
+const GROUP_TARGET = {
+  glutes: 'Glutes', hamstrings: 'Glutes', quads: 'Quads', calves: 'Calves',
+  'hip-flexors': 'Hips & TA', core: 'Core', 'upper-body': 'Upper body',
+};
+const targetOf = ex => (ex.pattern === 'mobility' ? 'Mobility' : (GROUP_TARGET[ex.group] ?? 'Other'));
 
 const N = {
   SLHT: 'Single leg hip thrust (unweighted)', BBHT: 'Hip thrust (barbell)', RDL: 'Romanian deadlift (bilateral)',
@@ -59,7 +66,7 @@ for (const [date, { note, items }] of Object.entries(PLAN)) {
   const structure = items.map(([key, sets, reps, weight]) => {
     const ex = lib[N[key]];
     if (!ex) throw new Error(`Exercise not in library: ${key} -> ${N[key]}`);
-    return { exercise_id: ex.id, name: N[key], sets, reps, reps_type: ex.repsType, weight: weight ?? null };
+    return { exercise_id: ex.id, name: N[key], sets, reps, reps_type: ex.repsType, weight: weight ?? null, target: targetOf(ex) };
   });
   const { error } = await supabase.from('plan_sessions')
     .update({ structure, rationale: note })
