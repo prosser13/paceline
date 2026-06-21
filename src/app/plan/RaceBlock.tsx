@@ -53,33 +53,6 @@ export default function RaceBlock({
     );
   }
 
-  // ── Cycling block ───────────────────────────────────────────
-  if (kind === 'cycling') {
-    const startsIn = startDate ? daysUntil(startDate) : null;
-    const range = startDate && endDate ? `${fmtDate(startDate)} – ${fmtDate(endDate, true)}` : '';
-    return (
-      <div className="rounded-[18px] overflow-hidden border border-fog">
-        <div className="bg-marine px-[22px] py-[18px] flex items-start justify-between">
-          <div>
-            <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/60">Cycling</span>
-            <h2 className="font-display font-semibold text-[28px] text-bone leading-tight mt-[2px]">{name}</h2>
-            {range && <p className="font-mono text-[14px] text-bone/60 mt-[5px]">{range}</p>}
-          </div>
-          <div className="text-right shrink-0 ml-6">
-            {startsIn != null && startsIn > 0 ? (
-              <>
-                <div className="font-display font-semibold text-[44px] leading-none text-bone">{startsIn}</div>
-                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-bone/60">days to start</div>
-              </>
-            ) : (
-              <div className="font-mono text-[13px] tracking-[.1em] uppercase text-bone/70">In progress</div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ── Race (A-race) block ─────────────────────────────────────
   const days = raceDate ? daysUntil(raceDate) : null;
   return (

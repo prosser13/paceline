@@ -108,11 +108,11 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Pace zones</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · pace zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
-              Planned sessions are built from zones — the paces shown across your plan are
+              Planned runs are built from zones — the paces shown across your plan are
               derived from these windows, so editing a zone updates every session.
             </p>
             <ZonesClient initialThreshold={threshold} initialZones={zones} />
@@ -121,11 +121,11 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Heart rate zones</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · heart rate zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
-              Your heart-rate threshold, max and resting values, plus zone ranges in bpm.
+              Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.
             </p>
             <HrZonesClient
               initialThreshold={hrThreshold}
@@ -138,7 +138,7 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Power zones · cycling</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · power zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
@@ -151,7 +151,7 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Bike heart rate zones · cycling</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · heart rate zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
