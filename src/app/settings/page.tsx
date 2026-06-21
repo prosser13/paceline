@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
 import { listRacePlans } from '@/data/plans';
+import { getThresholdPace, listPaceZones, getHrConfig, listHrZones } from '@/data/zones';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
@@ -11,12 +11,12 @@ import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import type { ZoneInput, HrZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [strava, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, racePlans] = await Promise.all([
+  const [strava, thresholdPace, paceZones, hrConfig, hrZones, racePlans] = await Promise.all([
     getStravaConnectionSummary(),
-    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
-    supabaseAdmin.from('hr_config').select('*').eq('id', 1).maybeSingle(),
-    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    getThresholdPace(),
+    listPaceZones(),
+    getHrConfig(),
+    listHrZones(),
     listRacePlans(),
   ]);
 
@@ -27,8 +27,8 @@ export default async function SettingsPage() {
     target_time: p.target_time,
   }));
 
-  const threshold = config?.threshold_pace_per_km ?? '3:40';
-  const zones: ZoneInput[] = (paceZones ?? []).map(z => ({
+  const threshold = thresholdPace ?? '3:40';
+  const zones: ZoneInput[] = paceZones.map(z => ({
     name:     z.name,
     pace_min: z.pace_min,
     pace_max: z.pace_max,
@@ -37,7 +37,7 @@ export default async function SettingsPage() {
   const hrThreshold = hrConfig?.threshold_hr != null ? String(hrConfig.threshold_hr) : '';
   const hrMax       = hrConfig?.max_hr != null ? String(hrConfig.max_hr) : '';
   const hrResting   = hrConfig?.resting_hr != null ? String(hrConfig.resting_hr) : '';
-  const hrZoneInputs: HrZoneInput[] = (hrZones ?? []).map(z => ({
+  const hrZoneInputs: HrZoneInput[] = hrZones.map(z => ({
     name:   z.name,
     hr_min: String(z.hr_min),
     hr_max: String(z.hr_max),

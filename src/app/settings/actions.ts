@@ -2,6 +2,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireUser } from '@/lib/auth';
+import { setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones } from '@/data/zones';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -13,15 +14,9 @@ export interface ZoneInput {
 
 export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
   await requireUser();
-  // Threshold is denormalised across every app_config row — keep them in sync
-  await supabaseAdmin
-    .from('app_config')
-    .update({ threshold_pace_per_km: threshold })
-    .not('key', 'is', null);
+  await setThresholdPace(threshold);
 
   // Replace the zone set (supports add/remove). Keys are assigned by order.
-  await supabaseAdmin.from('pace_zones').delete().gte('sort_order', 0);
-
   const rows = zones
     .filter(z => z.name.trim() || z.pace_min.trim() || z.pace_max.trim())
     .map((z, i) => ({
@@ -31,10 +26,7 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
       pace_max:   z.pace_max.trim(),
       sort_order: i + 1,
     }));
-
-  if (rows.length) {
-    await supabaseAdmin.from('pace_zones').insert(rows);
-  }
+  await replacePaceZones(rows);
 
   revalidatePath('/settings');
   revalidatePath('/plan');
@@ -55,16 +47,13 @@ export async function saveHrZones(
   threshold: string, max: string, resting: string, zones: HrZoneInput[],
 ) {
   await requireUser();
-  await supabaseAdmin.from('hr_config').upsert({
-    id:           1,
+  await saveHrConfig({
     threshold_hr: toInt(threshold),
     max_hr:       toInt(max),
     resting_hr:   toInt(resting),
   });
 
   // Replace the zone set (supports add/remove). Keys are assigned by order.
-  await supabaseAdmin.from('hr_zones').delete().gte('sort_order', 0);
-
   const rows = zones
     .filter(z => z.name.trim() || z.hr_min.trim() || z.hr_max.trim())
     .map((z, i) => ({
@@ -74,10 +63,7 @@ export async function saveHrZones(
       hr_max:     toInt(z.hr_max) ?? 0,
       sort_order: i + 1,
     }));
-
-  if (rows.length) {
-    await supabaseAdmin.from('hr_zones').insert(rows);
-  }
+  await replaceHrZones(rows);
 
   revalidatePath('/settings');
 

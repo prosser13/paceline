@@ -7,6 +7,7 @@ import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
 } from '@/data/plans';
+import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
@@ -141,9 +142,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     { data: { user } },
     { data: windowSessions },
     { data: recent },
-    { data: appConfig },
-    { data: paceZones },
-    { data: hrZoneRows },
+    thresholdPaceRaw,
+    paceZones,
+    hrZoneRows,
     weekRow,
     raceRow,
     wellness,
@@ -155,9 +156,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     supabaseAdmin.from('completed_workouts')
       .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
       .gte('completed_date', weekAgoStr).lte('completed_date', todayStr),
-    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
-    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    getThresholdPace(),
+    listPaceZones(),
+    listHrZones(),
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
     getWellnessCached(),
@@ -191,16 +192,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const fitnessForm    = wellness.form;
   const fitnessHistory = wellness.history;
 
-  const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
+  const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshParts   = thresholdPace.split(':').map(Number);
   const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
 
   const zones: ZoneMap = {};
-  for (const z of paceZones ?? []) {
+  for (const z of paceZones) {
     zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
   }
   const hrZones: HrZoneMap = {};
-  for (const z of hrZoneRows ?? []) {
+  for (const z of hrZoneRows) {
     hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
