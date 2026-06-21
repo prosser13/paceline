@@ -5,6 +5,7 @@ import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import SessionHero from './SessionHero';
 import SessionRows from './SessionRows';
 import StrengthHero from '@/components/StrengthHero';
+import CyclingHero from '@/components/CyclingHero';
 import { type StrengthEx } from '@/components/StrengthRow';
 import WeekStrip from './WeekStrip';
 import { OXBLOOD, MARINE, FERN } from '@/lib/colors';
@@ -37,6 +38,25 @@ export default function AgendaA({ d }: { d: DashboardData }) {
       exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} />
   ) : null;
 
+  // The day's primary activity hero — a ride or a run, depending on activity_type.
+  const activityHero = (s: PlanSession | null, label: string) => {
+    if (!s) return null;
+    return s.activity_type === 'cycling'
+      ? <CyclingHero label={label} session={s} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+      : <SessionHero label={label} session={s} thresholdPace={d.thresholdPace}
+          zones={d.zones} hrZones={d.hrZones} completed={d.todayCompleted} />;
+  };
+
+  const noRunBox = (
+    <div className="border border-fog rounded-[18px] bg-paper px-[22px] py-[16px] mb-[18px] text-stone text-[16px]">
+      No run today — rest day.
+    </div>
+  );
+
+  // On strength-priority plans (e.g. Dragon 50) strength leads; the ride/run sits
+  // beneath it. Otherwise the run/ride hero leads and strength follows.
+  const strengthLeads = d.strengthFirst && !!d.todayStrength;
+
   return (
     <>
       <WeekStrip days={d.windowDays} weekLabel={d.weekLabel} todayDone={todayDone} />
@@ -48,18 +68,25 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           dot={todayDone ? FERN : OXBLOOD}
           label={todayDone ? 'Done today' : 'Now · today'}
           labelColor={todayDone ? FERN : OXBLOOD}>
-          {d.todaySession
-            ? <SessionHero label={todayDone ? 'Done' : 'Today'} session={d.todaySession} thresholdPace={d.thresholdPace}
-                zones={d.zones} hrZones={d.hrZones} completed={d.todayCompleted} />
-            : <div className="border border-fog rounded-[18px] bg-paper px-[22px] py-[16px] mb-[18px] text-stone text-[16px]">No run today — rest day.</div>}
-          {strengthBlock(d.todayStrength, 'Today')}
+          {strengthLeads ? (
+            <>
+              {strengthBlock(d.todayStrength, 'Today')}
+              {activityHero(d.todaySession, todayDone ? 'Done' : 'Today')}
+            </>
+          ) : (
+            <>
+              {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
+              {strengthBlock(d.todayStrength, 'Today')}
+            </>
+          )}
         </Node>
 
         <Node anchorId={`spine-${d.windowDays[1].iso}`} ring={MARINE}
           label={`Tomorrow · ${formatSpineDay(d.windowDays[1].iso).date}`} labelColor={MARINE}>
           <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
             <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
-              zones={d.zones} hrZones={d.hrZones} restLabel="Rest day — recover" />
+              zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}
+              restLabel="Rest day — recover" />
           </div>
         </Node>
 
@@ -75,7 +102,8 @@ export default function AgendaA({ d }: { d: DashboardData }) {
                 <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
               ) : (
                 <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-                  <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} />
+                  <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
+                    powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
                 </div>
               )}
             </Node>

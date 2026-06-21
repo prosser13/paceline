@@ -13,8 +13,10 @@ import {
   INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM, humanHMM,
 } from '@/components/session-ui';
 import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
+import CyclingRow from '@/components/CyclingRow';
 import { RunGlyph, Dumbbell } from '@/components/glyphs';
 import { GOLD } from '@/lib/colors';
+import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PlanSession } from './data';
 
 function RunRow({ session, thresholdPace, zones, hrZones }: {
@@ -101,8 +103,11 @@ function StrengthRowCompact({ session }: { session: PlanSession }) {
   );
 }
 
-export default function SessionRows({ sessions, thresholdPace, zones, hrZones, restLabel = 'Rest day' }: {
-  sessions: PlanSession[]; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap; restLabel?: string;
+export default function SessionRows({
+  sessions, thresholdPace, zones, hrZones, powerZones, bikeHrZones, restLabel = 'Rest day',
+}: {
+  sessions: PlanSession[]; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap;
+  powerZones?: PowerZoneMap; bikeHrZones?: BikeHrZoneMap; restLabel?: string;
 }) {
   if (!sessions.length || sessions.every(s => s.status === 'rest')) {
     return (
@@ -121,7 +126,9 @@ export default function SessionRows({ sessions, thresholdPace, zones, hrZones, r
       {sessions.filter(s => s.status !== 'rest').map(s =>
         s.session_type === 'STRENGTH'
           ? <StrengthRowCompact key={s.id} session={s} />
-          : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} />,
+          : s.activity_type === 'cycling'
+            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact />
+            : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} />,
       )}
     </div>
   );

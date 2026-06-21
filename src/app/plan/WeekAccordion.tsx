@@ -9,7 +9,9 @@ import {
   INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
+import CyclingRow from '@/components/CyclingRow';
 import { RunGlyph } from '@/components/glyphs';
+import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
 
 // ── Plan data types ──────────────────────────────────────────
@@ -27,6 +29,7 @@ interface PlanSession {
   id: string;
   week_number: number;
   session_type: string;
+  activity_type?: string | null;
   name: string;
   description?: string | null;
   distance_km?: number | null;
@@ -177,10 +180,12 @@ interface Props {
   nextSessionId: string | null;
   zones: ZoneMap;
   hrZones: HrZoneMap;
+  powerZones: PowerZoneMap;
+  bikeHrZones: BikeHrZoneMap;
 }
 
 export default function WeekAccordion({
-  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones, hrZones,
+  week, sessions, thresholdPace, todayStr, defaultOpen, completedMap, nextSessionId, zones, hrZones, powerZones, bikeHrZones,
 }: Props) {
   const [open, setOpen]               = useState(defaultOpen);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -231,7 +236,7 @@ export default function WeekAccordion({
 
         <div className="flex items-center gap-[18px] shrink-0">
           <div className="text-right hidden sm:block">
-            <div className="font-mono text-[15px] font-semibold">{totalKm.toFixed(0)} km</div>
+            {totalKm > 0 && <div className="font-mono text-[15px] font-semibold">{totalKm.toFixed(0)} km</div>}
             <div className="font-mono text-[13px] text-stone">{tssIsEstimated ? '~' : ''}{headerTss} TSS</div>
           </div>
           <span
@@ -281,6 +286,22 @@ export default function WeekAccordion({
                   done={isDone}
                   note={session.rationale ?? null}
                   exercises={(session.structure as StrengthEx[] | null) ?? []}
+                />
+              );
+            }
+
+            // Cycling — power + duration, expandable to the per-segment targets
+            if (session.activity_type === 'cycling') {
+              return (
+                <CyclingRow
+                  key={session.id}
+                  short={d.short}
+                  date={d.date}
+                  session={session}
+                  powerZones={powerZones}
+                  bikeHrZones={bikeHrZones}
+                  today={status === 'today'}
+                  done={isDone}
                 />
               );
             }

@@ -2,18 +2,20 @@ export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
-import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
+import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
 import WeekAccordion from './WeekAccordion';
 import RaceBlock from './RaceBlock';
 import PastWeeksAccordion from './PastWeeksAccordion';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
+import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 
 interface PlanSession {
   id: string;
   plan_id?: number | null;
   week_number: number;
   session_type: string;
+  activity_type?: string | null;
   name: string;
   description?: string | null;
   distance_km?: number | null;
@@ -86,13 +88,15 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, plans] = await Promise.all([
+  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans] = await Promise.all([
     listAllSessions(),
     listWeeksByNumber(),
     getThresholdPace(),
     listAllCompleted(),
     listPaceZones(),
     listHrZones(),
+    listPowerZones(),
+    listBikeHrZones(),
     listPlansBySortOrder(),
   ]);
 
@@ -108,6 +112,15 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const hrZones: HrZoneMap = {};
   for (const z of hrZonesRows) {
     hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
+  }
+
+  const powerZones: PowerZoneMap = {};
+  for (const z of powerZoneRows) {
+    powerZones[z.zone_key] = { key: z.zone_key, name: z.name, powerMin: z.power_min, powerMax: z.power_max, sortOrder: z.sort_order };
+  }
+  const bikeHrZones: BikeHrZoneMap = {};
+  for (const z of bikeHrZoneRows) {
+    bikeHrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
   // Build map of plan_session_id → actual display values for done sessions
@@ -247,6 +260,8 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       nextSessionId={nextSessionId}
       zones={zones}
       hrZones={hrZones}
+      powerZones={powerZones}
+      bikeHrZones={bikeHrZones}
     />
   );
 
