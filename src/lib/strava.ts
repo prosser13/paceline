@@ -1,7 +1,12 @@
-import { supabaseAdmin } from './supabase-admin';
 import { expandSegmentDistances } from './plan-structure';
 import { invalidateWellnessCache } from './intervals';
 import { getStravaTokens, updateStravaTokens, markStravaSynced } from '@/data/strava-connection';
+import {
+  getEarliestSessionDate, listSessionsForMatching, completedWorkoutExistsForSession,
+  insertCompletedWorkout, listCompletedMissingSegments, updateCompletedWorkout,
+} from '@/data/plan-sessions';
+import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
+import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 
 export interface StravaActivity {
   id: number;
@@ -22,8 +27,55 @@ interface TokenResponse {
   athlete?: { id: number; firstname: string; lastname: string };
 }
 
+// ── Resilient fetch ──────────────────────────────────────────
+// Strava hangs, rate-limits (429) and 5xxs happen; without a timeout one stalled
+// request hangs the whole sync. timedFetch adds an abort timeout and a bounded
+// backoff retry (honouring Retry-After, capped so we never sleep a function out).
+
+const FETCH_TIMEOUT_MS = 15_000;
+const MAX_BACKOFF_MS = 30_000;
+const MAX_RETRIES = 2;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function timedFetch(url: string, init: RequestInit = {}): Promise<Response | null> {
+  for (let attempt = 0; ; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      clearTimeout(timer);
+      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const waitMs = Math.min(
+          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt,
+          MAX_BACKOFF_MS,
+        );
+        console.warn(`[strava] ${res.status} on ${url} — retry ${attempt + 1}/${MAX_RETRIES} in ${waitMs}ms`);
+        await sleep(waitMs);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      if (attempt < MAX_RETRIES) {
+        await sleep(Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS));
+        continue;
+      }
+      console.warn(`[strava] fetch failed after ${MAX_RETRIES} retries: ${String(err)}`);
+      return null;
+    }
+  }
+}
+
+function stravaGet(url: string, token: string): Promise<Response | null> {
+  return timedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+}
+
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
-  const res = await fetch('https://www.strava.com/oauth/token', {
+  const res = await timedFetch('https://www.strava.com/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -33,7 +85,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
       grant_type:    'refresh_token',
     }),
   });
-  if (!res.ok) return null;
+  if (!res || !res.ok) return null;
   const data: TokenResponse = await res.json();
   await updateStravaTokens({
     access_token:     data.access_token,
@@ -45,7 +97,6 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
 
 export async function getValidAccessToken(): Promise<string | null> {
   const data = await getStravaTokens();
-
   if (!data?.access_token || !data?.refresh_token) return null;
 
   const nowSecs = Math.floor(Date.now() / 1000);
@@ -63,11 +114,11 @@ async function fetchStreams(
   activityId: number,
   token: string,
 ): Promise<{ distance: number[]; time: number[]; heartrate: number[] | null } | null> {
-  const res = await fetch(
+  const res = await stravaGet(
     `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time,heartrate&key_by_type=true`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    token,
   );
-  if (!res.ok) return null;
+  if (!res || !res.ok) return null;
   const data = await res.json();
   const distance = data?.distance?.data;
   const time     = data?.time?.data;
@@ -144,25 +195,21 @@ async function computeForActivity(
   };
 }
 
+const BACKFILL_LIMIT = 50;
+
 export async function syncActivities(): Promise<{ synced: number; matched: number }> {
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
 
   // Sync from the earliest planned session
-  const { data: earliest } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('scheduled_date')
-    .order('scheduled_date')
-    .limit(1)
-    .single();
-
-  const afterDate = earliest?.scheduled_date ?? '2026-06-15';
+  const afterDate = (await getEarliestSessionDate()) ?? '2026-06-15';
   const afterUnix = Math.floor(new Date(afterDate + 'T00:00:00Z').getTime() / 1000);
 
-  const res = await fetch(
+  const res = await stravaGet(
     `https://www.strava.com/api/v3/athlete/activities?after=${afterUnix}&per_page=100`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    token,
   );
+  if (!res) throw new Error('Strava API unreachable');
   if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
 
   const all: StravaActivity[] = await res.json();
@@ -173,8 +220,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     return { synced: 0, matched: 0 };
   }
 
-  // Upsert into activities table
-  await supabaseAdmin.from('activities').upsert(
+  await upsertActivities(
     runs.map(a => ({
       strava_activity_id: a.id,
       activity_date:      a.start_date_local.substring(0, 10),
@@ -189,83 +235,72 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
         : null,
       raw_data: a as unknown as Record<string, unknown>,
     })),
-    { onConflict: 'strava_activity_id' },
   );
 
   // Re-fetch stored rows to get their UUIDs + timing
-  const { data: stored } = await supabaseAdmin
-    .from('activities')
-    .select('id, strava_activity_id, activity_date, distance_km, duration_mins, avg_pace_min_km, avg_hr')
-    .in('strava_activity_id', runs.map(a => a.id));
+  const stored = await listActivitiesByStravaIds(runs.map(a => a.id));
+  if (!stored.length) return { synced: runs.length, matched: 0 };
 
-  if (!stored?.length) return { synced: runs.length, matched: 0 };
+  const planSessions = await listSessionsForMatching();
+  if (!planSessions.length) return { synced: runs.length, matched: 0 };
 
-  // Fetch plan sessions
-  const { data: planSessions } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('id, scheduled_date, distance_km, structure');
-
-  if (!planSessions?.length) return { synced: runs.length, matched: 0 };
-
-  // Match: same date, distance within 20%
   let matched = 0;
   for (const activity of stored) {
     const actKm = Number(activity.distance_km);
-    const candidates = planSessions.filter(s => s.scheduled_date === activity.activity_date);
-    if (!candidates.length) continue;
 
-    const match = candidates.find(s => {
+    // Pick the CLOSEST same-day session within 20%, not just the first.
+    let match: (typeof planSessions)[number] | null = null;
+    let bestErr = Infinity;
+    for (const s of planSessions) {
+      if (s.scheduled_date !== activity.activity_date) continue;
       const planKm = Number(s.distance_km);
-      return planKm > 0 && Math.abs(actKm - planKm) / planKm <= 0.2;
-    });
+      if (!(planKm > 0)) continue;
+      const err = Math.abs(actKm - planKm) / planKm;
+      if (err <= 0.2 && err < bestErr) { bestErr = err; match = s; }
+    }
     if (!match) continue;
 
-    // Skip if already matched
-    const { count } = await supabaseAdmin
-      .from('session_matches')
-      .select('id', { count: 'exact', head: true })
-      .eq('plan_session_id', match.id);
-    if (count && count > 0) continue;
-
-    await supabaseAdmin.from('session_matches').insert({
-      plan_session_id: match.id,
-      activity_id:     activity.id,
-      match_source:    'auto',
-      matched_at:      new Date().toISOString(),
-    });
+    // Idempotent: one completion per planned session. Guarding on the completion
+    // (not the match row) means a prior run that wrote a match but died before the
+    // completion still gets the completion written here.
+    if (await completedWorkoutExistsForSession(match.id)) continue;
 
     const seg = await computeForActivity(activity.strava_activity_id, match.structure, token);
 
-    await supabaseAdmin.from('completed_workouts').insert({
-      plan_session_id:       match.id,
-      completed_date:        activity.activity_date,
-      actual_distance_km:    activity.distance_km,
-      actual_duration_mins:  activity.duration_mins,
+    await insertCompletedWorkout({
+      plan_session_id:        match.id,
+      completed_date:         activity.activity_date,
+      actual_distance_km:     activity.distance_km,
+      actual_duration_mins:   activity.duration_mins,
       actual_avg_pace_min_km: activity.avg_pace_min_km,
-      actual_avg_hr:         activity.avg_hr ?? null,
-      strava_activity_id:    activity.strava_activity_id,
-      source:                'strava',
-      segment_actuals:       seg?.pace ?? null,
-      segment_hr:            seg?.hr ?? null,
+      actual_avg_hr:          activity.avg_hr ?? null,
+      strava_activity_id:     activity.strava_activity_id,
+      source:                 'strava',
+      segment_actuals:        seg?.pace ?? null,
+      segment_hr:             seg?.hr ?? null,
     });
+
+    if (!(await planSessionHasMatch(match.id))) {
+      await insertSessionMatch({
+        plan_session_id: match.id,
+        activity_id:     activity.id,
+        match_source:    'auto',
+        matched_at:      new Date().toISOString(),
+      });
+    }
 
     matched++;
   }
 
-  // Backfill per-segment actuals + HR for matched runs missing them
-  const { data: missing } = await supabaseAdmin
-    .from('completed_workouts')
-    .select('id, plan_session_id, strava_activity_id, actual_avg_hr')
-    .or('segment_actuals.is.null,segment_hr.is.null')
-    .eq('source', 'strava');
-
-  if (missing?.length) {
+  // Backfill per-segment actuals + HR for matched runs missing them (capped).
+  const missing = await listCompletedMissingSegments(BACKFILL_LIMIT);
+  if (missing.length === BACKFILL_LIMIT) {
+    console.warn(`[strava] backfill hit the ${BACKFILL_LIMIT}-row cap; the rest will process on the next sync`);
+  }
+  if (missing.length) {
     const structById = new Map(planSessions.map(p => [p.id, p.structure]));
-    const { data: acts } = await supabaseAdmin
-      .from('activities')
-      .select('strava_activity_id, avg_hr')
-      .in('strava_activity_id', missing.map(m => m.strava_activity_id).filter(Boolean));
-    const hrById = new Map((acts ?? []).map(a => [a.strava_activity_id, a.avg_hr]));
+    const acts = await getActivityHrByStravaIds(missing.map(m => m.strava_activity_id).filter(Boolean));
+    const hrById = new Map(acts.map(a => [a.strava_activity_id, a.avg_hr]));
 
     for (const cw of missing) {
       if (!cw.plan_session_id || !cw.strava_activity_id) continue;
@@ -278,7 +313,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
         update.actual_avg_hr = hrById.get(cw.strava_activity_id);
       }
       if (Object.keys(update).length) {
-        await supabaseAdmin.from('completed_workouts').update(update).eq('id', cw.id);
+        await updateCompletedWorkout(cw.id, update);
       }
     }
   }
