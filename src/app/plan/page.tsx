@@ -160,6 +160,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   // ?plan=<slug> filters the page to one plan; default view is the active plan.
   const selectedPlan = planParam ? withStatus.find(p => p.slug === planParam) ?? null : null;
   const viewPlan  = selectedPlan ?? activePlan;
+  const strengthFirst = !!(viewPlan as { strength_priority?: boolean } | null)?.strength_priority;
   const viewWeeks = viewPlan ? allWeeks.filter(w => w.plan_id === viewPlan.id) : [];
 
   // Sessions for the viewed plan only — week_number is per-plan, so grouping
@@ -189,8 +190,10 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     }
     wk.sort((a, b) => {
       if (a.scheduled_date !== b.scheduled_date) return a.scheduled_date < b.scheduled_date ? -1 : 1;
-      // Same day: run/race first, strength after.
-      return (a.session_type === 'STRENGTH' ? 1 : 0) - (b.session_type === 'STRENGTH' ? 1 : 0);
+      // Same day: strength first on strength-priority plans, otherwise run/race first.
+      const aS = a.session_type === 'STRENGTH' ? 1 : 0;
+      const bS = b.session_type === 'STRENGTH' ? 1 : 0;
+      return strengthFirst ? bS - aS : aS - bS;
     });
   }
 

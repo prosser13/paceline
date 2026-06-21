@@ -34,7 +34,7 @@ export default function StrengthHero({
   label: string; planSessionId: string; focus: string | null; duration: string | null;
   note: string | null; exercises: StrengthEx[];
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false); // strength detail is less critical than the run — collapsed by default
   const [pending, start] = useTransition();
   const router = useRouter();
 

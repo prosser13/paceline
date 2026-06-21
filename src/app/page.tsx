@@ -189,7 +189,7 @@ export default async function DashboardPage() {
     : null;
 
   // ── Tier 2 — queries that depend on Tier 1 results, fired in parallel ──
-  const [{ data: cw }, weekData, { data: planWeeks }] = await Promise.all([
+  const [{ data: cw }, weekData, { data: planWeeks }, { data: planRow }] = await Promise.all([
     todaySession
       ? supabaseAdmin.from('completed_workouts')
           .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
@@ -207,7 +207,14 @@ export default async function DashboardPage() {
       ? supabaseAdmin.from('plan_weeks').select('phase, date_from, date_to, week_number')
           .eq('plan_id', planId).order('week_number')
       : Promise.resolve({ data: null }),
+    planId
+      ? supabaseAdmin.from('plans').select('strength_priority').eq('id', planId).maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
+
+  // Some plans (e.g. Dragon 50) treat strength as the day's priority — show the
+  // strength hero above the run hero when so.
+  const strengthFirst = !!(planRow as { strength_priority?: boolean } | null)?.strength_priority;
 
   // Is today's session already completed (matched to a Strava activity)?
   let todayCompleted: {
@@ -297,6 +304,37 @@ export default async function DashboardPage() {
     }
   }
 
+  const todayRunBlock = todaySession ? (
+    <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={todayCompleted} />
+  ) : (
+    <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
+      <div className="px-[26px] py-[12px]" style={{ background: '#8c2b2b', color: BONE }}>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Today</span>
+      </div>
+      <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
+    </div>
+  );
+  const todayStrengthBlock = todayStrength ? (
+    <StrengthHero label="Today" planSessionId={todayStrength.id} focus={todayStrength.description ?? null}
+      duration={todayStrength.estimated_duration ?? null} note={todayStrength.rationale ?? null}
+      exercises={(todayStrength.structure as unknown as StrengthEx[] | null) ?? []} />
+  ) : null;
+  const tomorrowRunBlock = tomorrowSession ? (
+    <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={null} />
+  ) : (
+    <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
+      <div className="px-[26px] py-[12px]" style={{ background: '#14617e', color: BONE }}>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Tomorrow</span>
+      </div>
+      <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
+    </div>
+  );
+  const tomorrowStrengthBlock = tomorrowStrength ? (
+    <StrengthHero label="Tomorrow" planSessionId={tomorrowStrength.id} focus={tomorrowStrength.description ?? null}
+      duration={tomorrowStrength.estimated_duration ?? null} note={tomorrowStrength.rationale ?? null}
+      exercises={(tomorrowStrength.structure as unknown as StrengthEx[] | null) ?? []} />
+  ) : null;
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
@@ -342,51 +380,15 @@ export default async function DashboardPage() {
           />
         </div>
 
-        {/* Today hero */}
-        {todaySession ? (
-          <SessionHero label="Today" session={todaySession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={todayCompleted} />
-        ) : (
-          <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-            <div className="px-[26px] py-[12px]" style={{ background: '#8c2b2b', color: BONE }}>
-              <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Today</span>
-            </div>
-            <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
-          </div>
-        )}
-
-        {todayStrength && (
-          <StrengthHero
-            label="Today"
-            planSessionId={todayStrength.id}
-            focus={todayStrength.description ?? null}
-            duration={todayStrength.estimated_duration ?? null}
-            note={todayStrength.rationale ?? null}
-            exercises={(todayStrength.structure as unknown as StrengthEx[] | null) ?? []}
-          />
-        )}
+        {/* Today hero — strength first on strength-priority plans */}
+        {strengthFirst
+          ? (<>{todayStrengthBlock}{todayRunBlock}</>)
+          : (<>{todayRunBlock}{todayStrengthBlock}</>)}
 
         {/* Tomorrow hero */}
-        {tomorrowSession ? (
-          <SessionHero label="Tomorrow" session={tomorrowSession} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} completed={null} />
-        ) : (
-          <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-            <div className="px-[26px] py-[12px]" style={{ background: '#14617e', color: BONE }}>
-              <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em]">Tomorrow</span>
-            </div>
-            <p className="text-stone text-[16px] px-[26px] py-[18px]">No session scheduled — rest day.</p>
-          </div>
-        )}
-
-        {tomorrowStrength && (
-          <StrengthHero
-            label="Tomorrow"
-            planSessionId={tomorrowStrength.id}
-            focus={tomorrowStrength.description ?? null}
-            duration={tomorrowStrength.estimated_duration ?? null}
-            note={tomorrowStrength.rationale ?? null}
-            exercises={(tomorrowStrength.structure as unknown as StrengthEx[] | null) ?? []}
-          />
-        )}
+        {strengthFirst
+          ? (<>{tomorrowStrengthBlock}{tomorrowRunBlock}</>)
+          : (<>{tomorrowRunBlock}{tomorrowStrengthBlock}</>)}
 
         {/* Coming up */}
         {upcomingWithRest.length > 0 && (
@@ -553,6 +555,9 @@ function SessionHero({
   );
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+  // Profile bars from the resolved structure (synthetic when none) so completed
+  // runs colour by pacing performance (green = matched) rather than the intensity.
+  const profileSession = { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) };
   const isDone     = !!completed;
   const accent     = HERO_ACCENT[isDone ? 'fern' : label === 'Today' ? 'oxblood' : 'marine'];
 
@@ -606,7 +611,7 @@ function SessionHero({
               )}
             </div>
             <ProfileChart
-              bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
+              bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
               size="lg"
               color={INTENSITY[intensity]?.hex ?? '#17191e'}
               opacity={segActuals ? 0.9 : 0.6}
@@ -647,7 +652,7 @@ function SessionHero({
           </div>
           <div className="flex items-center gap-4 shrink-0">
             <ProfileChart
-              bars={buildProfileBars(session, thresholdPace, zones, segActuals)}
+              bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
               size="lg"
               color={INTENSITY[intensity]?.hex ?? '#17191e'}
               opacity={segActuals ? 0.9 : 0.6}

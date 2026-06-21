@@ -80,7 +80,14 @@ export default function StrengthRow({
           <div className="flex flex-col gap-[7px]">
             {exercises.map((ex, i) => (
               <div key={i} className="flex items-center justify-between gap-3">
-                <span className="text-[14.5px] text-ink">{ex.name}</span>
+                <span className="flex items-center gap-[8px] min-w-0">
+                  <span className="text-[14.5px] text-ink">{ex.name}</span>
+                  {ex.target && (
+                    <span className="font-mono text-[10px] uppercase tracking-[.06em] text-stone bg-fog/70 rounded-[3px] px-[5px] py-[1px] shrink-0">
+                      {ex.target}
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono text-[13px] text-stone tabular-nums shrink-0">{fmtEx(ex)}</span>
               </div>
             ))}
