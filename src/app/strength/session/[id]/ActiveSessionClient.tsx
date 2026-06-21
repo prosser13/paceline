@@ -69,7 +69,10 @@ export default function ActiveSessionClient({
     await updateSessionExercise(current.id, {
       isDone: true, difficulty: current.difficulty ?? null, completedInSeconds: completedIn,
     });
-    if (items.filter(it => !it.isDone).length <= 1) {
+    // Count what's left AFTER marking the current one done (excluding it by index)
+    // — robust to skipped/reordered items, unlike checking the pre-patch list.
+    const remaining = items.filter((it, i) => i !== currentIdx && !it.isDone).length;
+    if (remaining === 0) {
       await completeSession(sessionId);
       setDone(true);
     }

@@ -50,8 +50,12 @@ export const PLAN_START_DATE = '2026-08-17';
 export const MARATHON_DATE   = '2026-11-08';
 
 export function calcScheduledDate(week: number, day: number): Date {
-  const d = new Date(PLAN_START_DATE);
-  d.setDate(d.getDate() + (week - 1) * 7 + (day - 1));
+  // Work entirely in UTC: PLAN_START_DATE parses as UTC midnight and we advance
+  // with setUTCDate, so the caller's `.toISOString().split('T')[0]` yields the
+  // intended calendar date in every timezone. Mixing a UTC-parsed date with
+  // local setDate (the old bug) shifted the stored date by a day west of UTC.
+  const d = new Date(PLAN_START_DATE + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + (week - 1) * 7 + (day - 1));
   return d;
 }
 
