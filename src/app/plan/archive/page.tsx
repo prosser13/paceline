@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import AppShell from '@/components/AppShell';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { listPlansByEndDate } from '@/data/plans';
 
 interface PlanRow {
   id: number;
@@ -25,9 +25,9 @@ function fmtRange(start: string | null, end: string | null): string {
 export default async function PlanArchivePage() {
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const { data: plans } = await supabaseAdmin.from('plans').select('*').order('end_date', { ascending: false });
+  const plans = await listPlansByEndDate();
 
-  const archived = ((plans ?? []) as PlanRow[])
+  const archived = (plans as PlanRow[])
     .filter(p => p.end_date && p.end_date < todayStr);
 
   return (

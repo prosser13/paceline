@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import AppShell from '@/components/AppShell';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
+import { listRacePlans } from '@/data/plans';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
@@ -10,16 +11,16 @@ import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import type { ZoneInput, HrZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [strava, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, { data: racePlans }] = await Promise.all([
+  const [strava, { data: config }, { data: paceZones }, { data: hrConfig }, { data: hrZones }, racePlans] = await Promise.all([
     getStravaConnectionSummary(),
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_config').select('*').eq('id', 1).maybeSingle(),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
-    supabaseAdmin.from('plans').select('id, name, distance_km, target_time').eq('kind', 'race').order('sort_order'),
+    listRacePlans(),
   ]);
 
-  const targetTimePlans: TargetTimeRow[] = (racePlans ?? []).map(p => ({
+  const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
     id: p.id,
     name: p.name,
     distance_km: Number(p.distance_km) || 0,
