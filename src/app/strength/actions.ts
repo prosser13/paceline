@@ -54,6 +54,37 @@ export async function saveSession(
   return { ok: true, shortId: sess.short_id };
 }
 
+// Step 3 (load only): copy a planned STRENGTH plan_session's prescription into a
+// live strength session and return its short_id to navigate to.
+export async function startPlannedSession(
+  planSessionId: string,
+): Promise<{ ok: true; shortId: string } | { ok: false; error: string }> {
+  const { data: ps } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('estimated_duration, structure, rationale')
+    .eq('id', planSessionId)
+    .single();
+  if (!ps) return { ok: false, error: 'Planned session not found' };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const presc = (ps.structure as any[] | null) ?? [];
+  const exercises: SaveSessionExercise[] = presc.map(e => ({
+    exerciseId: Number(e.exercise_id),
+    exerciseName: String(e.name),
+    repsType: e.reps_type ?? 'reps',
+    sets: Number(e.sets) || 3,
+    repsValue: e.reps != null ? Number(e.reps) : null,
+    weightKg: e.weight != null ? Number(e.weight) : null,
+  }));
+
+  const parts = String(ps.estimated_duration ?? '0:40').split(':').map(Number);
+  const mins = (parts[0] || 0) * 60 + (parts[1] || 0);
+  const duration = mins <= 25 ? 'short' : mins <= 45 ? 'medium' : 'long';
+  const intent = /heavy|peak/i.test(ps.rationale ?? '') ? 'strength' : 'maintain';
+
+  return saveSession(intent, duration, [], exercises);
+}
+
 export interface SessionExercisePatch {
   sets?: number;
   repsValue?: number | null;

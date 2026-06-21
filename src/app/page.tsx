@@ -357,6 +357,7 @@ export default async function DashboardPage() {
         {todayStrength && (
           <StrengthHero
             label="Today"
+            planSessionId={todayStrength.id}
             focus={todayStrength.description ?? null}
             duration={todayStrength.estimated_duration ?? null}
             note={todayStrength.rationale ?? null}
@@ -379,6 +380,7 @@ export default async function DashboardPage() {
         {tomorrowStrength && (
           <StrengthHero
             label="Tomorrow"
+            planSessionId={tomorrowStrength.id}
             focus={tomorrowStrength.description ?? null}
             duration={tomorrowStrength.estimated_duration ?? null}
             note={tomorrowStrength.rationale ?? null}
@@ -505,6 +507,18 @@ function VsStat({ label, value, delta, deltaClass, align = 'right' }: {
 
 const BONE = '#f4efe4';
 
+function RunGlyph() {
+  return (
+    <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+         strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-ink" aria-hidden="true">
+      <circle cx="13" cy="4" r="1" />
+      <path d="M4 17l5 1l.75 -1.5" />
+      <path d="M15 21l0 -4l-4 -3l1 -6" />
+      <path d="M7 12l0 -3l5 -1l3 3l3 1" />
+    </svg>
+  );
+}
+
 const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
   oxblood: { rail: 'border-l-oxblood', solid: '#8c2b2b' },
   marine:  { rail: 'border-l-marine',  solid: '#14617e' },
@@ -584,8 +598,8 @@ function SessionHero({
           {/* Title + profile, then a full-width stat strip (no wasted middle) */}
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
-                {session.name}
+              <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+                <RunGlyph />{session.name}
               </h3>
               {session.description && (
                 <div className="text-[15px] text-stone">{session.description}</div>
@@ -624,8 +638,8 @@ function SessionHero({
       ) : (
         <div className="flex justify-between items-start gap-6">
           <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight">
-              {session.name}
+            <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+              <RunGlyph />{session.name}
             </h3>
             {session.description && (
               <div className="text-[15px] text-stone">{session.description}</div>
