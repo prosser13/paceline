@@ -109,7 +109,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   }
 
   // Build map of plan_session_id → actual display values for done sessions
-  const completedMap: Record<string, { durationStr: string; distanceKm: number | null; tss: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
+  const completedMap: Record<string, { durationStr: string; durationMins: number | null; distanceKm: number | null; tss: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
   for (const cw of completed ?? []) {
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
@@ -126,6 +126,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     }
     completedMap[cw.plan_session_id] = {
       durationStr: durationStr ?? '',
+      durationMins: mins,
       distanceKm: cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null,
       tss,
       avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,

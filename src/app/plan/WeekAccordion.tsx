@@ -44,6 +44,7 @@ interface PlanSession {
 
 interface CompletedData {
   durationStr: string;
+  durationMins?: number | null;
   distanceKm?: number | null;
   tss: number | null;
   avgHr?: number | null;
@@ -309,7 +310,12 @@ export default function WeekAccordion({
               ? wholeRunActuals(
                   !!session.structure?.length,
                   {
-                    totalSeconds: (() => { const mins = parseDurationMins(completed.durationStr); return mins != null ? mins * 60 : null; })(),
+                    // Use the precise actual duration (not the rounded display string) so the
+                    // pacing colour matches the dashboard hero.
+                    totalSeconds: (() => {
+                      const mins = completed.durationMins ?? parseDurationMins(completed.durationStr);
+                      return mins != null ? mins * 60 : null;
+                    })(),
                     distanceKm: completed.distanceKm ?? null,
                     avgHr: completed.avgHr ?? null,
                   },
