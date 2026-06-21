@@ -3,10 +3,9 @@ import { PhaseTimeline, FormMeter } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './_dashboard/data';
 import AgendaA from './_dashboard/AgendaA';
 import DashboardExtras from './_dashboard/DashboardExtras';
+import { OXBLOOD, BONE } from '@/lib/colors';
 
 export const dynamic = 'force-dynamic';
-
-const BONE = '#f4efe4';
 
 export default async function DashboardPage() {
   const d = await loadDashboardData();
@@ -38,7 +37,7 @@ export default async function DashboardPage() {
             />
           ) : (
             <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
-              <div className="px-[18px] py-[10px]" style={{ background: '#8c2b2b', color: BONE }}>
+              <div className="px-[18px] py-[10px]" style={{ background: OXBLOOD, color: BONE }}>
                 <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">Plan</span>
               </div>
               <div className="flex flex-col gap-2 px-[18px] py-[15px] flex-1">

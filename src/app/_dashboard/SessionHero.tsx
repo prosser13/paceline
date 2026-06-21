@@ -9,27 +9,29 @@ import {
   INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, humanHMM, wholeRunActuals,
 } from '@/components/session-ui';
 import CollapsibleSession from '../CollapsibleSession';
+import { RunGlyph } from '@/components/glyphs';
+import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
 import type { PlanSession, CompletedToday } from './data';
 
-export const BONE = '#f4efe4';
+const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
+  oxblood: { rail: 'border-l-oxblood', solid: OXBLOOD },
+  marine:  { rail: 'border-l-marine',  solid: MARINE },
+  fern:    { rail: 'border-l-fern',    solid: FERN },
+};
 
-export function RunGlyph() {
+// Run name + descriptor — identical across the done / not-done layouts.
+function HeroTitle({ session }: { session: PlanSession }) {
   return (
-    <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-         strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-ink" aria-hidden="true">
-      <circle cx="13" cy="4" r="1" />
-      <path d="M4 17l5 1l.75 -1.5" />
-      <path d="M15 21l0 -4l-4 -3l1 -6" />
-      <path d="M7 12l0 -3l5 -1l3 3l3 1" />
-    </svg>
+    <div className="min-w-0">
+      <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+        <RunGlyph size={24} className="shrink-0 text-ink" />{session.name}
+      </h3>
+      {session.description && (
+        <div className="text-[15px] text-stone">{session.description}</div>
+      )}
+    </div>
   );
 }
-
-const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
-  oxblood: { rail: 'border-l-oxblood', solid: '#8c2b2b' },
-  marine:  { rail: 'border-l-marine',  solid: '#14617e' },
-  fern:    { rail: 'border-l-fern',    solid: '#4f7a52' },
-};
 
 function devClass(pct: number | null): string {
   if (pct == null) return 'text-stone';
@@ -96,8 +98,8 @@ export default function SessionHero({
   const isDone     = !!completed;
   const accent     = HERO_ACCENT[accentKey ?? (isDone ? 'fern' : label === 'Today' ? 'oxblood' : 'marine')];
 
-  const displayDuration = isDone && completed!.durationStr ? completed!.durationStr : plannedDur;
-  const displayTss      = isDone && completed!.tss != null ? completed!.tss : session.estimated_tss ?? null;
+  const displayDuration = completed?.durationStr ? completed.durationStr : plannedDur;
+  const displayTss      = completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
 
   const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;
   const distActual  = completed?.distanceKm ?? null;
@@ -134,14 +136,7 @@ export default function SessionHero({
       {isDone ? (
         <>
           <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0">
-              <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-                <RunGlyph />{session.name}
-              </h3>
-              {session.description && (
-                <div className="text-[15px] text-stone">{session.description}</div>
-              )}
-            </div>
+            <HeroTitle session={session} />
             <ProfileChart
               bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
               size="lg"
@@ -168,14 +163,7 @@ export default function SessionHero({
         </>
       ) : (
         <div className="flex justify-between items-start gap-6">
-          <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-              <RunGlyph />{session.name}
-            </h3>
-            {session.description && (
-              <div className="text-[15px] text-stone">{session.description}</div>
-            )}
-          </div>
+          <HeroTitle session={session} />
           <div className="flex items-center gap-4 shrink-0">
             <ProfileChart
               bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}

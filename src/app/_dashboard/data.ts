@@ -86,12 +86,12 @@ export interface DashboardData {
   last7: { totalKm: number; sessions: number; h: number; m: number; totalTss: number };
 }
 
-function addDays(date: Date, n: number) {
+function addDays(date: Date, n: number): Date {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
   return d;
 }
-function isoDate(d: Date) {
+function isoDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 function eachDate(from: string, to: string): string[] {
@@ -101,17 +101,26 @@ function eachDate(from: string, to: string): string[] {
   while (d <= end) { out.push(isoDate(d)); d.setDate(d.getDate() + 1); }
   return out;
 }
-function greet() {
+function greet(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
 }
-function fmtShort(iso: string) {
+function fmtShort(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short' });
 }
-function fmtDate(iso: string) {
+function fmtDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+// Long-weekday + date label for the agenda spine (e.g. "Thursday" / "26 Jun").
+export function formatSpineDay(iso: string): { weekday: string; date: string } {
+  const dt = new Date(iso + 'T00:00:00');
+  return {
+    weekday: dt.toLocaleDateString('en-GB', { weekday: 'long' }),
+    date:    dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+  };
 }
 
 export async function loadDashboardData(): Promise<DashboardData> {
@@ -166,8 +175,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
   for (const list of byDate.values()) {
     list.sort((a, b) => (a.session_type === 'STRENGTH' ? 1 : 0) - (b.session_type === 'STRENGTH' ? 1 : 0));
   }
-  const pickRun      = (list?: PlanSession[]) => list?.find(s => s.session_type !== 'STRENGTH') ?? null;
-  const pickStrength = (list?: PlanSession[]) => list?.find(s => s.session_type === 'STRENGTH') ?? null;
+  function pickRun(list?: PlanSession[]): PlanSession | null {
+    return list?.find(s => s.session_type !== 'STRENGTH') ?? null;
+  }
+  function pickStrength(list?: PlanSession[]): PlanSession | null {
+    return list?.find(s => s.session_type === 'STRENGTH') ?? null;
+  }
 
   const todaySession     = pickRun(byDate.get(todayStr));
   const tomorrowSession  = pickRun(byDate.get(tomorrowStr));
