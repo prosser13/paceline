@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   type Exercise, type SessionExercise, type SessionIntent, type Duration, type MuscleGroup,
@@ -199,9 +199,16 @@ function ExercisePicker({
 }) {
   const [q, setQ] = useState('');
   const list = exercises.filter(ex => ex.name.toLowerCase().includes(q.toLowerCase()));
+  // Close on Escape (dialog convention).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 bg-ink/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-bone border border-fog rounded-[14px] w-full max-w-[460px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Add exercise"
+        className="bg-bone border border-fog rounded-[14px] w-full max-w-[460px] max-h-[80vh] flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="p-[14px] border-b border-fog">
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search exercises…" autoFocus
             className="w-full bg-paper border border-fog rounded-[8px] px-3 py-2 text-[14px] text-ink focus:outline-none focus:border-stone" />

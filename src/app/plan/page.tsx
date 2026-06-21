@@ -228,11 +228,12 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   // Past weeks collapse into a single greyed accordion; current + future stay open
   const pastWeeks   = viewWeeks.filter(w => w.date_to < todayStr);
   const futureWeeks = viewWeeks.filter(w => w.date_to >= todayStr);
-  const pastLabel = pastWeeks.length === 1
-    ? `Week ${pastWeeks[0].week_number} · done`
-    : pastWeeks.length > 1
-      ? `Weeks ${pastWeeks[0].week_number}–${pastWeeks[pastWeeks.length - 1].week_number} · done`
-      : '';
+  let pastLabel = '';
+  if (pastWeeks.length === 1) {
+    pastLabel = `Week ${pastWeeks[0].week_number} · done`;
+  } else if (pastWeeks.length > 1) {
+    pastLabel = `Weeks ${pastWeeks[0].week_number}–${pastWeeks[pastWeeks.length - 1].week_number} · done`;
+  }
 
   const renderWeek = (week: PlanWeek) => (
     <WeekAccordion
