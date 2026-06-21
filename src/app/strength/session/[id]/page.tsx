@@ -1,23 +1,21 @@
 export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { notFound } from 'next/navigation';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getStrengthSessionByShortId, listSessionExercises } from '@/data/strength-sessions';
 import ActiveSessionClient, { type ActiveItem } from './ActiveSessionClient';
 
 export default async function ActiveSessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const { data: sess } = await supabaseAdmin
-    .from('strength_sessions').select('*').eq('short_id', id).maybeSingle();
+  const sess = await getStrengthSessionByShortId(id);
   if (!sess) notFound();
 
-  const { data: rows } = await supabaseAdmin
-    .from('strength_session_exercises').select('*').eq('session_id', sess.id).order('position');
+  const rows = await listSessionExercises(sess.id);
 
   const lib = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
-  const items: ActiveItem[] = (rows ?? []).map(r => {
+  const items: ActiveItem[] = rows.map(r => {
     const ex = lib.get(r.exercise_id);
     return {
       id: r.id,

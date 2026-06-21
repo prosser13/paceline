@@ -43,6 +43,17 @@ export async function listAllSessions() {
   return data ?? [];
 }
 
+// Prescription fields for one planned session (copied into a live strength
+// session), or null.
+export async function getPlanSessionPrescription(id: string) {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('estimated_duration, structure, rationale')
+    .eq('id', id)
+    .single();
+  return data;
+}
+
 // Sessions in a plan whose target_pace matches `pace` (goal-pace cascade).
 export async function listSessionsByTargetPace(planId: number, pace: string) {
   const { data } = await supabaseAdmin

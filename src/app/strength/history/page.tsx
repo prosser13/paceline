@@ -1,16 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import Link from 'next/link';
 import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
+import { listStrengthHistory } from '@/data/strength-sessions';
 
 export default async function StrengthHistoryPage() {
-  const { data: sessions } = await supabaseAdmin
-    .from('strength_sessions')
-    .select('id, short_id, intent, duration, groups, confirmed_at, completed_at, strength_session_exercises(count)')
-    .order('confirmed_at', { ascending: false })
-    .limit(60);
+  const sessions = await listStrengthHistory();
 
   const rows = (sessions ?? []) as Array<{
     short_id: string; intent: string; duration: string; groups: string[];
