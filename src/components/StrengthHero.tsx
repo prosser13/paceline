@@ -2,18 +2,11 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { StrengthEx } from './StrengthRow';
+import { type StrengthEx, STRENGTH_COLS, MuscleChip, repsStr, loadStr } from './StrengthRow';
 import { startPlannedSession } from '@/app/strength/actions';
 
 const GOLD = '#8f6512';
 const BONE = '#f4efe4';
-
-function fmtEx(ex: StrengthEx): string {
-  const r = ex.reps_type === 'secs' ? `${ex.reps}s` : `${ex.reps}`;
-  let s = `${ex.sets} × ${r}`;
-  if (ex.weight != null && Number(ex.weight) > 0) s += ` @ ${ex.weight}kg`;
-  return s;
-}
 
 function Dumbbell() {
   return (
@@ -77,21 +70,20 @@ export default function StrengthHero({
 
           {open && (
             <div className="mt-[9px] border border-fog rounded-[12px] bg-bone px-[16px] py-[10px]">
-              <div className="flex items-center justify-between pb-[6px] mb-[2px] border-b border-fog/50">
-                <span className="font-mono text-[11.5px] tracking-[.1em] uppercase text-stone">Exercise</span>
-                <span className="font-mono text-[11.5px] tracking-[.1em] uppercase text-stone">Sets × reps</span>
+              <div className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50" style={{ gridTemplateColumns: STRENGTH_COLS }}>
+                {['Exercise', 'Sets', 'Reps', 'Load'].map((h, i) => (
+                  <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>{h}</span>
+                ))}
               </div>
               {exercises.map((ex, i) => (
-                <div key={i} className="flex items-center justify-between gap-3 py-[6px]">
-                  <span className="flex items-center gap-[8px] min-w-0">
-                    <span className="text-[14.5px] text-ink">{ex.name}</span>
-                    {ex.target && (
-                      <span className="font-mono text-[10px] uppercase tracking-[.06em] text-stone bg-fog/70 rounded-[3px] px-[5px] py-[1px] shrink-0">
-                        {ex.target}
-                      </span>
-                    )}
+                <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
+                  <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
+                    <span className="truncate">{ex.name}</span>
+                    {ex.target && <MuscleChip label={ex.target} />}
                   </span>
-                  <span className="font-mono text-[13.5px] text-ink tabular-nums shrink-0">{fmtEx(ex)}</span>
+                  <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
+                  <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
+                  <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
                 </div>
               ))}
             </div>

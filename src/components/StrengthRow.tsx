@@ -11,11 +11,22 @@ export interface StrengthEx {
   target?: string | null;
 }
 
-function fmtEx(ex: StrengthEx): string {
-  const r = ex.reps_type === 'secs' ? `${ex.reps}s` : `${ex.reps}`;
-  let s = `${ex.sets} × ${r}`;
-  if (ex.weight != null && Number(ex.weight) > 0) s += ` @ ${ex.weight}kg`;
-  return s;
+// Column grid for the exercise table — mirrors the run segment table (WorkoutDetail).
+export const STRENGTH_COLS = '1fr 46px 66px 78px';
+
+export const repsStr = (ex: StrengthEx) => (ex.reps_type === 'secs' ? `${ex.reps}s` : `${ex.reps}`);
+export const loadStr = (ex: StrengthEx) => (ex.weight != null && Number(ex.weight) > 0 ? `${ex.weight} kg` : '—');
+
+// Neutral tinted pill, matching the run's zone-chip styling.
+export function MuscleChip({ label }: { label: string }) {
+  return (
+    <span
+      className="font-mono text-[11px] px-[5px] py-[1px] rounded-[4px] whitespace-nowrap shrink-0"
+      style={{ background: '#8a857a22', color: '#8a857a' }}
+    >
+      {label}
+    </span>
+  );
 }
 
 function Dumbbell() {
@@ -74,24 +85,31 @@ export default function StrengthRow({
 
       {open && hasDetail && (
         <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
-          {note && (
-            <p className="text-[13.5px] text-stone leading-snug border-l-[3px] border-l-stone/40 pl-[10px] mb-[10px]">{note}</p>
-          )}
-          <div className="flex flex-col gap-[7px]">
-            {exercises.map((ex, i) => (
-              <div key={i} className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-[8px] min-w-0">
-                  <span className="text-[14.5px] text-ink">{ex.name}</span>
-                  {ex.target && (
-                    <span className="font-mono text-[10px] uppercase tracking-[.06em] text-stone bg-fog/70 rounded-[3px] px-[5px] py-[1px] shrink-0">
-                      {ex.target}
-                    </span>
-                  )}
-                </span>
-                <span className="font-mono text-[13px] text-stone tabular-nums shrink-0">{fmtEx(ex)}</span>
-              </div>
+          {/* Column header — mirrors the run segment table */}
+          <div
+            className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
+            style={{ gridTemplateColumns: STRENGTH_COLS }}
+          >
+            {['Exercise', 'Sets', 'Reps', 'Load'].map((h, i) => (
+              <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
+                {h}
+              </span>
             ))}
           </div>
+
+          {exercises.map((ex, i) => (
+            <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
+              <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
+                <span className="truncate">{ex.name}</span>
+                {ex.target && <MuscleChip label={ex.target} />}
+              </span>
+              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
+              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
+              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
+            </div>
+          ))}
+
+          {note && <div className="text-[13.5px] text-stone leading-snug mt-[8px]">{note}</div>}
         </div>
       )}
     </div>
