@@ -1,6 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireUser } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -11,6 +12,7 @@ export interface ZoneInput {
 }
 
 export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
+  await requireUser();
   // Threshold is denormalised across every app_config row — keep them in sync
   await supabaseAdmin
     .from('app_config')
@@ -52,6 +54,7 @@ const toInt = (s: string): number | null => (s.trim() ? Number(s) : null);
 export async function saveHrZones(
   threshold: string, max: string, resting: string, zones: HrZoneInput[],
 ) {
+  await requireUser();
   await supabaseAdmin.from('hr_config').upsert({
     id:           1,
     threshold_hr: toInt(threshold),
@@ -140,6 +143,7 @@ async function cascadeGoalPace(planId: number, oldPace: string, newPace: string)
 }
 
 export async function saveTargetTime(planId: number, targetTime: string) {
+  await requireUser();
   const { data: plan } = await supabaseAdmin
     .from('plans')
     .select('id, distance_km, target_pace')

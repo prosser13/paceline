@@ -1,6 +1,7 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { requireUser } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 
 export interface SaveSessionExercise {
@@ -22,6 +23,7 @@ export async function saveSession(
   groups: string[],
   exercises: SaveSessionExercise[],
 ): Promise<{ ok: true; shortId: string } | { ok: false; error: string }> {
+  await requireUser();
   let short = genShortId();
   // Insert the session, retrying once on the (very unlikely) short_id collision.
   let sess = null;
@@ -59,6 +61,7 @@ export async function saveSession(
 export async function startPlannedSession(
   planSessionId: string,
 ): Promise<{ ok: true; shortId: string } | { ok: false; error: string }> {
+  await requireUser();
   const { data: ps } = await supabaseAdmin
     .from('plan_sessions')
     .select('estimated_duration, structure, rationale')
@@ -95,6 +98,7 @@ export interface SessionExercisePatch {
 }
 
 export async function updateSessionExercise(id: string, patch: SessionExercisePatch) {
+  await requireUser();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const update: Record<string, any> = {};
   if (patch.sets != null) update.sets = patch.sets;
@@ -108,6 +112,7 @@ export async function updateSessionExercise(id: string, patch: SessionExercisePa
 }
 
 export async function completeSession(sessionId: string) {
+  await requireUser();
   await supabaseAdmin
     .from('strength_sessions')
     .update({ completed_at: new Date().toISOString() })
@@ -117,6 +122,7 @@ export async function completeSession(sessionId: string) {
 }
 
 export async function deleteSession(sessionId: string) {
+  await requireUser();
   await supabaseAdmin.from('strength_sessions').delete().eq('id', sessionId);
   revalidatePath('/strength/history');
   return { ok: true as const };
