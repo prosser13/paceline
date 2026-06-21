@@ -5,30 +5,9 @@
 // to that day's node.
 
 import type { WindowDay } from './data';
+import { RunGlyph, Dumbbell } from '@/components/glyphs';
+import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER } from '@/lib/colors';
 
-const OXBLOOD = '#8c2b2b';
-const MARINE = '#14617e';
-const FERN = '#4f7a52';
-const GOLD = '#8f6512';
-const FOG = '#d9d3c6';
-const AMBER = '#dfa01c';
-
-function RunMini({ color }: { color: string }) {
-  return (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2}
-         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="13" cy="4" r="1" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" />
-    </svg>
-  );
-}
-function LiftMini({ color }: { color: string }) {
-  return (
-    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2}
-         strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11" />
-    </svg>
-  );
-}
 function BedMini({ color }: { color: string }) {
   return (
     <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2.2}
@@ -73,8 +52,16 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
                   <BedMini color="#a39c8c" />
                 ) : (
                   <>
-                    {day.hasRun && <RunMini color={day.isToday ? OXBLOOD : MARINE} />}
-                    {day.hasStrength && <LiftMini color={GOLD} />}
+                    {day.hasRun && (
+                      <span className="inline-flex" style={{ color: day.isToday ? OXBLOOD : MARINE }}>
+                        <RunGlyph size={13} strokeWidth={2.2} className="" />
+                      </span>
+                    )}
+                    {day.hasStrength && (
+                      <span className="inline-flex" style={{ color: GOLD }}>
+                        <Dumbbell size={13} strokeWidth={2.2} className="" />
+                      </span>
+                    )}
                   </>
                 )}
               </div>

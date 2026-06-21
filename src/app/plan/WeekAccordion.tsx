@@ -9,6 +9,7 @@ import {
   INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
+import { RunGlyph } from '@/components/glyphs';
 import type { SessionStatus } from '@/components/StatusMark';
 
 // ── Plan data types ──────────────────────────────────────────
@@ -95,18 +96,6 @@ const RACE_COLOR: Record<string, string> = {
   B: '#b5790f',
   C: '#14617e',
 };
-
-function RunGlyph() {
-  return (
-    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-         strokeLinecap="round" strokeLinejoin="round" className="text-stone shrink-0" aria-hidden="true">
-      <circle cx="13" cy="4" r="1" />
-      <path d="M4 17l5 1l.75 -1.5" />
-      <path d="M15 21l0 -4l-4 -3l1 -6" />
-      <path d="M7 12l0 -3l5 -1l3 3l3 1" />
-    </svg>
-  );
-}
 
 function RaceBadge({ priority }: { priority: string }) {
   return (
@@ -388,7 +377,7 @@ export default function WeekAccordion({
                         </span>
                       )}
                       {isDone && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-                      <RunGlyph />
+                      <RunGlyph size={15} className="text-stone shrink-0" />
                       <span className="text-[16.5px] font-semibold text-ink">
                         {session.name}
                       </span>

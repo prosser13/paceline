@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { humanHMM } from './session-ui';
+import { Dumbbell } from './glyphs';
 
 export interface StrengthEx {
   name: string;
@@ -30,12 +31,34 @@ export function MuscleChip({ label }: { label: string }) {
   );
 }
 
-function Dumbbell() {
+// The exercise table body (header + one row per exercise) shared by the strength
+// row, the dashboard StrengthHero, and the dashboard compact row. Each caller
+// supplies its own wrapper (padding/border differs); this owns the grid only.
+export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) {
   return (
-    <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="text-stone shrink-0" aria-hidden="true">
-      <path d="M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11" />
-    </svg>
+    <>
+      <div
+        className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
+        style={{ gridTemplateColumns: STRENGTH_COLS }}
+      >
+        {['Exercise', 'Sets', 'Reps', 'Load'].map((h, i) => (
+          <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
+            {h}
+          </span>
+        ))}
+      </div>
+      {exercises.map((ex, i) => (
+        <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
+          <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
+            <span className="truncate">{ex.name}</span>
+            {ex.target && <MuscleChip label={ex.target} />}
+          </span>
+          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
+          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
+          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
+        </div>
+      ))}
+    </>
   );
 }
 
@@ -68,7 +91,7 @@ export default function StrengthRow({
               </span>
             )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-            <Dumbbell />
+            <Dumbbell size={15} className="text-stone shrink-0" />
             <span className="text-[16.5px] font-semibold text-ink">Strength</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
@@ -86,29 +109,7 @@ export default function StrengthRow({
 
       {open && hasDetail && (
         <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
-          {/* Column header — mirrors the run segment table */}
-          <div
-            className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
-            style={{ gridTemplateColumns: STRENGTH_COLS }}
-          >
-            {['Exercise', 'Sets', 'Reps', 'Load'].map((h, i) => (
-              <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
-                {h}
-              </span>
-            ))}
-          </div>
-
-          {exercises.map((ex, i) => (
-            <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
-              <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-                <span className="truncate">{ex.name}</span>
-                {ex.target && <MuscleChip label={ex.target} />}
-              </span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
-            </div>
-          ))}
+          <StrengthDetailTable exercises={exercises} />
 
           {note && <div className="text-[13.5px] text-stone leading-snug mt-[8px]">{note}</div>}
         </div>

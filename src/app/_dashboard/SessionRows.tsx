@@ -12,30 +12,10 @@ import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM, humanHMM,
 } from '@/components/session-ui';
-import {
-  type StrengthEx, STRENGTH_COLS, MuscleChip, repsStr, loadStr,
-} from '@/components/StrengthRow';
+import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
+import { RunGlyph, Dumbbell } from '@/components/glyphs';
+import { GOLD } from '@/lib/colors';
 import type { PlanSession } from './data';
-
-function RunGlyph() {
-  return (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-         strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden="true">
-      <circle cx="13" cy="4" r="1" />
-      <path d="M4 17l5 1l.75 -1.5" />
-      <path d="M15 21l0 -4l-4 -3l1 -6" />
-      <path d="M7 12l0 -3l5 -1l3 3l3 1" />
-    </svg>
-  );
-}
-function Dumbbell() {
-  return (
-    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
-         strokeLinecap="round" strokeLinejoin="round" className="shrink-0" aria-hidden="true">
-      <path d="M6.5 6.5v11M3.5 9v6M17.5 6.5v11M20.5 9v6M6.5 12h11" />
-    </svg>
-  );
-}
 
 function RunRow({ session, thresholdPace, zones, hrZones }: {
   session: PlanSession; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap;
@@ -85,7 +65,6 @@ function StrengthRowCompact({ session }: { session: PlanSession }) {
   const [open, setOpen] = useState(false);
   const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
   const hasDetail = exercises.length > 0;
-  const GOLD = '#8f6512';
 
   return (
     <div>
@@ -115,22 +94,7 @@ function StrengthRowCompact({ session }: { session: PlanSession }) {
 
       {open && hasDetail && (
         <div className="border-t border-fog/60 bg-bone/40 pl-[44px] pr-[18px] py-[12px]">
-          <div className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50" style={{ gridTemplateColumns: STRENGTH_COLS }}>
-            {['Exercise', 'Sets', 'Reps', 'Load'].map((hd, i) => (
-              <span key={hd} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>{hd}</span>
-            ))}
-          </div>
-          {exercises.map((ex, i) => (
-            <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
-              <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-                <span className="truncate">{ex.name}</span>
-                {ex.target && <MuscleChip label={ex.target} />}
-              </span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
-              <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
-            </div>
-          ))}
+          <StrengthDetailTable exercises={exercises} />
         </div>
       )}
     </div>

@@ -1,16 +1,13 @@
 // Option A — the week strip + agenda-spine body of the dashboard
 // (src/app/page.tsx). Server component.
 
-import { type DashboardData, type PlanSession } from './data';
+import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import SessionHero from './SessionHero';
 import SessionRows from './SessionRows';
 import StrengthHero from '@/components/StrengthHero';
 import { type StrengthEx } from '@/components/StrengthRow';
 import WeekStrip from './WeekStrip';
-
-const FERN = '#4f7a52';
-const OXBLOOD = '#8c2b2b';
-const MARINE = '#14617e';
+import { OXBLOOD, MARINE, FERN } from '@/lib/colors';
 
 function Node({ anchorId, dot, ring, label, labelColor, children }: {
   anchorId: string; dot?: string; ring?: string; label: string; labelColor: string; children: React.ReactNode;
@@ -33,14 +30,6 @@ export default function AgendaA({ d }: { d: DashboardData }) {
     if (last && last.iso === s.scheduled_date) last.sessions.push(s);
     else groups.push({ iso: s.scheduled_date, sessions: [s] });
   }
-  const fmt = (iso: string) => {
-    const dt = new Date(iso + 'T00:00:00');
-    return {
-      short: dt.toLocaleDateString('en-GB', { weekday: 'long' }),
-      date:  dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
-    };
-  };
-
   const todayDone = !!d.todayCompleted;
   const strengthBlock = (s: PlanSession | null, label: string) => s ? (
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
@@ -67,7 +56,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         </Node>
 
         <Node anchorId={`spine-${d.windowDays[1].iso}`} ring={MARINE}
-          label={`Tomorrow · ${fmt(d.windowDays[1].iso).date}`} labelColor={MARINE}>
+          label={`Tomorrow · ${formatSpineDay(d.windowDays[1].iso).date}`} labelColor={MARINE}>
           <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
             <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
               zones={d.zones} hrZones={d.hrZones} restLabel="Rest day — recover" />
@@ -75,12 +64,12 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         </Node>
 
         {groups.map(g => {
-          const f = fmt(g.iso);
+          const f = formatSpineDay(g.iso);
           const isRest = g.sessions.every(s => s.status === 'rest');
           const count = g.sessions.filter(s => s.status !== 'rest').length;
           return (
             <Node key={g.iso} anchorId={`spine-${g.iso}`} ring="#cfc8b8"
-              label={`${f.short} · ${f.date}${count > 1 ? ` · ${count} sessions` : ''}`}
+              label={`${f.weekday} · ${f.date}${count > 1 ? ` · ${count} sessions` : ''}`}
               labelColor="#5f5a50">
               {isRest ? (
                 <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
