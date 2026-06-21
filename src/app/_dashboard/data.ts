@@ -4,6 +4,9 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
 import { getWellnessCached } from '@/lib/intervals';
+import {
+  getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
+} from '@/data/plans';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
@@ -141,8 +144,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     { data: appConfig },
     { data: paceZones },
     { data: hrZoneRows },
-    { data: weekRow },
-    { data: raceRow },
+    weekRow,
+    raceRow,
     wellness,
   ] = await Promise.all([
     supabase.auth.getUser(),
@@ -155,10 +158,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
     supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
     supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
-    supabaseAdmin.from('plan_weeks').select('*').lte('date_from', todayStr).gte('date_to', todayStr).maybeSingle(),
-    supabaseAdmin.from('plans').select('name, race_date')
-      .eq('kind', 'race').gte('race_date', todayStr)
-      .order('race_date', { ascending: true }).limit(1).maybeSingle(),
+    getCurrentWeek(todayStr),
+    getNextRace(todayStr),
     getWellnessCached(),
   ]);
 
@@ -260,7 +261,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [{ data: cw }, weekData, { data: planWeeks }, { data: planRow }] = await Promise.all([
+  const [{ data: cw }, weekData, planWeeks, strengthFirst] = await Promise.all([
     todaySession
       ? supabaseAdmin.from('completed_workouts')
           .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
@@ -274,16 +275,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
             .gte('completed_date', weekRow.date_from).lte('completed_date', weekRow.date_to),
         ])
       : Promise.resolve(null),
-    planId
-      ? supabaseAdmin.from('plan_weeks').select('phase, date_from, date_to, week_number')
-          .eq('plan_id', planId).order('week_number')
-      : Promise.resolve({ data: null }),
-    planId
-      ? supabaseAdmin.from('plans').select('strength_priority').eq('id', planId).maybeSingle()
-      : Promise.resolve({ data: null }),
+    planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
+    planId ? getPlanStrengthPriority(planId) : Promise.resolve(false),
   ]);
-
-  const strengthFirst = !!(planRow as { strength_priority?: boolean } | null)?.strength_priority;
 
   let todayCompleted: CompletedToday | null = null;
   if (cw) {
