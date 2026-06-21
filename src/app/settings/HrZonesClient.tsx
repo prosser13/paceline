@@ -13,12 +13,17 @@ interface Props {
 const INPUT =
   'bg-bone border border-fog rounded-[6px] px-2 py-[5px] font-mono text-[13px] text-ink focus:outline-none focus:border-stone transition-colors';
 
+// Stable row identity so add/remove doesn't reuse inputs by index.
+type HrZoneRow = HrZoneInput & { _key: number };
+let nextKey = 0;
+const withKey = (z: HrZoneInput): HrZoneRow => ({ ...z, _key: nextKey++ });
+
 export default function HrZonesClient({ initialThreshold, initialMax, initialResting, initialZones }: Props) {
   const [threshold, setThreshold] = useState(initialThreshold);
   const [max, setMax]             = useState(initialMax);
   const [resting, setResting]     = useState(initialResting);
-  const [zones, setZones]         = useState<HrZoneInput[]>(
-    initialZones.length ? initialZones : [{ name: '', hr_min: '', hr_max: '' }],
+  const [zones, setZones]         = useState<HrZoneRow[]>(
+    (initialZones.length ? initialZones : [{ name: '', hr_min: '', hr_max: '' }]).map(withKey),
   );
   const [saved, setSaved] = useState(false);
   const [pending, start]  = useTransition();
@@ -29,7 +34,7 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
   }
 
   function addZone() {
-    setZones(zs => [...zs, { name: '', hr_min: '', hr_max: '' }]);
+    setZones(zs => [...zs, withKey({ name: '', hr_min: '', hr_max: '' })]);
     setSaved(false);
   }
 
@@ -40,7 +45,7 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
 
   function save() {
     start(async () => {
-      await saveHrZones(threshold, max, resting, zones);
+      await saveHrZones(threshold, max, resting, zones.map(z => ({ name: z.name, hr_min: z.hr_min, hr_max: z.hr_max })));
       setSaved(true);
     });
   }
@@ -81,7 +86,7 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
         </div>
 
         {zones.map((z, i) => (
-          <div key={i} className="grid items-center gap-2"
+          <div key={z._key} className="grid items-center gap-2"
                style={{ gridTemplateColumns: '1fr 78px 16px 78px 28px' }}>
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-mono text-[11px] text-stone shrink-0">Z{i + 1}</span>

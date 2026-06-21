@@ -1,4 +1,4 @@
-import { normalizeStructure, segmentPerformance, PERF_COLOR, type ZoneMap, type NormSegment } from './plan-structure';
+import { normalizeStructure, segmentPerformance, PERF_COLOR, paceToSeconds, secondsToPace, type ZoneMap, type NormSegment } from './plan-structure';
 
 export interface ProfileBar {
   effort: number;   // 0–100
@@ -6,10 +6,10 @@ export interface ProfileBar {
   color?: string;   // per-bar override (e.g. pacing-performance colour)
 }
 
-// Converts "m:ss" or "mm:ss" pace string to total seconds
+// Converts "m:ss" pace string to total seconds (0 when blank/invalid). Thin
+// wrapper over plan-structure's paceToSeconds — one parsing implementation.
 export function parsePaceSeconds(pace: string): number {
-  const parts = pace.split(':').map(Number);
-  return parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+  return paceToSeconds(pace) ?? 0;
 }
 
 // Continuous effort formula: anchor 75% at threshold, scale by speedRatio²
@@ -50,12 +50,6 @@ function mergeConsecutive(bars: ProfileBar[]): ProfileBar[] {
   }, []);
 }
 
-function secsToPace(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = Math.round(secs % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
 // New structure format: a leg's effort comes from its mid-range pace,
 // its width (minutes) from distance × that pace.
 interface NewPhaseStep {
@@ -68,7 +62,7 @@ function phaseToBar(p: NewPhaseStep, thresholdPace: string): ProfileBar {
   const lo   = parsePaceSeconds(p.pace_min ?? '');
   const hi   = parsePaceSeconds(p.pace_max ?? '');
   const secs = lo && hi ? (lo + hi) / 2 : lo || hi;
-  const effort  = secs ? paceToEffort(secsToPace(secs), thresholdPace) : 40;
+  const effort  = secs ? paceToEffort(secondsToPace(secs), thresholdPace) : 40;
   const minutes = Math.max(1, Math.round(((Number(p.distance_km) || 0) * secs) / 60));
   return { effort, minutes };
 }
@@ -111,7 +105,7 @@ export function buildProfileBars(
     const segToBar = (seg: NormSegment): ProfileBar => {
       const perf = segmentPerformance(seg);
       return {
-        effort:  seg.midSeconds ? paceToEffort(secsToPace(seg.midSeconds), thresholdPace) : 40,
+        effort:  seg.midSeconds ? paceToEffort(secondsToPace(seg.midSeconds), thresholdPace) : 40,
         minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
         ...(perf ? { color: PERF_COLOR[perf] } : {}),
       };

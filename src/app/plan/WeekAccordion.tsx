@@ -354,6 +354,10 @@ export default function WeekAccordion({
                 <div
                   className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${railClass} ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
                   onClick={() => toggleExpanded(session.id)}
+                  role="button"
+                  tabIndex={0}
+                  aria-expanded={isExpanded}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(session.id); } }}
                 >
                   {/* Day */}
                   <div className="w-[46px] shrink-0">

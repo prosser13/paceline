@@ -11,10 +11,15 @@ interface Props {
 const INPUT =
   'bg-bone border border-fog rounded-[6px] px-2 py-[5px] font-mono text-[13px] text-ink focus:outline-none focus:border-stone transition-colors';
 
+// Stable row identity so add/remove doesn't reuse inputs by index.
+type ZoneRow = ZoneInput & { _key: number };
+let nextKey = 0;
+const withKey = (z: ZoneInput): ZoneRow => ({ ...z, _key: nextKey++ });
+
 export default function ZonesClient({ initialThreshold, initialZones }: Props) {
   const [threshold, setThreshold] = useState(initialThreshold);
-  const [zones, setZones]         = useState<ZoneInput[]>(
-    initialZones.length ? initialZones : [{ name: '', pace_min: '', pace_max: '' }],
+  const [zones, setZones]         = useState<ZoneRow[]>(
+    (initialZones.length ? initialZones : [{ name: '', pace_min: '', pace_max: '' }]).map(withKey),
   );
   const [saved, setSaved]   = useState(false);
   const [pending, start]    = useTransition();
@@ -25,7 +30,7 @@ export default function ZonesClient({ initialThreshold, initialZones }: Props) {
   }
 
   function addZone() {
-    setZones(zs => [...zs, { name: '', pace_min: '', pace_max: '' }]);
+    setZones(zs => [...zs, withKey({ name: '', pace_min: '', pace_max: '' })]);
     setSaved(false);
   }
 
@@ -36,7 +41,7 @@ export default function ZonesClient({ initialThreshold, initialZones }: Props) {
 
   function save() {
     start(async () => {
-      await savePaceZones(threshold, zones);
+      await savePaceZones(threshold, zones.map(z => ({ name: z.name, pace_min: z.pace_min, pace_max: z.pace_max })));
       setSaved(true);
     });
   }
@@ -69,7 +74,7 @@ export default function ZonesClient({ initialThreshold, initialZones }: Props) {
         </div>
 
         {zones.map((z, i) => (
-          <div key={i} className="grid items-center gap-2"
+          <div key={z._key} className="grid items-center gap-2"
                style={{ gridTemplateColumns: '1fr 78px 16px 78px 28px' }}>
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-mono text-[11px] text-stone shrink-0">Z{i + 1}</span>

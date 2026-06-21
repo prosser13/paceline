@@ -78,6 +78,10 @@ export default function StrengthRow({
       <div
         className={`flex items-center gap-[14px] border-l-[3px] border-l-stone/40 px-[16px] py-[12px] ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
+        role={hasDetail ? 'button' : undefined}
+        tabIndex={hasDetail ? 0 : undefined}
+        aria-expanded={hasDetail ? open : undefined}
+        onKeyDown={hasDetail ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } } : undefined}
       >
         <div className="w-[46px] shrink-0">
           <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
