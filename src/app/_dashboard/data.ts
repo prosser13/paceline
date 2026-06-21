@@ -1,13 +1,16 @@
 // Shared dashboard data loader — all the queries and derivations the dashboard
 // (src/app/page.tsx) and its sub-components need, in one place.
 
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
 } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
+import {
+  listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
+  getCompletedForSession, listCompletedDistancesBetween,
+} from '@/data/plan-sessions';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
@@ -140,8 +143,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // ── Tier 1 ──
   const [
     { data: { user } },
-    { data: windowSessions },
-    { data: recent },
+    windowSessions,
+    recent,
     thresholdPaceRaw,
     paceZones,
     hrZoneRows,
@@ -150,12 +153,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     wellness,
   ] = await Promise.all([
     supabase.auth.getUser(),
-    supabaseAdmin.from('plan_sessions').select('*')
-      .gte('scheduled_date', todayStr).lte('scheduled_date', weekEndStr)
-      .order('scheduled_date', { ascending: true }).order('am_pm', { ascending: true }),
-    supabaseAdmin.from('completed_workouts')
-      .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
-      .gte('completed_date', weekAgoStr).lte('completed_date', todayStr),
+    listSessionsBetween(todayStr, weekEndStr),
+    listCompletedBetween(weekAgoStr, todayStr),
     getThresholdPace(),
     listPaceZones(),
     listHrZones(),
@@ -262,18 +261,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [{ data: cw }, weekData, planWeeks, strengthFirst] = await Promise.all([
-    todaySession
-      ? supabaseAdmin.from('completed_workouts')
-          .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
-          .eq('plan_session_id', todaySession.id).maybeSingle()
-      : Promise.resolve({ data: null }),
+  const [cw, weekData, planWeeks, strengthFirst] = await Promise.all([
+    todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
-          supabaseAdmin.from('plan_sessions').select('scheduled_date, distance_km')
-            .gte('scheduled_date', weekRow.date_from).lte('scheduled_date', weekRow.date_to),
-          supabaseAdmin.from('completed_workouts').select('completed_date, actual_distance_km')
-            .gte('completed_date', weekRow.date_from).lte('completed_date', weekRow.date_to),
+          listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
+          listCompletedDistancesBetween(weekRow.date_from, weekRow.date_to),
         ])
       : Promise.resolve(null),
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
@@ -305,7 +298,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   let weekDoneKm = 0;
   let weekDays: WeekDay[] = [];
   if (weekData && weekRow?.date_from && weekRow?.date_to) {
-    const [{ data: weekSessions }, { data: weekCompleted }] = weekData;
+    const [weekSessions, weekCompleted] = weekData;
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
 
     const plannedByDate = new Map<string, number>();

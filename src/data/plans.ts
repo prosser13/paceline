@@ -80,6 +80,26 @@ export async function getNextRace(fromDate: string): Promise<NextRace | null> {
   return (data as NextRace | null) ?? null;
 }
 
+// Distance + current goal pace for a plan, or null (target-time form).
+export async function getPlanTargetInfo(planId: number): Promise<
+  { id: number; distance_km: number | null; target_pace: string | null } | null
+> {
+  const { data } = await supabaseAdmin
+    .from('plans')
+    .select('id, distance_km, target_pace')
+    .eq('id', planId)
+    .single();
+  return (data as { id: number; distance_km: number | null; target_pace: string | null } | null) ?? null;
+}
+
+// Set a plan's goal time and derived pace.
+export async function updatePlanTarget(
+  planId: number,
+  patch: { target_time: string | null; target_pace: string | null },
+): Promise<void> {
+  await supabaseAdmin.from('plans').update(patch).eq('id', planId);
+}
+
 // Whether a plan orders strength ahead of running.
 export async function getPlanStrengthPriority(planId: number): Promise<boolean> {
   const { data } = await supabaseAdmin

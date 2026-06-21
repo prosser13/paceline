@@ -1,9 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import AppShell from '@/components/AppShell';
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
+import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
 import WeekAccordion from './WeekAccordion';
 import RaceBlock from './RaceBlock';
 import PastWeeksAccordion from './PastWeeksAccordion';
@@ -86,11 +86,11 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [{ data: sessions }, weeks, thresholdPaceRaw, { data: completed }, paceZones, hrZonesRows, plans] = await Promise.all([
-    supabaseAdmin.from('plan_sessions').select('*').order('scheduled_date').order('am_pm'),
+  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, plans] = await Promise.all([
+    listAllSessions(),
     listWeeksByNumber(),
     getThresholdPace(),
-    supabaseAdmin.from('completed_workouts').select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, segment_actuals, segment_hr'),
+    listAllCompleted(),
     listPaceZones(),
     listHrZones(),
     listPlansBySortOrder(),

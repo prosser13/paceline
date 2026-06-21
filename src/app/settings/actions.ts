@@ -1,8 +1,9 @@
 'use server';
 
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireUser } from '@/lib/auth';
 import { setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones } from '@/data/zones';
+import { getPlanTargetInfo, updatePlanTarget } from '@/data/plans';
+import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -111,42 +112,31 @@ async function cascadeGoalPace(planId: number, oldPace: string, newPace: string)
   const newSec = paceToSeconds(newPace);
   if (oldSec == null || newSec == null) return;
 
-  const { data: sessions } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('id, session_type, target_pace, target_pace_end, structure')
-    .eq('plan_id', planId)
-    .eq('target_pace', oldPace);
+  const sessions = await listSessionsByTargetPace(planId, oldPace);
 
-  for (const s of sessions ?? []) {
+  for (const s of sessions) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const update: Record<string, any> = { target_pace: newPace };
     if (s.target_pace_end === oldPace) update.target_pace_end = newPace;
     if (Array.isArray(s.structure)) {
       update.structure = s.structure.map(ph => rewritePhasePace(ph, oldPace, newPace, oldSec, newSec));
     }
-    await supabaseAdmin.from('plan_sessions').update(update).eq('id', s.id);
+    await updatePlanSession(s.id, update);
   }
 }
 
 export async function saveTargetTime(planId: number, targetTime: string) {
   await requireUser();
-  const { data: plan } = await supabaseAdmin
-    .from('plans')
-    .select('id, distance_km, target_pace')
-    .eq('id', planId)
-    .single();
+  const plan = await getPlanTargetInfo(planId);
   if (!plan) return { ok: false as const, error: 'Plan not found' };
 
   const trimmed = targetTime.trim();
   const secs = timeToSeconds(trimmed);
   const dist = Number(plan.distance_km) || 0;
   const newPace = secs != null && dist > 0 ? secondsToPace(Math.round(secs / dist)) : null;
-  const oldPace = plan.target_pace as string | null;
+  const oldPace = plan.target_pace;
 
-  await supabaseAdmin
-    .from('plans')
-    .update({ target_time: trimmed || null, target_pace: newPace })
-    .eq('id', planId);
+  await updatePlanTarget(planId, { target_time: trimmed || null, target_pace: newPace });
 
   if (oldPace && newPace && oldPace !== newPace) {
     await cascadeGoalPace(planId, oldPace, newPace);
