@@ -1,7 +1,10 @@
 'use server';
 
 import { requireUser } from '@/lib/auth';
-import { setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones } from '@/data/zones';
+import {
+  setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones,
+  savePowerConfig, replacePowerZones, saveBikeHrConfig, replaceBikeHrZones,
+} from '@/data/zones';
 import { getPlanTargetInfo, updatePlanTarget } from '@/data/plans';
 import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import { revalidatePath } from 'next/cache';
@@ -67,6 +70,66 @@ export async function saveHrZones(
   await replaceHrZones(rows);
 
   revalidatePath('/settings');
+
+  return { ok: true };
+}
+
+// ── Cycling: power zones (watts) ─────────────────────────────
+
+export interface PowerZoneInput {
+  name: string;
+  power_min: string;
+  power_max: string;
+}
+
+export async function savePowerZones(threshold: string, zones: PowerZoneInput[]) {
+  await requireUser();
+  await savePowerConfig(toInt(threshold));
+
+  const rows = zones
+    .filter(z => z.name.trim() || z.power_min.trim() || z.power_max.trim())
+    .map((z, i) => ({
+      zone_key:   `Z${i + 1}`,
+      name:       z.name.trim() || `Zone ${i + 1}`,
+      power_min:  toInt(z.power_min) ?? 0,
+      power_max:  toInt(z.power_max) ?? 0,
+      sort_order: i + 1,
+    }));
+  await replacePowerZones(rows);
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
+
+  return { ok: true };
+}
+
+// ── Cycling: bike heart-rate zones ───────────────────────────
+
+export async function saveBikeHrZones(
+  threshold: string, max: string, resting: string, zones: HrZoneInput[],
+) {
+  await requireUser();
+  await saveBikeHrConfig({
+    threshold_hr: toInt(threshold),
+    max_hr:       toInt(max),
+    resting_hr:   toInt(resting),
+  });
+
+  const rows = zones
+    .filter(z => z.name.trim() || z.hr_min.trim() || z.hr_max.trim())
+    .map((z, i) => ({
+      zone_key:   `Z${i + 1}`,
+      name:       z.name.trim() || `Zone ${i + 1}`,
+      hr_min:     toInt(z.hr_min) ?? 0,
+      hr_max:     toInt(z.hr_max) ?? 0,
+      sort_order: i + 1,
+    }));
+  await replaceBikeHrZones(rows);
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
 
   return { ok: true };
 }

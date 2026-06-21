@@ -20,6 +20,19 @@ export function RunGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }:
   );
 }
 
+export function BikeGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <circle cx="5" cy="17" r="3" />
+      <circle cx="19" cy="17" r="3" />
+      <path d="M5 17l3.5 -8h5.5l-3 8" />
+      <path d="M14 9l2 -3h2" />
+      <path d="M8.5 9h6" />
+    </svg>
+  );
+}
+
 export function Dumbbell({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}

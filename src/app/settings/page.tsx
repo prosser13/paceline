@@ -3,20 +3,31 @@ export const dynamic = 'force-dynamic';
 import AppShell from '@/components/AppShell';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
 import { listRacePlans } from '@/data/plans';
-import { getThresholdPace, listPaceZones, getHrConfig, listHrZones } from '@/data/zones';
+import {
+  getThresholdPace, listPaceZones, getHrConfig, listHrZones,
+  getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
+} from '@/data/zones';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
+import PowerZonesClient from './PowerZonesClient';
 import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
-import type { ZoneInput, HrZoneInput } from './actions';
+import { saveBikeHrZones, type ZoneInput, type HrZoneInput, type PowerZoneInput } from './actions';
 
 export default async function SettingsPage() {
-  const [strava, thresholdPace, paceZones, hrConfig, hrZones, racePlans] = await Promise.all([
+  const [
+    strava, thresholdPace, paceZones, hrConfig, hrZones,
+    powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
+  ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
     listPaceZones(),
     getHrConfig(),
     listHrZones(),
+    getPowerConfig(),
+    listPowerZones(),
+    getBikeHrConfig(),
+    listBikeHrZones(),
     listRacePlans(),
   ]);
 
@@ -43,6 +54,22 @@ export default async function SettingsPage() {
     hr_max: String(z.hr_max),
   }));
 
+  const powerThreshold = powerConfig?.threshold_power != null ? String(powerConfig.threshold_power) : '';
+  const powerZoneInputs: PowerZoneInput[] = powerZones.map(z => ({
+    name:      z.name,
+    power_min: String(z.power_min),
+    power_max: String(z.power_max),
+  }));
+
+  const bikeHrThreshold = bikeHrConfig?.threshold_hr != null ? String(bikeHrConfig.threshold_hr) : '';
+  const bikeHrMax       = bikeHrConfig?.max_hr != null ? String(bikeHrConfig.max_hr) : '';
+  const bikeHrResting   = bikeHrConfig?.resting_hr != null ? String(bikeHrConfig.resting_hr) : '';
+  const bikeHrZoneInputs: HrZoneInput[] = bikeHrZones.map(z => ({
+    name:   z.name,
+    hr_min: String(z.hr_min),
+    hr_max: String(z.hr_max),
+  }));
+
   return (
     <AppShell>
       <div className="px-[26px] py-[22px] max-w-[720px]">
@@ -50,26 +77,17 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Zone type</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Choose which zones the app uses to build and display sessions.
+            <p className="text-[15px] text-stone">
+              Sessions are built from zones, so the targets shown across your plan are derived
+              from these windows — editing a zone updates every session. Running uses
+              <span className="text-ink font-medium"> pace</span> and
+              <span className="text-ink font-medium"> heart-rate</span> zones; cycling uses
+              <span className="text-ink font-medium"> power</span> and
+              <span className="text-ink font-medium"> bike heart-rate</span> zones.
             </p>
-            <div className="flex items-start gap-3">
-              <span className="bg-oxblood text-bone border border-oxblood rounded-[8px] px-[18px] py-[9px] text-[14px] font-medium select-none">
-                Pace
-              </span>
-              <div className="flex flex-col items-center gap-[5px]">
-                <span
-                  aria-disabled="true"
-                  className="bg-bone border border-fog rounded-[8px] px-[18px] py-[9px] text-[14px] text-stone/40 cursor-not-allowed select-none"
-                >
-                  Heart rate
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[.1em] text-stone/50">coming soon</span>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -90,11 +108,11 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Pace zones</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · pace zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
-              Planned sessions are built from zones — the paces shown across your plan are
+              Planned runs are built from zones — the paces shown across your plan are
               derived from these windows, so editing a zone updates every session.
             </p>
             <ZonesClient initialThreshold={threshold} initialZones={zones} />
@@ -103,17 +121,49 @@ export default async function SettingsPage() {
 
         <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
           <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Heart rate zones</span>
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · heart rate zones</span>
           </div>
           <div className="px-[18px] py-[18px]">
             <p className="text-[15px] text-stone mb-4">
-              Your heart-rate threshold, max and resting values, plus zone ranges in bpm.
+              Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.
             </p>
             <HrZonesClient
               initialThreshold={hrThreshold}
               initialMax={hrMax}
               initialResting={hrResting}
               initialZones={hrZoneInputs}
+            />
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · power zones</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from
+              these zones, so editing one updates every ride&apos;s power targets.
+            </p>
+            <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · heart rate zones</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Cycling heart rate runs lower than running, so it has its own threshold, max and
+              resting values plus zone ranges in bpm.
+            </p>
+            <HrZonesClient
+              initialThreshold={bikeHrThreshold}
+              initialMax={bikeHrMax}
+              initialResting={bikeHrResting}
+              initialZones={bikeHrZoneInputs}
+              save={saveBikeHrZones}
             />
           </div>
         </section>

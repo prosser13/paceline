@@ -6,18 +6,20 @@ import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
 } from '@/data/plans';
-import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
+import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
   getCompletedForSession, listCompletedDistancesBetween,
 } from '@/data/plan-sessions';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
+import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
 export interface PlanSession {
   id: string;
   scheduled_date: string;
   session_type?: string | null;
+  activity_type?: string | null;
   name: string;
   description?: string | null;
   distance_km?: number | null;
@@ -48,6 +50,7 @@ export interface WindowDay {
   sessions: PlanSession[]; // run/race first, strength after
   volumeKm: number;
   hasRun: boolean;
+  hasRide: boolean;
   hasStrength: boolean;
 }
 
@@ -69,6 +72,8 @@ export interface DashboardData {
 
   zones: ZoneMap;
   hrZones: HrZoneMap;
+  powerZones: PowerZoneMap;
+  bikeHrZones: BikeHrZoneMap;
   thresholdPace: string;
 
   hasPlanWeek: boolean;
@@ -148,6 +153,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     thresholdPaceRaw,
     paceZones,
     hrZoneRows,
+    powerZoneRows,
+    bikeHrZoneRows,
     weekRow,
     raceRow,
     wellness,
@@ -158,6 +165,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getThresholdPace(),
     listPaceZones(),
     listHrZones(),
+    listPowerZones(),
+    listBikeHrZones(),
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
     getWellnessCached(),
@@ -204,6 +213,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
     hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
+  const powerZones: PowerZoneMap = {};
+  for (const z of powerZoneRows) {
+    powerZones[z.zone_key] = { key: z.zone_key, name: z.name, powerMin: z.power_min, powerMax: z.power_max, sortOrder: z.sort_order };
+  }
+  const bikeHrZones: BikeHrZoneMap = {};
+  for (const z of bikeHrZoneRows) {
+    bikeHrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
+  }
+
   // Upcoming (+2..+7), rest-filled
   const upcomingWithRest: PlanSession[] = [];
   for (let i = 2; i <= 7; i++) {
@@ -219,6 +237,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const iso = isoDate(addDays(today, i));
     const sessions = byDate.get(iso) ?? [];
     const volumeKm = sessions.reduce((s, x) => s + (Number(x.distance_km) || 0), 0);
+    const isRide = (s: PlanSession) => s.activity_type === 'cycling';
     windowDays.push({
       iso,
       short: fmtShort(iso),
@@ -227,7 +246,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       isTomorrow: i === 1,
       sessions,
       volumeKm,
-      hasRun: sessions.some(s => s.session_type !== 'STRENGTH'),
+      hasRun: sessions.some(s => s.session_type !== 'STRENGTH' && !isRide(s)),
+      hasRide: sessions.some(isRide),
       hasStrength: sessions.some(s => s.session_type === 'STRENGTH'),
     });
   }
@@ -356,7 +376,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     firstName, greeting: greet(), todayFull, todayStr,
     todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayCompleted, strengthFirst,
     upcomingWithRest, windowDays,
-    zones, hrZones, thresholdPace,
+    zones, hrZones, powerZones, bikeHrZones, thresholdPace,
     hasPlanWeek: !!weekRow,
     weekLabel, weekPurpose,
     phaseSegments, todayPct, ringPct,

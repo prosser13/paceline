@@ -1,46 +1,36 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { saveHrZones, type HrZoneInput } from './actions';
-
-type SaveAction = (
-  threshold: string, max: string, resting: string, zones: HrZoneInput[],
-) => Promise<{ ok: boolean }>;
+import { savePowerZones, type PowerZoneInput } from './actions';
 
 interface Props {
   initialThreshold: string;
-  initialMax: string;
-  initialResting: string;
-  initialZones: HrZoneInput[];
-  // Defaults to the running HR save; the bike-HR section passes saveBikeHrZones.
-  save?: SaveAction;
+  initialZones: PowerZoneInput[];
 }
 
 const INPUT =
   'bg-bone border border-fog rounded-[6px] px-2 py-[5px] font-mono text-[13px] text-ink focus:outline-none focus:border-stone transition-colors';
 
 // Stable row identity so add/remove doesn't reuse inputs by index.
-type HrZoneRow = HrZoneInput & { _key: number };
+type PowerZoneRow = PowerZoneInput & { _key: number };
 let nextKey = 0;
-const withKey = (z: HrZoneInput): HrZoneRow => ({ ...z, _key: nextKey++ });
+const withKey = (z: PowerZoneInput): PowerZoneRow => ({ ...z, _key: nextKey++ });
 
-export default function HrZonesClient({ initialThreshold, initialMax, initialResting, initialZones, save: saveAction = saveHrZones }: Props) {
+export default function PowerZonesClient({ initialThreshold, initialZones }: Props) {
   const [threshold, setThreshold] = useState(initialThreshold);
-  const [max, setMax]             = useState(initialMax);
-  const [resting, setResting]     = useState(initialResting);
-  const [zones, setZones]         = useState<HrZoneRow[]>(
-    (initialZones.length ? initialZones : [{ name: '', hr_min: '', hr_max: '' }]).map(withKey),
+  const [zones, setZones]         = useState<PowerZoneRow[]>(
+    (initialZones.length ? initialZones : [{ name: '', power_min: '', power_max: '' }]).map(withKey),
   );
   const [saved, setSaved] = useState(false);
   const [pending, start]  = useTransition();
 
-  function update(i: number, field: keyof HrZoneInput, value: string) {
+  function update(i: number, field: keyof PowerZoneInput, value: string) {
     setZones(zs => zs.map((z, idx) => (idx === i ? { ...z, [field]: value } : z)));
     setSaved(false);
   }
 
   function addZone() {
-    setZones(zs => [...zs, withKey({ name: '', hr_min: '', hr_max: '' })]);
+    setZones(zs => [...zs, withKey({ name: '', power_min: '', power_max: '' })]);
     setSaved(false);
   }
 
@@ -51,33 +41,26 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
 
   function save() {
     start(async () => {
-      await saveAction(threshold, max, resting, zones.map(z => ({ name: z.name, hr_min: z.hr_min, hr_max: z.hr_max })));
+      await savePowerZones(threshold, zones.map(z => ({ name: z.name, power_min: z.power_min, power_max: z.power_max })));
       setSaved(true);
     });
   }
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Threshold values */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <div className="flex items-center gap-2">
-          <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">Threshold</label>
-          <input value={threshold} onChange={e => { setThreshold(e.target.value); setSaved(false); }}
-                 placeholder="171" inputMode="numeric" className={`${INPUT} w-[64px] text-center`} />
-          <span className="font-mono text-[11px] text-stone">bpm</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">Max</label>
-          <input value={max} onChange={e => { setMax(e.target.value); setSaved(false); }}
-                 placeholder="188" inputMode="numeric" className={`${INPUT} w-[64px] text-center`} />
-          <span className="font-mono text-[11px] text-stone">bpm</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">Resting</label>
-          <input value={resting} onChange={e => { setResting(e.target.value); setSaved(false); }}
-                 placeholder="43" inputMode="numeric" className={`${INPUT} w-[64px] text-center`} />
-          <span className="font-mono text-[11px] text-stone">bpm</span>
-        </div>
+      {/* Threshold power (FTP) */}
+      <div className="flex items-center gap-3">
+        <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone w-[120px] shrink-0">
+          Threshold power
+        </label>
+        <input
+          value={threshold}
+          onChange={e => { setThreshold(e.target.value); setSaved(false); }}
+          placeholder="270"
+          inputMode="numeric"
+          className={`${INPUT} w-[80px] text-center`}
+        />
+        <span className="font-mono text-[11px] text-stone">W</span>
       </div>
 
       {/* Zones */}
@@ -104,17 +87,17 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
               />
             </div>
             <input
-              value={z.hr_min}
-              onChange={e => update(i, 'hr_min', e.target.value)}
-              placeholder="111"
+              value={z.power_min}
+              onChange={e => update(i, 'power_min', e.target.value)}
+              placeholder="149"
               inputMode="numeric"
               className={`${INPUT} text-center`}
             />
             <span className="font-mono text-[11px] text-stone text-center">to</span>
             <input
-              value={z.hr_max}
-              onChange={e => update(i, 'hr_max', e.target.value)}
-              placeholder="140"
+              value={z.power_max}
+              onChange={e => update(i, 'power_max', e.target.value)}
+              placeholder="202"
               inputMode="numeric"
               className={`${INPUT} text-center`}
             />
@@ -148,7 +131,7 @@ export default function HrZonesClient({ initialThreshold, initialMax, initialRes
           {pending ? 'Saving…' : 'Save zones'}
         </button>
         {saved && !pending && (
-          <span className="font-mono text-[11px] text-fern">Saved</span>
+          <span className="font-mono text-[11px] text-fern">Saved · power targets updated across rides</span>
         )}
       </div>
     </div>

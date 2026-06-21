@@ -5,7 +5,7 @@
 // to that day's node.
 
 import type { WindowDay } from './data';
-import { RunGlyph, Dumbbell } from '@/components/glyphs';
+import { RunGlyph, Dumbbell, BikeGlyph } from '@/components/glyphs';
 import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER } from '@/lib/colors';
 
 function BedMini({ color }: { color: string }) {
@@ -34,7 +34,7 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
         {days.map(day => {
           const isRest = day.sessions.length === 0;
           const barH = isRest ? 5 : Math.max(8, Math.round((day.volumeKm / maxKm) * 46));
-          const barColor = day.isToday ? OXBLOOD : isRest ? FOG : day.hasRun ? MARINE : GOLD;
+          const barColor = day.isToday ? OXBLOOD : isRest ? FOG : (day.hasRun || day.hasRide) ? MARINE : GOLD;
           const labelColor = day.isToday ? AMBER : '#5f5a50';
           return (
             <button key={day.iso} type="button" onClick={() => scrollToDay(day.iso)}
@@ -55,6 +55,11 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
                     {day.hasRun && (
                       <span className="inline-flex" style={{ color: day.isToday ? OXBLOOD : MARINE }}>
                         <RunGlyph size={13} strokeWidth={2.2} className="" />
+                      </span>
+                    )}
+                    {day.hasRide && (
+                      <span className="inline-flex" style={{ color: day.isToday ? OXBLOOD : MARINE }}>
+                        <BikeGlyph size={13} strokeWidth={2.2} className="" />
                       </span>
                     )}
                     {day.hasStrength && (
