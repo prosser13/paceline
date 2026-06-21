@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { type StrengthEx, STRENGTH_COLS, MuscleChip, repsStr, loadStr } from './StrengthRow';
+import { humanHMM } from './session-ui';
 import { startPlannedSession } from '@/app/strength/actions';
 
 const GOLD = '#8f6512';
@@ -55,7 +56,7 @@ export default function StrengthHero({
             {note && <div className="text-[15px] text-stone">{note}</div>}
           </div>
           <div className="shrink-0 text-right">
-            <div className="font-display font-semibold text-[30px] leading-none text-ink">{duration ?? '—'}</div>
+            <div className="font-display font-semibold text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
             <div className="font-mono text-[14px] text-stone mt-[3px]">{exercises.length} exercises</div>
           </div>
         </div>

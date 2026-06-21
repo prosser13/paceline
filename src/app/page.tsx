@@ -4,7 +4,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, wholeRunActuals,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, humanHMM, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthHero from '@/components/StrengthHero';
 import { type StrengthEx } from '@/components/StrengthRow';
@@ -488,9 +488,14 @@ function devClass(pct: number | null): string {
 }
 
 function signedTime(deltaMin: number): string {
-  const sign   = deltaMin >= 0 ? '+' : '−';
-  const absSec = Math.round(Math.abs(deltaMin) * 60);
-  return `${sign}${Math.floor(absSec / 60)}:${String(absSec % 60).padStart(2, '0')}`;
+  const sign     = deltaMin >= 0 ? '+' : '−';
+  const totalSec = Math.round(Math.abs(deltaMin) * 60);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${sign}${h}h ${m}m`;
+  if (m > 0) return `${sign}${m}m${s ? ` ${s}s` : ''}`;
+  return `${sign}${s}s`;
 }
 
 function VsStat({ label, value, delta, deltaClass, align = 'right' }: {
@@ -626,7 +631,7 @@ function SessionHero({
             />
             <VsStat align="left"
               label="Time"
-              value={displayDuration ?? '—'}
+              value={humanHMM(displayDuration) ?? '—'}
               delta={timeDelta != null ? signedTime(timeDelta) : null}
               deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)}
             />

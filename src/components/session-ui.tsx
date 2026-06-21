@@ -64,6 +64,19 @@ export function fmtHMM(totalSec: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
+// Human-readable duration: "1h 35m" / "38m" / "1h". Accepts an "H:MM" string
+// (the format stored in the DB and produced by fmtHMM) so hour/minute durations
+// don't read like minute/second paces. Returns the input unchanged if not H:MM.
+export function humanHMM(str: string | null | undefined): string | null {
+  if (!str) return null;
+  const parts = str.split(':').map(Number);
+  if (parts.length !== 2 || parts.some(isNaN)) return str;
+  const [h, m] = parts;
+  if (h <= 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 // Planned duration = Σ (distance × zone mid-pace) across all segments (repeats expanded).
 export function sumSegmentSeconds(steps: NormStep[]): number {
   let total = 0;
@@ -356,7 +369,7 @@ export function MetricBlock({
   return (
     <div className={`shrink-0 text-right ${s.w}`}>
       <div className={`font-display font-semibold leading-none ${s.dur} ${duration ? 'text-ink' : 'text-stone'}`}>
-        {duration ?? '—'}
+        {humanHMM(duration) ?? '—'}
       </div>
       {distanceKm != null && (
         <div className={`font-mono text-ink mt-[3px] ${s.tss}`}>

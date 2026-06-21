@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { humanHMM } from './session-ui';
 
 export interface StrengthEx {
   name: string;
@@ -79,7 +80,7 @@ export default function StrengthRow({
           {focus && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{focus}</div>}
         </div>
         <div className="shrink-0 text-right w-[78px]">
-          <div className="font-display font-semibold text-[19px] leading-none text-ink">{duration ?? '—'}</div>
+          <div className="font-display font-semibold text-[19px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
         </div>
       </div>
 
