@@ -1,18 +1,12 @@
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { createClient } from '@/lib/supabase-server';
+import { requireUser } from '@/lib/auth';
 import { syncSession, deleteIntervalEvent } from '@/lib/intervals';
 import { calcScheduledDate, SESSION_TYPES } from '@/data/sessions';
 import type { SessionType } from '@/data/sessions';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-
-async function assertAuth() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error('Unauthorized');
-}
 
 function parseSession(fd: FormData) {
   const week = parseInt(fd.get('week_number') as string, 10);
@@ -55,7 +49,7 @@ export async function createSessionAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   try {
-    await assertAuth();
+    await requireUser();
     const data = parseSession(formData);
     const { error } = await supabaseAdmin.from('plan_sessions').insert(data);
     if (error) return { error: error.message };
@@ -72,7 +66,7 @@ export async function updateSessionAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   try {
-    await assertAuth();
+    await requireUser();
     const data = parseSession(formData);
     const { error } = await supabaseAdmin
       .from('plan_sessions')
@@ -88,7 +82,7 @@ export async function updateSessionAction(
 
 export async function deleteSessionAction(id: string): Promise<{ error?: string }> {
   try {
-    await assertAuth();
+    await requireUser();
 
     // Remove from intervals.icu first if synced
     const { data: session } = await supabaseAdmin
@@ -112,7 +106,7 @@ export async function deleteSessionAction(id: string): Promise<{ error?: string 
 
 export async function syncToIntervalsAction(id: string): Promise<{ error?: string }> {
   try {
-    await assertAuth();
+    await requireUser();
 
     const { data: session, error: fetchError } = await supabaseAdmin
       .from('plan_sessions')
