@@ -33,7 +33,9 @@ export async function GET(request: Request) {
   }
 
   const email = process.env.DEV_LOGIN_EMAIL ?? "prosser13@gmail.com";
-  const next = searchParams.get("next") ?? "/";
+  const nextParam = searchParams.get("next") ?? "/";
+  // Only allow same-origin relative paths (reject "//evil.com", "https://…").
+  const next = nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/";
 
   // 1. Admin-generate a magic-link token for the target user (does NOT send email).
   const { data: linkData, error: linkError } =
