@@ -74,6 +74,25 @@ export async function updatePlanSession(
   if (error) throw new Error(error.message);
 }
 
+// Earliest scheduled date across all sessions (Strava sync start), or null.
+export async function getEarliestSessionDate(): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('scheduled_date')
+    .order('scheduled_date')
+    .limit(1)
+    .maybeSingle();
+  return (data?.scheduled_date as string | null) ?? null;
+}
+
+// Minimal session fields for Strava activity matching.
+export async function listSessionsForMatching() {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, distance_km, structure');
+  return data ?? [];
+}
+
 // ── completed_workouts ───────────────────────────────────────
 
 // Summary fields for completions within [from, to] (last-7-days stats).
@@ -112,4 +131,41 @@ export async function listAllCompleted() {
     .from('completed_workouts')
     .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, segment_actuals, segment_hr');
   return data ?? [];
+}
+
+// Whether a planned session already has a logged completion (Strava idempotency).
+export async function completedWorkoutExistsForSession(planSessionId: string): Promise<boolean> {
+  const { count } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id', { count: 'exact', head: true })
+    .eq('plan_session_id', planSessionId);
+  return !!(count && count > 0);
+}
+
+// Insert a completion (Strava sync).
+export async function insertCompletedWorkout(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  row: Record<string, any>,
+): Promise<void> {
+  await supabaseAdmin.from('completed_workouts').insert(row);
+}
+
+// Strava completions still missing per-segment pace or HR, capped at `limit`.
+export async function listCompletedMissingSegments(limit: number) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, plan_session_id, strava_activity_id, actual_avg_hr')
+    .or('segment_actuals.is.null,segment_hr.is.null')
+    .eq('source', 'strava')
+    .limit(limit);
+  return data ?? [];
+}
+
+// Patch a completion (Strava backfill).
+export async function updateCompletedWorkout(
+  id: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  patch: Record<string, any>,
+): Promise<void> {
+  await supabaseAdmin.from('completed_workouts').update(patch).eq('id', id);
 }
