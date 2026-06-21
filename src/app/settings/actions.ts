@@ -1,7 +1,9 @@
 'use server';
 
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { requireUser } from '@/lib/auth';
+import { setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones } from '@/data/zones';
+import { getPlanTargetInfo, updatePlanTarget } from '@/data/plans';
+import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -13,15 +15,9 @@ export interface ZoneInput {
 
 export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
   await requireUser();
-  // Threshold is denormalised across every app_config row — keep them in sync
-  await supabaseAdmin
-    .from('app_config')
-    .update({ threshold_pace_per_km: threshold })
-    .not('key', 'is', null);
+  await setThresholdPace(threshold);
 
   // Replace the zone set (supports add/remove). Keys are assigned by order.
-  await supabaseAdmin.from('pace_zones').delete().gte('sort_order', 0);
-
   const rows = zones
     .filter(z => z.name.trim() || z.pace_min.trim() || z.pace_max.trim())
     .map((z, i) => ({
@@ -31,10 +27,7 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
       pace_max:   z.pace_max.trim(),
       sort_order: i + 1,
     }));
-
-  if (rows.length) {
-    await supabaseAdmin.from('pace_zones').insert(rows);
-  }
+  await replacePaceZones(rows);
 
   revalidatePath('/settings');
   revalidatePath('/plan');
@@ -55,16 +48,13 @@ export async function saveHrZones(
   threshold: string, max: string, resting: string, zones: HrZoneInput[],
 ) {
   await requireUser();
-  await supabaseAdmin.from('hr_config').upsert({
-    id:           1,
+  await saveHrConfig({
     threshold_hr: toInt(threshold),
     max_hr:       toInt(max),
     resting_hr:   toInt(resting),
   });
 
   // Replace the zone set (supports add/remove). Keys are assigned by order.
-  await supabaseAdmin.from('hr_zones').delete().gte('sort_order', 0);
-
   const rows = zones
     .filter(z => z.name.trim() || z.hr_min.trim() || z.hr_max.trim())
     .map((z, i) => ({
@@ -74,10 +64,7 @@ export async function saveHrZones(
       hr_max:     toInt(z.hr_max) ?? 0,
       sort_order: i + 1,
     }));
-
-  if (rows.length) {
-    await supabaseAdmin.from('hr_zones').insert(rows);
-  }
+  await replaceHrZones(rows);
 
   revalidatePath('/settings');
 
@@ -125,42 +112,31 @@ async function cascadeGoalPace(planId: number, oldPace: string, newPace: string)
   const newSec = paceToSeconds(newPace);
   if (oldSec == null || newSec == null) return;
 
-  const { data: sessions } = await supabaseAdmin
-    .from('plan_sessions')
-    .select('id, session_type, target_pace, target_pace_end, structure')
-    .eq('plan_id', planId)
-    .eq('target_pace', oldPace);
+  const sessions = await listSessionsByTargetPace(planId, oldPace);
 
-  for (const s of sessions ?? []) {
+  for (const s of sessions) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const update: Record<string, any> = { target_pace: newPace };
     if (s.target_pace_end === oldPace) update.target_pace_end = newPace;
     if (Array.isArray(s.structure)) {
       update.structure = s.structure.map(ph => rewritePhasePace(ph, oldPace, newPace, oldSec, newSec));
     }
-    await supabaseAdmin.from('plan_sessions').update(update).eq('id', s.id);
+    await updatePlanSession(s.id, update);
   }
 }
 
 export async function saveTargetTime(planId: number, targetTime: string) {
   await requireUser();
-  const { data: plan } = await supabaseAdmin
-    .from('plans')
-    .select('id, distance_km, target_pace')
-    .eq('id', planId)
-    .single();
+  const plan = await getPlanTargetInfo(planId);
   if (!plan) return { ok: false as const, error: 'Plan not found' };
 
   const trimmed = targetTime.trim();
   const secs = timeToSeconds(trimmed);
   const dist = Number(plan.distance_km) || 0;
   const newPace = secs != null && dist > 0 ? secondsToPace(Math.round(secs / dist)) : null;
-  const oldPace = plan.target_pace as string | null;
+  const oldPace = plan.target_pace;
 
-  await supabaseAdmin
-    .from('plans')
-    .update({ target_time: trimmed || null, target_pace: newPace })
-    .eq('id', planId);
+  await updatePlanTarget(planId, { target_time: trimmed || null, target_pace: newPace });
 
   if (oldPace && newPace && oldPace !== newPace) {
     await cascadeGoalPace(planId, oldPace, newPace);

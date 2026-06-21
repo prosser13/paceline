@@ -1,12 +1,16 @@
 // Shared dashboard data loader — all the queries and derivations the dashboard
 // (src/app/page.tsx) and its sub-components need, in one place.
 
-import { supabaseAdmin } from '@/lib/supabase-admin';
 import { createClient } from '@/lib/supabase-server';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
 } from '@/data/plans';
+import { getThresholdPace, listPaceZones, listHrZones } from '@/data/zones';
+import {
+  listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
+  getCompletedForSession, listCompletedDistancesBetween,
+} from '@/data/plan-sessions';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
@@ -139,25 +143,21 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // ── Tier 1 ──
   const [
     { data: { user } },
-    { data: windowSessions },
-    { data: recent },
-    { data: appConfig },
-    { data: paceZones },
-    { data: hrZoneRows },
+    windowSessions,
+    recent,
+    thresholdPaceRaw,
+    paceZones,
+    hrZoneRows,
     weekRow,
     raceRow,
     wellness,
   ] = await Promise.all([
     supabase.auth.getUser(),
-    supabaseAdmin.from('plan_sessions').select('*')
-      .gte('scheduled_date', todayStr).lte('scheduled_date', weekEndStr)
-      .order('scheduled_date', { ascending: true }).order('am_pm', { ascending: true }),
-    supabaseAdmin.from('completed_workouts')
-      .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
-      .gte('completed_date', weekAgoStr).lte('completed_date', todayStr),
-    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('pace_zones').select('*').order('sort_order'),
-    supabaseAdmin.from('hr_zones').select('*').order('sort_order'),
+    listSessionsBetween(todayStr, weekEndStr),
+    listCompletedBetween(weekAgoStr, todayStr),
+    getThresholdPace(),
+    listPaceZones(),
+    listHrZones(),
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
     getWellnessCached(),
@@ -191,16 +191,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const fitnessForm    = wellness.form;
   const fitnessHistory = wellness.history;
 
-  const thresholdPace = appConfig?.threshold_pace_per_km ?? '3:40';
+  const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshParts   = thresholdPace.split(':').map(Number);
   const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
 
   const zones: ZoneMap = {};
-  for (const z of paceZones ?? []) {
+  for (const z of paceZones) {
     zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
   }
   const hrZones: HrZoneMap = {};
-  for (const z of hrZoneRows ?? []) {
+  for (const z of hrZoneRows) {
     hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
@@ -261,18 +261,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [{ data: cw }, weekData, planWeeks, strengthFirst] = await Promise.all([
-    todaySession
-      ? supabaseAdmin.from('completed_workouts')
-          .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
-          .eq('plan_session_id', todaySession.id).maybeSingle()
-      : Promise.resolve({ data: null }),
+  const [cw, weekData, planWeeks, strengthFirst] = await Promise.all([
+    todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
-          supabaseAdmin.from('plan_sessions').select('scheduled_date, distance_km')
-            .gte('scheduled_date', weekRow.date_from).lte('scheduled_date', weekRow.date_to),
-          supabaseAdmin.from('completed_workouts').select('completed_date, actual_distance_km')
-            .gte('completed_date', weekRow.date_from).lte('completed_date', weekRow.date_to),
+          listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
+          listCompletedDistancesBetween(weekRow.date_from, weekRow.date_to),
         ])
       : Promise.resolve(null),
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
@@ -304,7 +298,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   let weekDoneKm = 0;
   let weekDays: WeekDay[] = [];
   if (weekData && weekRow?.date_from && weekRow?.date_to) {
-    const [{ data: weekSessions }, { data: weekCompleted }] = weekData;
+    const [weekSessions, weekCompleted] = weekData;
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
 
     const plannedByDate = new Map<string, number>();
