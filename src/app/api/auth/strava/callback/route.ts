@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';
+import { upsertStravaConnection } from '@/data/strava-connection';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -31,14 +31,12 @@ export async function GET(request: Request) {
     .filter(Boolean)
     .join(' ');
 
-  await supabaseAdmin.from('strava_connection').upsert({
-    id:               1,
+  await upsertStravaConnection({
     athlete_id:       data.athlete?.id ?? null,
     athlete_name:     athleteName || null,
     access_token:     data.access_token,
     refresh_token:    data.refresh_token,
     token_expires_at: data.expires_at,
-    connected_at:     new Date().toISOString(),
   });
 
   return NextResponse.redirect(`${base}/settings?connected=1`);

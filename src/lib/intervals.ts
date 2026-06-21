@@ -1,5 +1,7 @@
 import type { PlanSession, WorkoutStep } from '@/data/sessions';
-import { supabaseAdmin } from './supabase-admin';
+import {
+  getWellnessCacheRow, saveWellnessCacheRow, markWellnessCacheStale,
+} from '@/data/wellness-cache';
 
 const ATHLETE_ID = 'i330821';
 const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
@@ -188,11 +190,7 @@ function snapshotFromCacheRow(row: {
 export async function getWellnessCached(): Promise<WellnessSnapshot> {
   const todayStr = isoDay(new Date());
 
-  const { data: cached } = await supabaseAdmin
-    .from('intervals_wellness_cache')
-    .select('fetched_date, form, fitness, fatigue, history, stale')
-    .eq('id', 1)
-    .maybeSingle();
+  const cached = await getWellnessCacheRow();
 
   const fresh = cached && cached.fetched_date === todayStr && !cached.stale;
   if (fresh) return snapshotFromCacheRow(cached);
@@ -202,15 +200,12 @@ export async function getWellnessCached(): Promise<WellnessSnapshot> {
   // API unavailable — serve the last known value rather than nothing.
   if (!snapshot) return cached ? snapshotFromCacheRow(cached) : { form: null, history: null };
 
-  await supabaseAdmin.from('intervals_wellness_cache').upsert({
-    id: 1,
+  await saveWellnessCacheRow({
     fetched_date: todayStr,
     form:    snapshot.form?.form ?? null,
     fitness: snapshot.form?.fitness ?? null,
     fatigue: snapshot.form?.fatigue ?? null,
     history: snapshot.history,
-    stale:   false,
-    updated_at: new Date().toISOString(),
   });
 
   return snapshot;
@@ -218,10 +213,7 @@ export async function getWellnessCached(): Promise<WellnessSnapshot> {
 
 /** Flag the wellness cache stale so the next dashboard load refetches from intervals.icu. */
 export async function invalidateWellnessCache(): Promise<void> {
-  await supabaseAdmin
-    .from('intervals_wellness_cache')
-    .update({ stale: true })
-    .eq('id', 1);
+  await markWellnessCacheStale();
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {

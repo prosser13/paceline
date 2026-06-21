@@ -1,6 +1,7 @@
 import { supabaseAdmin } from './supabase-admin';
 import { expandSegmentDistances } from './plan-structure';
 import { invalidateWellnessCache } from './intervals';
+import { getStravaTokens, updateStravaTokens, markStravaSynced } from '@/data/strava-connection';
 
 export interface StravaActivity {
   id: number;
@@ -34,20 +35,16 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   });
   if (!res.ok) return null;
   const data: TokenResponse = await res.json();
-  await supabaseAdmin.from('strava_connection').update({
+  await updateStravaTokens({
     access_token:     data.access_token,
     refresh_token:    data.refresh_token,
     token_expires_at: data.expires_at,
-  }).eq('id', 1);
+  });
   return data.access_token;
 }
 
 export async function getValidAccessToken(): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from('strava_connection')
-    .select('access_token, refresh_token, token_expires_at')
-    .eq('id', 1)
-    .single();
+  const data = await getStravaTokens();
 
   if (!data?.access_token || !data?.refresh_token) return null;
 
@@ -172,8 +169,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   const runs = all.filter(a => RUN_TYPES.has(a.sport_type) || RUN_TYPES.has(a.type));
 
   if (!runs.length) {
-    await supabaseAdmin.from('strava_connection')
-      .update({ last_synced_at: new Date().toISOString() }).eq('id', 1);
+    await markStravaSynced();
     return { synced: 0, matched: 0 };
   }
 
@@ -287,8 +283,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     }
   }
 
-  await supabaseAdmin.from('strava_connection')
-    .update({ last_synced_at: new Date().toISOString() }).eq('id', 1);
+  await markStravaSynced();
 
   // A newly-detected run changes fitness/fatigue/form on intervals.icu — force
   // the dashboard to refetch wellness on its next load.
