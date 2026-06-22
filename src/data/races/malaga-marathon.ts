@@ -8,6 +8,7 @@ import type { RaceGuide } from './types';
 export const MALAGA_MARATHON: RaceGuide = {
   slug: 'malaga-marathon',
   eventName: 'Generali Maratón Málaga',
+  priority: 'A',
   organiser: 'Generali / Maratón Málaga',
   region: 'Málaga, Spain — flat city loop',
   start: { name: 'Paseo del Parque, Málaga', lat: 36.71953, lng: -4.41597 },

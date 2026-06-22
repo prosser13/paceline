@@ -50,6 +50,8 @@ export interface RaceGuide {
   slug: string;
   /** Full event name (curated; the plan name may be shorter). */
   eventName: string;
+  /** Race priority — drives the A/B/C colour, matching the plan page. */
+  priority: 'A' | 'B' | 'C';
   organiser?: string | null;
   region: string;                    // "South Wales coast"
   start: { name: string; lat: number; lng: number };

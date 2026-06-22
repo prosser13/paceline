@@ -12,6 +12,7 @@ import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
 import { listPlannedTssBetween, listRunningDoneForPlan } from '@/data/plan-sessions';
 import { parseGpx, type ParsedGpx } from '@/lib/gpx';
+import { RACE_PRIORITY_COLOR } from '@/lib/colors';
 import { getRaceForecast } from '@/lib/weather';
 import { getWellnessCached } from '@/lib/intervals';
 import { projectFitness, readinessFromProjection } from '@/lib/fitness-projection';
@@ -168,9 +169,9 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
         {/* hero header */}
         <div className="rounded-[18px] overflow-hidden border border-fog mt-[10px]">
-          <div className="bg-oxblood px-[22px] py-[20px] flex items-start justify-between gap-6">
+          <div className="px-[22px] py-[20px] flex items-start justify-between gap-6" style={{ background: RACE_PRIORITY_COLOR[guide.priority] ?? RACE_PRIORITY_COLOR.A }}>
             <div>
-              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">Race guide</span>
+              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">{guide.priority}-Race · Guide</span>
               <h1 className="font-display font-semibold text-[30px] text-bone leading-tight mt-[2px]">{guide.eventName}</h1>
               <p className="font-mono text-[13px] text-bone/60 mt-[5px]">{guide.region}</p>
               {raceDateLong && <p className="font-mono text-[13px] text-bone/60 mt-[2px]">{raceDateLong}</p>}

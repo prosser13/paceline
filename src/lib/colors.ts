@@ -13,3 +13,10 @@ export const AMBER   = '#dfa01c';
 export const FOG     = '#d9d3c6';
 export const BONE    = '#f4efe4';
 export const INK     = '#17191e';
+
+// A/B/C race-priority colours — must match the plan page's RaceBadge.
+export const RACE_PRIORITY_COLOR: Record<string, string> = {
+  A: '#8c2b2b', // oxblood
+  B: '#b5790f', // gold
+  C: '#14617e', // marine
+};
