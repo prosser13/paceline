@@ -232,6 +232,12 @@ export default function PlanThread({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const matchSourceById = new Map(manualMatches.map(m => [m.id, m.source]));
 
+  const tomorrowStr = (() => {
+    const d = new Date(todayStr + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  })();
+
   const toggleExpanded = (id: string) => setExpandedIds(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -395,11 +401,12 @@ export default function PlanThread({
   }
 
   function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean) {
-    const isToday   = dateStr === todayStr;
-    const d         = new Date(dateStr + 'T00:00:00');
-    const weekday   = d.toLocaleDateString('en-GB', { weekday: 'short' });
-    const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    const dim       = dimPast && !isToday;
+    const isToday    = dateStr === todayStr;
+    const isTomorrow = dateStr === tomorrowStr;
+    const d          = new Date(dateStr + 'T00:00:00');
+    const weekday    = d.toLocaleDateString('en-GB', { weekday: 'short' });
+    const dateLabel  = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const dim        = dimPast && !isToday;
 
     // If an extra activity was done this day, drop any "rest" filler — the day
     // wasn't a rest day. Planned (non-rest) sessions still render above the extras.
@@ -421,15 +428,20 @@ export default function PlanThread({
     return (
       <div key={dateStr} className={`flex gap-[14px] ${dim ? 'opacity-55' : ''}`}>
         <div className="w-[52px] shrink-0 pt-[8px] text-right">
-          <div className={`font-display font-semibold text-[15px] leading-none ${isToday ? 'text-oxblood' : 'text-ink'}`}>
+          <div className={`font-display font-semibold text-[15px] leading-none ${isToday ? 'text-oxblood' : isTomorrow ? 'text-marine' : 'text-ink'}`}>
             {weekday}
           </div>
           <div className="font-mono text-[12px] text-stone mt-[3px]">{dateLabel}</div>
         </div>
-        <div className={`flex-1 min-w-0 rounded-[12px] border bg-paper overflow-hidden ${isToday ? 'border-oxblood' : 'border-fog'}`}>
+        <div className={`flex-1 min-w-0 rounded-[12px] border bg-paper overflow-hidden ${isToday ? 'border-oxblood' : isTomorrow ? 'border-marine' : 'border-fog'}`}>
           {isToday && (
             <div className="px-[14px] py-[4px] bg-oxblood text-bone font-mono text-[10px] tracking-[.14em] uppercase">
               Today
+            </div>
+          )}
+          {isTomorrow && (
+            <div className="px-[14px] py-[4px] bg-marine text-bone font-mono text-[10px] tracking-[.14em] uppercase">
+              Tomorrow
             </div>
           )}
           <div className="divide-y divide-fog/50">
