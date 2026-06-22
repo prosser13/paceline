@@ -1,11 +1,12 @@
-import { createClient } from '@/lib/supabase-server';
+import { getCurrentUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import Sidebar from './Sidebar';
 import { listNavPlans } from '@/data/plans';
 
 export default async function AppShell({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  // Shares the request-cached lookup with page.tsx / the dashboard loader, so
+  // this resolves without an extra auth round-trip.
+  const user = await getCurrentUser();
   if (!user) redirect('/auth/login');
 
   const todayStr = new Date().toISOString().split('T')[0];

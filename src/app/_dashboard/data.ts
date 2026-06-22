@@ -1,7 +1,7 @@
 // Shared dashboard data loader — all the queries and derivations the dashboard
 // (src/app/page.tsx) and its sub-components need, in one place.
 
-import { createClient } from '@/lib/supabase-server';
+import { getCurrentUser } from '@/lib/supabase-server';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
@@ -142,8 +142,6 @@ export function formatSpineDay(iso: string): { weekday: string; date: string } {
 }
 
 export async function loadDashboardData(): Promise<DashboardData> {
-  const supabase = await createClient();
-
   const today       = new Date();
   const todayStr    = isoDate(today);
   const tomorrowStr = isoDate(addDays(today, 1));
@@ -153,7 +151,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   // ── Tier 1 ──
   const [
-    { data: { user } },
+    user,
     windowSessions,
     recent,
     thresholdPaceRaw,
@@ -166,7 +164,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     wellness,
     offPlanRaw,
   ] = await Promise.all([
-    supabase.auth.getUser(),
+    getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
     listCompletedBetween(weekAgoStr, todayStr),
     getThresholdPace(),

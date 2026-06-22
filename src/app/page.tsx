@@ -1,13 +1,19 @@
+import { redirect } from 'next/navigation';
 import AppShell from '@/components/AppShell';
 import { PhaseTimeline, FormMeter } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './_dashboard/data';
 import AgendaA from './_dashboard/AgendaA';
 import DashboardExtras from './_dashboard/DashboardExtras';
+import { getCurrentUser } from '@/lib/supabase-server';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
+  // Gate before any data loading: a logged-out request should redirect
+  // immediately, not load (and discard) a full dashboard's worth of queries.
+  if (!await getCurrentUser()) redirect('/auth/login');
+
   const d = await loadDashboardData();
   const noSessions = d.windowDays.every(x => x.sessions.length === 0);
 
