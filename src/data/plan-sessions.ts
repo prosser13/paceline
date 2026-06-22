@@ -89,7 +89,7 @@ export async function getEarliestSessionDate(): Promise<string | null> {
 export async function listSessionsForMatching() {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, distance_km, structure');
+    .select('id, scheduled_date, distance_km, structure, activity_type');
   return data ?? [];
 }
 

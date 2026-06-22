@@ -106,7 +106,16 @@ export async function getValidAccessToken(): Promise<string | null> {
   return refreshAccessToken(data.refresh_token);
 }
 
-const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const RUN_TYPES  = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide']);
+
+// Strava activity → the plan activity kind it can fulfil, or null if unsupported.
+// Strava sets `sport_type` (newer) and `type` (legacy); either may carry the kind.
+function activityKind(sportType: string, type: string): 'run' | 'ride' | null {
+  if (RUN_TYPES.has(sportType)  || RUN_TYPES.has(type))  return 'run';
+  if (RIDE_TYPES.has(sportType) || RIDE_TYPES.has(type)) return 'ride';
+  return null;
+}
 
 // ── Per-segment pacing (Strava streams) ──────────────────────
 
@@ -213,15 +222,19 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
 
   const all: StravaActivity[] = await res.json();
-  const runs = all.filter(a => RUN_TYPES.has(a.sport_type) || RUN_TYPES.has(a.type));
+  const relevant = all.filter(a => activityKind(a.sport_type, a.type) !== null);
 
-  if (!runs.length) {
+  if (!relevant.length) {
     await markStravaSynced();
     return { synced: 0, matched: 0 };
   }
 
+  // Strava id → which plan kind this activity can fulfil (runs match by distance,
+  // rides by date), resolved once here so the matcher needn't re-classify.
+  const kindByStravaId = new Map(relevant.map(a => [a.id, activityKind(a.sport_type, a.type)!]));
+
   await upsertActivities(
-    runs.map(a => ({
+    relevant.map(a => ({
       strava_activity_id: a.id,
       activity_date:      a.start_date_local.substring(0, 10),
       activity_type:      a.sport_type || a.type,
@@ -238,25 +251,43 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   );
 
   // Re-fetch stored rows to get their UUIDs + timing
-  const stored = await listActivitiesByStravaIds(runs.map(a => a.id));
-  if (!stored.length) return { synced: runs.length, matched: 0 };
+  const stored = await listActivitiesByStravaIds(relevant.map(a => a.id));
+  if (!stored.length) return { synced: relevant.length, matched: 0 };
 
   const planSessions = await listSessionsForMatching();
-  if (!planSessions.length) return { synced: runs.length, matched: 0 };
+  if (!planSessions.length) return { synced: relevant.length, matched: 0 };
 
   let matched = 0;
   for (const activity of stored) {
-    const actKm = Number(activity.distance_km);
+    const kind = kindByStravaId.get(activity.strava_activity_id);
+    if (!kind) continue;
 
-    // Pick the CLOSEST same-day session within 20%, not just the first.
+    const actKm = Number(activity.distance_km);
     let match: (typeof planSessions)[number] | null = null;
-    let bestErr = Infinity;
-    for (const s of planSessions) {
-      if (s.scheduled_date !== activity.activity_date) continue;
-      const planKm = Number(s.distance_km);
-      if (!(planKm > 0)) continue;
-      const err = Math.abs(actKm - planKm) / planKm;
-      if (err <= 0.2 && err < bestErr) { bestErr = err; match = s; }
+
+    if (kind === 'run') {
+      // Pick the CLOSEST same-day run/race session within 20% by distance.
+      let bestErr = Infinity;
+      for (const s of planSessions) {
+        if (s.activity_type === 'cycling') continue;
+        if (s.scheduled_date !== activity.activity_date) continue;
+        const planKm = Number(s.distance_km);
+        if (!(planKm > 0)) continue;
+        const err = Math.abs(actKm - planKm) / planKm;
+        if (err <= 0.2 && err < bestErr) { bestErr = err; match = s; }
+      }
+    } else {
+      // Rides have no reliable distance target (a Z2 ride drifts far from plan),
+      // so match the same-day cycling session; if a day has several, take the
+      // closest by distance, otherwise the first.
+      let bestErr = Infinity;
+      for (const s of planSessions) {
+        if (s.activity_type !== 'cycling') continue;
+        if (s.scheduled_date !== activity.activity_date) continue;
+        const planKm = Number(s.distance_km);
+        const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
+        if (err < bestErr) { bestErr = err; match = s; }
+      }
     }
     if (!match) continue;
 
@@ -265,19 +296,26 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     // completion still gets the completion written here.
     if (await completedWorkoutExistsForSession(match.id)) continue;
 
-    const seg = await computeForActivity(activity.strava_activity_id, match.structure, token);
+    // Per-segment pacing only applies to distance-structured runs.
+    const seg = kind === 'run'
+      ? await computeForActivity(activity.strava_activity_id, match.structure, token)
+      : null;
 
     await insertCompletedWorkout({
       plan_session_id:        match.id,
       completed_date:         activity.activity_date,
       actual_distance_km:     activity.distance_km,
       actual_duration_mins:   activity.duration_mins,
-      actual_avg_pace_min_km: activity.avg_pace_min_km,
+      // Pace is meaningless for rides; leaving it null stops the plan view from
+      // deriving a bogus pace-based TSS against a cycling activity.
+      actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,
       actual_avg_hr:          activity.avg_hr ?? null,
       strava_activity_id:     activity.strava_activity_id,
       source:                 'strava',
-      segment_actuals:        seg?.pace ?? null,
-      segment_hr:             seg?.hr ?? null,
+      // Rides carry no distance-segment pacing; store empty arrays (not null) so
+      // the run-only segment backfill doesn't re-examine them on every sync.
+      segment_actuals:        kind === 'run' ? (seg?.pace ?? null) : [],
+      segment_hr:             kind === 'run' ? (seg?.hr ?? null)   : [],
     });
 
     if (!(await planSessionHasMatch(match.id))) {
@@ -320,9 +358,9 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
 
   await markStravaSynced();
 
-  // A newly-detected run changes fitness/fatigue/form on intervals.icu — force
-  // the dashboard to refetch wellness on its next load.
+  // A newly-detected run or ride changes fitness/fatigue/form on intervals.icu —
+  // force the dashboard to refetch wellness on its next load.
   if (matched > 0) await invalidateWellnessCache();
 
-  return { synced: runs.length, matched };
+  return { synced: relevant.length, matched };
 }
