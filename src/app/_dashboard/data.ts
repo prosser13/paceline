@@ -346,8 +346,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
     weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
 
     const plannedByDate = new Map<string, number>();
+    const raceKmByDate = new Map<string, number>();
     for (const s of weekSessions ?? []) {
       plannedByDate.set(s.scheduled_date, (plannedByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
+      // Race days (any race type) get their distance flagged so the bar splits.
+      if (s.session_type === 'RACE') {
+        raceKmByDate.set(s.scheduled_date, (raceKmByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
+      }
     }
     const doneByDate = new Map<string, number>();
     for (const c of weekCompleted ?? []) {
@@ -368,7 +373,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
       else if (done > 0 && date < todayStr) { state = 'done'; km = done; }
       else if (planned > 0) { state = 'plan'; km = planned; }
       else { state = 'rest'; km = 0; }
-      return { label, km, state };
+      const raceKm = raceKmByDate.get(date) ?? 0;
+      return { label, km, state, ...(raceKm > 0 && km > 0 ? { raceKm } : {}) };
     });
   }
 

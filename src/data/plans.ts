@@ -80,6 +80,26 @@ export async function getNextRace(fromDate: string): Promise<NextRace | null> {
   return (data as NextRace | null) ?? null;
 }
 
+export interface PlanBySlug {
+  id: number;
+  name: string;
+  slug: string | null;
+  race_date: string | null;
+  distance_km: number | null;
+  target_time: string | null;
+  target_pace: string | null;
+}
+
+// Full plan row for a race-guide hero page, by slug, or null.
+export async function getPlanBySlug(slug: string): Promise<PlanBySlug | null> {
+  const { data } = await supabaseAdmin
+    .from('plans')
+    .select('id, name, slug, race_date, distance_km, target_time, target_pace')
+    .eq('slug', slug)
+    .maybeSingle();
+  return (data as PlanBySlug | null) ?? null;
+}
+
 // Distance + current goal pace for a plan, or null (target-time form).
 export async function getPlanTargetInfo(planId: number): Promise<
   { id: number; distance_km: number | null; target_pace: string | null } | null
@@ -130,6 +150,24 @@ export async function listWeeksByNumber() {
     .select('*')
     .order('week_number');
   return data ?? [];
+}
+
+// Weeks for a plan with planned volume — drives the weekly running-volume chart.
+export async function listPlanWeeks(planId: number): Promise<
+  { week_number: number; phase: string; date_from: string; date_to: string; planned_volume_km: number | null }[]
+> {
+  const { data } = await supabaseAdmin
+    .from('plan_weeks')
+    .select('week_number, phase, date_from, date_to, planned_volume_km')
+    .eq('plan_id', planId)
+    .order('week_number');
+  return (data ?? []).map(w => ({
+    week_number: w.week_number as number,
+    phase: w.phase as string,
+    date_from: w.date_from as string,
+    date_to: w.date_to as string,
+    planned_volume_km: w.planned_volume_km != null ? Number(w.planned_volume_km) : null,
+  }));
 }
 
 // Phase timeline for a plan — weeks in order with just the timeline fields.

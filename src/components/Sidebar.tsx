@@ -70,6 +70,16 @@ export default function Sidebar({
       </div>
 
       <Link
+        href="/races"
+        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
+          pathname.startsWith('/races') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
+        }`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname.startsWith('/races') ? 'bg-bone' : 'bg-fog'}`} />
+        Races
+      </Link>
+
+      <Link
         href="/strength"
         className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
           pathname.startsWith('/strength') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'

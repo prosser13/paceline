@@ -23,14 +23,59 @@ export async function listSessionsBetween(from: string, to: string) {
   return data ?? [];
 }
 
-// Scheduled date + distance for sessions within [from, to] (weekly volume).
+// Scheduled date + distance (+ type, to flag race days) for sessions within
+// [from, to] (weekly volume).
 export async function listSessionDistancesBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('scheduled_date, distance_km')
+    .select('scheduled_date, distance_km, session_type')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to);
   return data ?? [];
+}
+
+// Planned TSS per scheduled date within [from, to], summed across sessions that
+// carry an estimate (used to project fitness/fatigue forward to race day).
+export async function listPlannedTssBetween(
+  from: string,
+  to: string,
+): Promise<{ date: string; tss: number }[]> {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('scheduled_date, estimated_tss')
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', to)
+    .not('estimated_tss', 'is', null);
+
+  const byDate = new Map<string, number>();
+  for (const r of data ?? []) {
+    const d = r.scheduled_date as string;
+    byDate.set(d, (byDate.get(d) ?? 0) + Number(r.estimated_tss));
+  }
+  return [...byDate.entries()].map(([date, tss]) => ({ date, tss }));
+}
+
+// Completed *running* distances for a plan (excludes rides/strength), as
+// completed_date + km — bucketed into weeks for the weekly-volume chart.
+export async function listRunningDoneForPlan(
+  planId: number,
+): Promise<{ date: string; km: number }[]> {
+  const { data: runRows } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id')
+    .eq('plan_id', planId)
+    .eq('activity_type', 'running');
+  const ids = (runRows ?? []).map(r => r.id as string);
+  if (!ids.length) return [];
+
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, actual_distance_km')
+    .in('plan_session_id', ids);
+
+  return (data ?? [])
+    .filter(r => r.completed_date && r.actual_distance_km != null)
+    .map(r => ({ date: r.completed_date as string, km: Number(r.actual_distance_km) }));
 }
 
 // Every session in schedule order (plan page).

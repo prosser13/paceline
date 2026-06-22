@@ -266,6 +266,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       distanceKm={p.distance_km}
       targetTime={p.target_time}
       targetPace={p.target_pace}
+      slug={p.slug}
     />
   );
 

@@ -14,8 +14,11 @@ function fmtDate(dateStr: string, year = false): string {
   });
 }
 
+import Link from 'next/link';
+import { getRaceGuide } from '@/data/races';
+
 export default function RaceBlock({
-  name, kind = 'race', raceDate, startDate, endDate, distanceKm, targetTime, targetPace,
+  name, kind = 'race', raceDate, startDate, endDate, distanceKm, targetTime, targetPace, slug,
 }: {
   name: string;
   kind?: string;
@@ -25,7 +28,10 @@ export default function RaceBlock({
   distanceKm?: number | null;
   targetTime?: string | null;
   targetPace?: string | null;
+  slug?: string | null;
 }) {
+  // Only link to a guide that actually exists for this slug.
+  const hasGuide = !!slug && !!getRaceGuide(slug);
   // ── Recovery block ──────────────────────────────────────────
   if (kind === 'recovery') {
     const startsIn = startDate ? daysUntil(startDate) : null;
@@ -67,6 +73,14 @@ export default function RaceBlock({
                 weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
               })}
             </p>
+          )}
+          {hasGuide && (
+            <Link
+              href={`/races/${slug}`}
+              className="inline-block font-mono text-[12px] tracking-[.08em] uppercase text-bone border border-bone/30 rounded-[6px] px-[10px] py-[5px] mt-[12px] hover:bg-bone/10 active:opacity-70 transition-colors"
+            >
+              Race guide →
+            </Link>
           )}
         </div>
         {days != null && (

@@ -17,7 +17,7 @@ const PHASE_HEX: Record<string, string> = {
   Base: MARINE, Build: AMBER, Peak: EMBER, Taper: FERN,
 };
 
-function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
+export function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-[18px] py-[10px]" style={{ background: accent, color: BONE }}>
       <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">{children}</span>
@@ -26,7 +26,7 @@ function CardHeader({ accent, children, right }: { accent: string; children: Rea
   );
 }
 
-const cardClass = 'flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper';
+export const cardClass = 'flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper';
 
 /* ── Phase timeline (top-left) ─────────────────────────────── */
 
@@ -238,7 +238,13 @@ export function CountdownRing({
 
 /* ── Weekly volume bars (bottom) ───────────────────────────── */
 
-export interface WeekDay { label: string; km: number; state: 'done' | 'today' | 'plan' | 'rest' }
+export interface WeekDay {
+  label: string;
+  km: number;
+  state: 'done' | 'today' | 'plan' | 'rest';
+  /** Portion of `km` that is race distance — drawn as a distinct top segment. */
+  raceKm?: number;
+}
 
 export function WeeklyBars({
   headerLabel, days, weekDoneKm, weekPlannedKm, daysToRace, raceName,
@@ -252,6 +258,7 @@ export function WeeklyBars({
 }) {
   const maxKm = Math.max(...days.map(d => d.km), 1);
   const toGo = weekPlannedKm != null ? Math.max(0, Math.round(weekPlannedKm - weekDoneKm)) : null;
+  const hasRace = days.some(d => (d.raceKm ?? 0) > 0);
 
   return (
     <div className={cardClass}>
@@ -264,6 +271,20 @@ export function WeeklyBars({
             const h = d.state === 'rest' || d.km <= 0 ? 4 : Math.max(6, Math.round((d.km / maxKm) * 60));
             const bg = d.state === 'plan' || d.state === 'rest' ? FOG : OXBLOOD;
             const outline = d.state === 'today' ? { outline: `2px solid ${AMBER}`, outlineOffset: '1px' } : {};
+            const raceKm = Math.min(d.raceKm ?? 0, d.km);
+            if (raceKm > 0 && d.km > 0) {
+              // Split bar: race distance as a marine cap above the week's other km.
+              const raceH = Math.max(3, Math.round((raceKm / d.km) * h));
+              const baseH = Math.max(0, h - raceH);
+              return (
+                <div key={i} className="flex-1 flex flex-col justify-end">
+                  <div className="rounded-[4px] overflow-hidden flex flex-col" style={{ height: `${h}px`, ...outline }}>
+                    <div style={{ height: `${raceH}px`, background: MARINE }} />
+                    <div style={{ height: `${baseH}px`, background: bg }} />
+                  </div>
+                </div>
+              );
+            }
             return (
               <div key={i} className="flex-1 flex flex-col justify-end">
                 <div className="rounded-[4px]" style={{ height: `${h}px`, background: bg, ...outline }} />
@@ -291,6 +312,12 @@ export function WeeklyBars({
             <span className="font-mono text-[11px] text-stone flex items-center">
               <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: FOG }} />
               {toGo} planned
+            </span>
+          )}
+          {hasRace && (
+            <span className="font-mono text-[11px] text-stone flex items-center">
+              <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: MARINE }} />
+              race day
             </span>
           )}
         </div>
