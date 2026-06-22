@@ -4,9 +4,8 @@ import AppShell from '@/components/AppShell';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
-import WeekAccordion from './WeekAccordion';
+import PlanThread from './PlanThread';
 import RaceBlock from './RaceBlock';
-import PastWeeksAccordion from './PastWeeksAccordion';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 
@@ -238,33 +237,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       ))
     : null;
 
-  // Past weeks collapse into a single greyed accordion; current + future stay open
-  const pastWeeks   = viewWeeks.filter(w => w.date_to < todayStr);
-  const futureWeeks = viewWeeks.filter(w => w.date_to >= todayStr);
-  let pastLabel = '';
-  if (pastWeeks.length === 1) {
-    pastLabel = `Week ${pastWeeks[0].week_number} · done`;
-  } else if (pastWeeks.length > 1) {
-    pastLabel = `Weeks ${pastWeeks[0].week_number}–${pastWeeks[pastWeeks.length - 1].week_number} · done`;
-  }
-
-  const renderWeek = (week: PlanWeek) => (
-    <WeekAccordion
-      key={week.week_number}
-      week={week}
-      sessions={byWeek[week.week_number] ?? []}
-      thresholdPace={thresholdPace}
-      todayStr={todayStr}
-      defaultOpen={week.date_from <= todayStr && week.date_to >= todayStr}
-      completedMap={completedMap}
-      nextSessionId={nextSessionId}
-      zones={zones}
-      hrZones={hrZones}
-      powerZones={powerZones}
-      bikeHrZones={bikeHrZones}
-    />
-  );
-
   const planBlock = (p: PlanRow) => (
     <RaceBlock
       name={p.name}
@@ -318,14 +290,18 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const weeksSection = (
     <>
       {phaseBar}
-      <div className="flex flex-col gap-[10px]">
-        {pastWeeks.length > 0 && (
-          <PastWeeksAccordion label={pastLabel}>
-            {pastWeeks.map(renderWeek)}
-          </PastWeeksAccordion>
-        )}
-        {futureWeeks.map(renderWeek)}
-      </div>
+      <PlanThread
+        weeks={viewWeeks}
+        byWeek={byWeek}
+        todayStr={todayStr}
+        completedMap={completedMap}
+        nextSessionId={nextSessionId}
+        thresholdPace={thresholdPace}
+        zones={zones}
+        hrZones={hrZones}
+        powerZones={powerZones}
+        bikeHrZones={bikeHrZones}
+      />
     </>
   );
 
