@@ -6,6 +6,7 @@ import SessionHero from './SessionHero';
 import SessionRows from './SessionRows';
 import StrengthHero from '@/components/StrengthHero';
 import CyclingHero from '@/components/CyclingHero';
+import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
 import WeekStrip from './WeekStrip';
 import { OXBLOOD, MARINE, FERN } from '@/lib/colors';
@@ -78,6 +79,13 @@ export default function AgendaA({ d }: { d: DashboardData }) {
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
               {strengthBlock(d.todayStrength, 'Today')}
             </>
+          )}
+          {d.offPlanToday.length > 0 && (
+            <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+              <div className="divide-y divide-fog/50">
+                {d.offPlanToday.map(a => <OffPlanRow key={a.id} activity={a} />)}
+              </div>
+            </div>
           )}
         </Node>
 

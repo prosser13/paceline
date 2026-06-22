@@ -11,6 +11,8 @@ import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
   getCompletedForSession, listCompletedDistancesBetween,
 } from '@/data/plan-sessions';
+import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { activityKind } from '@/lib/activity-types';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
@@ -96,6 +98,9 @@ export interface DashboardData {
   fitnessHistory: { date: string; ctl: number; atl: number }[] | null;
 
   last7: { totalKm: number; sessions: number; h: number; m: number; totalTss: number };
+
+  offPlanToday: OffPlanActivity[];   // extras done today (shown under the Today node)
+  offPlanRecent: OffPlanActivity[];  // extras in the last 7 days (excl. today)
 }
 
 function addDays(date: Date, n: number): Date {
@@ -158,6 +163,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     weekRow,
     raceRow,
     wellness,
+    offPlanRaw,
   ] = await Promise.all([
     supabase.auth.getUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -170,6 +176,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
     getWellnessCached(),
+    listOffPlanActivitiesBetween(weekAgoStr, todayStr),
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
@@ -203,6 +210,17 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshParts   = thresholdPace.split(':').map(Number);
   const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
+
+  // Off-plan extras: run TSS from pace, then split today vs recent (newest-first
+  // already from the query).
+  for (const a of offPlanRaw) {
+    if (activityKind(a.activityType) === 'run' && a.durationMins != null && a.avgPaceMinKm && a.avgPaceMinKm > 0) {
+      const IF = threshMinKm / a.avgPaceMinKm;
+      a.tss = Math.round((a.durationMins / 60) * IF * IF * 100);
+    }
+  }
+  const offPlanToday  = offPlanRaw.filter(a => a.date === todayStr);
+  const offPlanRecent = offPlanRaw.filter(a => a.date !== todayStr);
 
   const zones: ZoneMap = {};
   for (const z of paceZones) {
@@ -384,5 +402,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     weekPlannedKm, weekDoneKm, weekDays,
     fitnessForm, fitnessHistory,
     last7: { totalKm, sessions, h, m, totalTss },
+    offPlanToday, offPlanRecent,
   };
 }
