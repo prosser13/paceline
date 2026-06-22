@@ -5,7 +5,7 @@ import { CyclingDetailTable } from './CyclingRow';
 import { BikeGlyph } from './glyphs';
 import { MARINE, BONE } from '@/lib/colors';
 import {
-  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower,
+  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock,
   type PowerZoneMap, type BikeHrZoneMap,
 } from '@/lib/cycling';
 
@@ -25,7 +25,6 @@ export default function CyclingHero({
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
   const totalMins = sumCyclingMinutes(segments);
   const duration  = totalMins > 0 ? fmtRideClock(totalMins) : session.estimated_duration ?? null;
-  const lead = segments[0];
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
@@ -43,7 +42,6 @@ export default function CyclingHero({
           </div>
           <div className="shrink-0 text-right">
             <div className="font-display font-semibold text-[30px] leading-none text-ink">{duration ?? '—'}</div>
-            {lead && <div className="font-mono text-[14px] text-stone mt-[4px]">{fmtPower(lead.powerMin, lead.powerMax)}</div>}
           </div>
         </div>
 

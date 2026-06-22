@@ -127,7 +127,7 @@ export default function SessionRows({
         s.session_type === 'STRENGTH'
           ? <StrengthRowCompact key={s.id} session={s} />
           : s.activity_type === 'cycling'
-            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact />
+            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph />
             : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} />,
       )}
     </div>
