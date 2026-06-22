@@ -14,7 +14,7 @@ import CyclingRow from '@/components/CyclingRow';
 import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
-import { unlinkSession } from './match-actions';
+import { unlinkSession, removePromotedSession } from './match-actions';
 import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
@@ -185,18 +185,23 @@ function RaceBadge({ priority }: { priority: string }) {
   );
 }
 
-// Sub-row under a manually-linked session — lets the user undo the link.
-function UnlinkFooter({ sessionId }: { sessionId: string }) {
+// Sub-row under a user-attached session — undo a manual link, or remove a
+// promoted (off-plan → plan) session entirely.
+function UnlinkFooter({ sessionId, source }: { sessionId: string; source: 'manual' | 'promoted' }) {
   const [pending, start] = useTransition();
   const router = useRouter();
+  const promoted = source === 'promoted';
+  const run = () => start(async () => {
+    await (promoted ? removePromotedSession(sessionId) : unlinkSession(sessionId));
+    router.refresh();
+  });
   return (
     <div className="flex items-center gap-[8px] px-[16px] py-[6px] bg-bone/40 font-mono text-[11px] text-stone">
-      <span className="tracking-[.08em] uppercase">Linked manually</span>
+      <span className="tracking-[.08em] uppercase">{promoted ? 'Added to plan' : 'Linked manually'}</span>
       <span className="text-fog">·</span>
-      <button type="button" disabled={pending}
-        onClick={() => start(async () => { await unlinkSession(sessionId); router.refresh(); })}
+      <button type="button" disabled={pending} onClick={run}
         className="tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer">
-        {pending ? 'Unlinking…' : 'Unlink'}
+        {pending ? '…' : promoted ? 'Remove' : 'Unlink'}
       </button>
     </div>
   );
@@ -208,7 +213,7 @@ interface Props {
   weeks: PlanWeek[];
   byWeek: Record<number, PlanSession[]>;
   offPlanByDate?: Record<string, OffPlanActivity[]>;
-  manualMatchIds?: string[];
+  manualMatches?: { id: string; source: 'manual' | 'promoted' }[];
   todayStr: string;
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
@@ -220,12 +225,12 @@ interface Props {
 }
 
 export default function PlanThread({
-  weeks, byWeek, offPlanByDate = {}, manualMatchIds = [], todayStr, completedMap, nextSessionId,
+  weeks, byWeek, offPlanByDate = {}, manualMatches = [], todayStr, completedMap, nextSessionId,
   thresholdPace, zones, hrZones, powerZones, bikeHrZones,
 }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const manualMatchSet = new Set(manualMatchIds);
+  const matchSourceById = new Map(manualMatches.map(m => [m.id, m.source]));
 
   const toggleExpanded = (id: string) => setExpandedIds(prev => {
     const next = new Set(prev);
@@ -249,10 +254,11 @@ export default function PlanThread({
 
     if (isRest) return <RestCard key={session.id} />;
 
-    // Manually-linked sessions get an "Unlink" footer below the row.
+    // User-attached sessions (manual link / promotion) get an undo footer.
+    const matchSource = matchSourceById.get(session.id);
     const withUnlink = (node: React.ReactNode) =>
-      manualMatchSet.has(session.id)
-        ? <div key={session.id}>{node}<UnlinkFooter sessionId={session.id} /></div>
+      matchSource
+        ? <div key={session.id}>{node}<UnlinkFooter sessionId={session.id} source={matchSource} /></div>
         : node;
 
     if (session.session_type === 'STRENGTH') {
