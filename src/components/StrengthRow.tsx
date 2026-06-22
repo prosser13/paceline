@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { humanHMM } from './session-ui';
 import { Dumbbell } from './glyphs';
+import { GOLD } from '@/lib/colors';
 
 export interface StrengthEx {
   name: string;
@@ -76,7 +77,8 @@ export default function StrengthRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] border-l-stone/40 px-[16px] py-[12px] ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
+        className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
+        style={{ borderLeftColor: GOLD }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
@@ -91,11 +93,6 @@ export default function StrengthRow({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            {today && (
-              <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
-                Today
-              </span>
-            )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
             <Dumbbell size={15} className="text-stone shrink-0" />
             <span className="text-[16.5px] font-semibold text-ink">Strength</span>

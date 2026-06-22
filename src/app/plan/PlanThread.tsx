@@ -64,15 +64,6 @@ const PHASE_HEX: Record<string, string> = {
 
 const RACE_COLOR: Record<string, string> = { A: '#8c2b2b', B: '#b5790f', C: '#14617e' };
 
-const STATUS_RAIL: Record<SessionStatus, string> = {
-  done:          'border-l-fern/70',
-  today:         'border-l-oxblood',
-  planned:       'border-l-transparent',
-  missed_injury: 'border-l-ember',
-  skipped:       'border-l-transparent',
-  rest:          'border-l-transparent',
-};
-
 const REST_SHEETS = 'repeating-linear-gradient(135deg,#fbf8f2,#fbf8f2 9px,#f4efe4 9px,#f4efe4 18px)';
 
 function parseDurationMins(str: string | null | undefined): number | null {
@@ -307,12 +298,10 @@ export default function PlanThread({
       tssDelta != null && tssPct != null && durDelta != null && durPct != null
         ? { tssDelta, tssPct, durDelta, durPct } : null;
 
-    const railClass = isFocus ? 'border-l-oxblood' : STATUS_RAIL[status];
-
     return (
       <div key={session.id}>
         <div
-          className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${railClass} ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
+          className={`flex items-center gap-[14px] border-l-[3px] border-l-fern px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
           onClick={() => toggleExpanded(session.id)}
           role="button"
           tabIndex={0}
@@ -321,9 +310,9 @@ export default function PlanThread({
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-[7px] flex-wrap leading-tight">
-              {isFocus && (
+              {isNext && !isToday && (
                 <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
-                  {isToday ? 'Today' : 'Next up'}
+                  Next up
                 </span>
               )}
               {isRace && (
