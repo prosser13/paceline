@@ -33,10 +33,10 @@ export default function AgendaA({ d }: { d: DashboardData }) {
     else groups.push({ iso: s.scheduled_date, sessions: [s] });
   }
   const todayDone = !!d.todayCompleted;
-  const strengthBlock = (s: PlanSession | null, label: string) => s ? (
+  const strengthBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
-      exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} />
+      exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} done={done} />
   ) : null;
 
   // The day's primary activity hero — a ride or a run, depending on activity_type.
@@ -71,13 +71,13 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           labelColor={todayDone ? FERN : OXBLOOD}>
           {strengthLeads ? (
             <>
-              {strengthBlock(d.todayStrength, 'Today')}
+              {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today')}
             </>
           ) : (
             <>
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
-              {strengthBlock(d.todayStrength, 'Today')}
+              {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
             </>
           )}
           {d.offPlanToday.length > 0 && (

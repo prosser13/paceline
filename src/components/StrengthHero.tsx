@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { type StrengthEx, StrengthDetailTable } from './StrengthRow';
 import { humanHMM } from './session-ui';
 import { Dumbbell } from './glyphs';
-import { GOLD, BONE } from '@/lib/colors';
+import { GOLD, FERN, BONE } from '@/lib/colors';
 import { startPlannedSession } from '@/app/strength/actions';
 
 // Dashboard hero for a strength session — mirrors the run SessionHero: coloured
@@ -13,10 +13,10 @@ import { startPlannedSession } from '@/app/strength/actions';
 // accordion with the exercises (in order, with a muscle-group pill), and a CTA
 // that loads the planned session.
 export default function StrengthHero({
-  label, planSessionId, focus, duration, note, exercises,
+  label, planSessionId, focus, duration, note, exercises, done = false,
 }: {
   label: string; planSessionId: string; focus: string | null; duration: string | null;
-  note: string | null; exercises: StrengthEx[];
+  note: string | null; exercises: StrengthEx[]; done?: boolean;
 }) {
   const [open, setOpen] = useState(false); // strength detail is less critical than the run — collapsed by default
   const [pending, start] = useTransition();
@@ -31,9 +31,17 @@ export default function StrengthHero({
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-      {/* Gold header bar */}
-      <div className="px-[26px] py-[12px]" style={{ background: GOLD, color: BONE }}>
+      {/* Header bar — gold when planned, fern when completed */}
+      <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: done ? FERN : GOLD, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
+        {done && (
+          <span className="flex items-center gap-[7px] font-mono text-[13px]">
+            ✓ Completed
+            <svg width="13" height="13" viewBox="0 0 24 24" fill={BONE} role="img" aria-label="Strava">
+              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+            </svg>
+          </span>
+        )}
       </div>
 
       <div className="p-[22px_26px]">
@@ -66,10 +74,12 @@ export default function StrengthHero({
           )}
         </div>
 
-        <button type="button" onClick={go} disabled={pending}
-          className="flex items-center justify-center gap-[8px] w-full bg-oxblood text-bone text-[15px] font-medium py-[12px] rounded-[10px] hover:bg-oxblood-dark transition-colors disabled:opacity-50 mt-[16px]">
-          {pending ? 'Loading…' : 'Do this session →'}
-        </button>
+        {!done && (
+          <button type="button" onClick={go} disabled={pending}
+            className="flex items-center justify-center gap-[8px] w-full bg-oxblood text-bone text-[15px] font-medium py-[12px] rounded-[10px] hover:bg-oxblood-dark transition-colors disabled:opacity-50 mt-[16px]">
+            {pending ? 'Loading…' : 'Do this session →'}
+          </button>
+        )}
       </div>
     </div>
   );

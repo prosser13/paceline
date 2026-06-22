@@ -67,6 +67,7 @@ export interface DashboardData {
   todayStrength: PlanSession | null;
   tomorrowStrength: PlanSession | null;
   todayCompleted: CompletedToday | null;
+  todayStrengthDone: boolean;
   strengthFirst: boolean;
 
   upcomingWithRest: PlanSession[]; // days +2..+7, rest-filled
@@ -299,8 +300,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [cw, weekData, planWeeks, strengthFirst] = await Promise.all([
+  const [cw, strengthCw, weekData, planWeeks, strengthFirst] = await Promise.all([
     todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
+    todayStrength ? getCompletedForSession(todayStrength.id) : Promise.resolve(null),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
           listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
@@ -392,7 +394,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   return {
     firstName, greeting: greet(), todayFull, todayStr,
-    todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayCompleted, strengthFirst,
+    todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayCompleted,
+    todayStrengthDone: !!strengthCw,
+    strengthFirst,
     upcomingWithRest, windowDays,
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
     hasPlanWeek: !!weekRow,
