@@ -22,7 +22,7 @@ export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; t
           <thead>
             <tr className="text-stone font-mono text-[10px] uppercase tracking-[.08em]">
               <th className="text-left font-normal px-[16px] py-[9px]">Checkpoint</th>
-              <th className="text-right font-normal px-[10px] py-[9px]">Mile</th>
+              <th className="text-right font-normal px-[10px] py-[9px]">Km</th>
               <th className="text-right font-normal px-[10px] py-[9px]">Elapsed</th>
               <th className="text-right font-normal px-[10px] py-[9px]">Arrive</th>
               <th className="text-right font-normal px-[10px] py-[9px]">Leg /km</th>
@@ -40,7 +40,7 @@ export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; t
                     </span>
                   )}
                 </td>
-                <td className="px-[10px] py-[9px] text-right font-mono text-stone">{r.distanceMi}</td>
+                <td className="px-[10px] py-[9px] text-right font-mono text-stone">{r.distanceKm}</td>
                 <td className="px-[10px] py-[9px] text-right font-mono text-ink">{r.cumElapsed}</td>
                 <td className="px-[10px] py-[9px] text-right font-mono text-ink">{r.arrival}</td>
                 <td className="px-[10px] py-[9px] text-right font-mono text-stone">{r.legPace ?? '—'}</td>

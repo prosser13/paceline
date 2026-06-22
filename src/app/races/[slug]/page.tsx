@@ -71,7 +71,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   // Weekly running-volume bars: actual done km for past/current weeks, planned
   // for upcoming weeks — the build → taper shape into race day.
-  const raceKm = plan?.distance_km ?? Math.round(guide.distanceMi * 1.609);
+  const raceKm = plan?.distance_km ?? guide.distanceKm;
   const weekBars: WeekDay[] = planWeeks.map(w => {
     const doneKm = runningDone
       .filter(d => d.date >= w.date_from && d.date <= w.date_to)
@@ -139,7 +139,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           </div>
           <div className="bg-paper grid grid-cols-2 sm:grid-cols-4 divide-x divide-fog">
             {[
-              { label: 'Distance', value: distanceKm != null ? `${distanceKm} km` : `${guide.distanceMi} mi` },
+              { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
               { label: 'Ascent', value: `${guide.ascentM} m` },
               { label: 'Target time', value: targetTime },
               { label: 'Target pace', value: targetPace ? `${targetPace}/km` : '—' },
@@ -157,9 +157,9 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         {/* ── Course ── */}
         <SectionLabel>Course</SectionLabel>
         <div className="grid lg:grid-cols-2 gap-[14px]">
-          <RouteMap parsed={parsed} checkpoints={guide.checkpoints} totalMi={guide.distanceMi} />
+          <RouteMap parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
           <div className="flex flex-col gap-[14px]">
-            <ElevationProfile parsed={parsed} checkpoints={guide.checkpoints} totalMi={guide.distanceMi} />
+            <ElevationProfile parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
             <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[15px]">
               <p className="font-mono text-[10px] uppercase tracking-[.1em] text-stone mb-[8px]">Terrain</p>
               <ul className="flex flex-col gap-[5px]">

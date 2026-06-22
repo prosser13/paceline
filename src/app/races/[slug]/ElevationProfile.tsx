@@ -16,35 +16,35 @@ const PAD_T = 10;
 export default function ElevationProfile({
   parsed,
   checkpoints,
-  totalMi,
+  totalKm: routeKm,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
-  totalMi: number;
+  totalKm: number;
 }) {
-  // Build (distanceMi, ele) samples either from the GPX or the checkpoint table.
-  let samples: { mi: number; ele: number }[];
+  // Build (km, ele) samples either from the GPX or the checkpoint table.
+  let samples: { km: number; ele: number }[];
   let usingGpx = false;
   const withEle = parsed?.points.filter(p => p.ele != null) ?? [];
 
   if (parsed && withEle.length > 1) {
     usingGpx = true;
-    const totalKm = parsed.totalKm;
-    samples = withEle.map(p => ({ mi: (p.distKm / totalKm) * totalMi, ele: p.ele as number }));
+    const gpxKm = parsed.totalKm;
+    samples = withEle.map(p => ({ km: (p.distKm / gpxKm) * routeKm, ele: p.ele as number }));
   } else {
     // Proxy "profile" from cumulative ascent at each checkpoint (monotonic — a
     // rough silhouette, clearly a fallback).
-    samples = checkpoints.map(c => ({ mi: c.distanceMi, ele: c.ascentM ?? 0 }));
+    samples = checkpoints.map(c => ({ km: c.distanceKm, ele: c.ascentM ?? 0 }));
   }
 
   const minE = Math.min(...samples.map(s => s.ele));
   const maxE = Math.max(...samples.map(s => s.ele), minE + 1);
   const spanE = maxE - minE || 1;
 
-  const sx = (mi: number) => PAD_L + (mi / totalMi) * (W - PAD_L - 8);
+  const sx = (km: number) => PAD_L + (km / routeKm) * (W - PAD_L - 8);
   const sy = (ele: number) => PAD_T + (1 - (ele - minE) / spanE) * (H - PAD_T - PAD_B);
 
-  const line = samples.map(s => `${sx(s.mi).toFixed(1)},${sy(s.ele).toFixed(1)}`).join(' ');
+  const line = samples.map(s => `${sx(s.km).toFixed(1)},${sy(s.ele).toFixed(1)}`).join(' ');
   const area = `${PAD_L},${(H - PAD_B).toFixed(1)} ${line} ${(W - 8).toFixed(1)},${(H - PAD_B).toFixed(1)}`;
 
   const mid = checkpoints.filter(c => c.index > 0 && c.index < checkpoints.length - 1);
@@ -61,7 +61,7 @@ export default function ElevationProfile({
 
         {/* checkpoint markers */}
         {mid.map(c => {
-          const x = sx(c.distanceMi);
+          const x = sx(c.distanceKm);
           return (
             <g key={c.index}>
               <line x1={x} y1={PAD_T} x2={x} y2={H - PAD_B} stroke={MARINE} strokeWidth={0.75} opacity={0.4} strokeDasharray="2 3" />

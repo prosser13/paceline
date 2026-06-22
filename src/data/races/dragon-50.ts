@@ -11,7 +11,7 @@ export const DRAGON_50: RaceGuide = {
   region: 'South Wales coast — Kenfig to Cardiff Bay',
   start: { name: 'Kenfig Nature Reserve', lat: 51.5031, lng: -3.7283 },
   finish: { name: 'Norwegian Church, Cardiff Bay', lat: 51.4636, lng: -3.1656 },
-  distanceMi: 50.5,
+  distanceKm: 81.3,
   ascentM: 1150,
   startTime: '07:30', // midnight finish cut-off at 16.5 h ⇒ 07:30 start
   // Drop the user-supplied GPX here. The map/elevation render a placeholder
@@ -33,25 +33,25 @@ export const DRAGON_50: RaceGuide = {
   ],
 
   checkpoints: [
-    { index: 0, name: 'Start — Kenfig Nature Reserve', distanceMi: 0, ascentM: 0, cutoff: null,
-      supplies: 'Toilets. 4.5-mile loop of the reserve before CP1.' },
-    { index: 1, name: 'CP1 · Kenfig', distanceMi: 4.5, ascentM: 30, cutoff: null,
+    { index: 0, name: 'Start — Kenfig Nature Reserve', distanceKm: 0, ascentM: 0, cutoff: null,
+      supplies: 'Toilets. 7.2 km loop of the reserve before CP1.' },
+    { index: 1, name: 'CP1 · Kenfig', distanceKm: 7.2, ascentM: 30, cutoff: null,
       supplies: 'Sweets, biscuits, crisps, crackers, fruit, water, squash. Toilets.' },
-    { index: 2, name: 'CP2 · Newton', distanceMi: 11, ascentM: 100, cutoff: null,
+    { index: 2, name: 'CP2 · Newton', distanceKm: 17.7, ascentM: 100, cutoff: null,
       supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.' },
-    { index: 3, name: 'CP3 · Southerndown', distanceMi: 19.5, ascentM: 200, cutoff: '14:00',
+    { index: 3, name: 'CP3 · Southerndown', distanceKm: 31.4, ascentM: 200, cutoff: '14:00',
       supplies: 'Hot drinks, soup, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.' },
-    { index: 4, name: 'CP4 · Llantwit Major', distanceMi: 27, ascentM: 650, cutoff: '17:00', dropBag: true,
+    { index: 4, name: 'CP4 · Llantwit Major', distanceKm: 43.5, ascentM: 650, cutoff: '17:00', dropBag: true,
       supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
       note: 'Drop-bag access here.' },
-    { index: 5, name: 'CP5 · Aberthaw', distanceMi: 31, ascentM: 700, cutoff: '18:30',
+    { index: 5, name: 'CP5 · Aberthaw', distanceKm: 49.9, ascentM: 700, cutoff: '18:30',
       supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.',
       note: 'No supporters or support crews at this checkpoint.' },
-    { index: 6, name: 'CP6 · Porthkerry Park', distanceMi: 37.5, ascentM: 900, cutoff: '20:00',
+    { index: 6, name: 'CP6 · Porthkerry Park', distanceKm: 60.4, ascentM: 900, cutoff: '20:00',
       supplies: 'Hot dogs, hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets nearby.' },
-    { index: 7, name: 'CP7 · Sully', distanceMi: 43.5, ascentM: 1000, cutoff: '22:00',
+    { index: 7, name: 'CP7 · Sully', distanceKm: 70.0, ascentM: 1000, cutoff: '22:00',
       supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.' },
-    { index: 8, name: 'Finish — Norwegian Church', distanceMi: 50.5, ascentM: 1150, cutoff: '00:00',
+    { index: 8, name: 'Finish — Norwegian Church', distanceKm: 81.3, ascentM: 1150, cutoff: '00:00',
       supplies: 'Cardiff Bay. Midnight cut-off (16.5 h).' },
   ],
 
@@ -69,16 +69,16 @@ export const DRAGON_50: RaceGuide = {
 
   coachNotes: [
     { heading: 'Pace the first half like it’s the warm-up',
-      body: 'The course is at its most runnable in the first 20 miles. The temptation is to bank time on ' +
-            'the flat early miles; resist it. The climbs cluster after CP4 (Llantwit Major) where you ' +
-            'jump from 200 m to 1000 m of cumulative ascent in 16 miles. Arrive at CP4 feeling like ' +
+      body: 'The course is at its most runnable in the first 30 km. The temptation is to bank time on ' +
+            'the flat early kilometres; resist it. The climbs cluster after CP4 (Llantwit Major) where you ' +
+            'jump from 200 m to 1000 m of cumulative ascent in 26 km. Arrive at CP4 feeling like ' +
             'you’ve been lazy.' },
     { heading: 'Walk the climbs with intent',
       body: 'Power-hike every steep pitch from a long way out and run the flats and descents. A hard ' +
             'march uphill costs little time versus running and saves the legs for the back third where ' +
             'the cut-offs tighten.' },
     { heading: 'Use the drop bag at CP4',
-      body: 'Llantwit Major (27 mi) is your one drop bag and the gateway to the hard section. Restock ' +
+      body: 'Llantwit Major (43.5 km) is your one drop bag and the gateway to the hard section. Restock ' +
             'food, swap to fresh socks if wet, grab the head torch and any layers for the evening. ' +
             'CP5 (Aberthaw) has no crew, so leave CP4 self-sufficient to CP6.' },
     { heading: 'Respect the cut-offs late',

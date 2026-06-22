@@ -7,8 +7,8 @@ export interface RaceCheckpoint {
   /** 0 = start. Sequential checkpoint index. */
   index: number;
   name: string;
-  /** Cumulative distance from the start, in miles (as the organiser publishes). */
-  distanceMi: number;
+  /** Cumulative distance from the start, in km. */
+  distanceKm: number;
   /** Cumulative ascent to this point, in metres (organiser figure). */
   ascentM?: number | null;
   /** Official cut-off, "HH:MM" local race-day clock, or null if none. */
@@ -51,7 +51,7 @@ export interface RaceGuide {
   region: string;                    // "South Wales coast"
   start: { name: string; lat: number; lng: number };
   finish: { name: string; lat: number; lng: number };
-  distanceMi: number;
+  distanceKm: number;
   ascentM: number;
   /** Mass-start time, "HH:MM" local — anchors cut-off margins. */
   startTime: string;

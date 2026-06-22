@@ -13,11 +13,11 @@ const H = 360;
 export default function RouteMap({
   parsed,
   checkpoints,
-  totalMi,
+  totalKm: routeKm,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
-  totalMi: number;
+  totalKm: number;
 }) {
   if (!parsed) {
     return (
@@ -32,9 +32,10 @@ export default function RouteMap({
   const { project, polyline } = buildProjection(parsed, W, H);
 
   // Find the track point closest to each checkpoint's cumulative distance.
-  const totalKm = parsed.totalKm;
-  function pointAtMi(mi: number) {
-    const targetKm = (mi / totalMi) * totalKm;
+  // Scale the checkpoint's km to the GPX's own length (they can differ).
+  const gpxKm = parsed.totalKm;
+  function pointAtKm(km: number) {
+    const targetKm = (km / routeKm) * gpxKm;
     let best = parsed!.points[0];
     let bestD = Infinity;
     for (const p of parsed!.points) {
@@ -59,7 +60,7 @@ export default function RouteMap({
 
         {/* checkpoint dots */}
         {mid.map(c => {
-          const [x, y] = pointAtMi(c.distanceMi);
+          const [x, y] = pointAtKm(c.distanceKm);
           return (
             <g key={c.index}>
               <circle cx={x} cy={y} r={4.5} fill="#fbf8f2" stroke={MARINE} strokeWidth={2} />

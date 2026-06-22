@@ -59,7 +59,7 @@ export default async function RacesPage() {
                   )}
                 </div>
                 <div className="px-[20px] py-[14px] flex items-center gap-[20px]">
-                  <Stat label="Distance" value={`${guide.distanceMi} mi`} />
+                  <Stat label="Distance" value={`${guide.distanceKm} km`} />
                   <Stat label="Ascent" value={`${guide.ascentM} m`} />
                   <Stat label="Date" value={dateLong} />
                 </div>

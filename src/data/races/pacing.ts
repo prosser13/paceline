@@ -7,7 +7,7 @@ import type { RaceGuide } from './types';
 
 export interface PacingRow {
   name: string;
-  distanceMi: number;
+  distanceKm: number;
   /** Cumulative target elapsed, e.g. "2:41". */
   cumElapsed: string;
   /** Target time-of-day arrival, 12-hour, e.g. "10:11 AM". */
@@ -21,7 +21,6 @@ export interface PacingRow {
   dropBag: boolean;
 }
 
-const MI_TO_KM = 1.609344;
 // 100 m of climb ≈ 1 km of flat effort.
 const CLIMB_PENALTY_PER_M = 0.01;
 
@@ -67,7 +66,7 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
   const legEffort: number[] = [0];
   let totalEffort = 0;
   for (let i = 1; i < cps.length; i++) {
-    const legKm = (cps[i].distanceMi - cps[i - 1].distanceMi) * MI_TO_KM;
+    const legKm = cps[i].distanceKm - cps[i - 1].distanceKm;
     const legClimb = Math.max(0, (cps[i].ascentM ?? 0) - (cps[i - 1].ascentM ?? 0));
     const effort = legKm + legClimb * CLIMB_PENALTY_PER_M;
     legEffort.push(effort);
@@ -82,7 +81,7 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
     if (i > 0) {
       const legSec = (legEffort[i] / totalEffort) * targetSec;
       cumSec += legSec;
-      const legKm = (cp.distanceMi - cps[i - 1].distanceMi) * MI_TO_KM;
+      const legKm = cp.distanceKm - cps[i - 1].distanceKm;
       legPace = paceMinKm(legSec, legKm);
     }
 
@@ -95,7 +94,7 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
 
     rows.push({
       name: cp.name,
-      distanceMi: cp.distanceMi,
+      distanceKm: cp.distanceKm,
       cumElapsed: elapsed(cumSec),
       arrival: clock(startSec + cumSec),
       legPace,
