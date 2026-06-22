@@ -45,7 +45,7 @@ export function CyclingDetailTable({ segments }: { segments: CyclingSegment[] })
 // Used on the plan page (with a day column) and, via the compact variant, on the
 // dashboard.
 export default function CyclingRow({
-  short, date, session, powerZones, bikeHrZones, today, done, compact = false, centeredGlyph = false,
+  short, date, session, powerZones, bikeHrZones, today, done, compact = false, centeredGlyph = false, emphasis = false,
 }: {
   short?: string;
   date?: string;
@@ -57,6 +57,7 @@ export default function CyclingRow({
   done?: boolean;
   compact?: boolean;
   centeredGlyph?: boolean;   // glyph as a vertically-centred left column (dashboard) vs inline (plan)
+  emphasis?: boolean;        // roomier row (tomorrow card on the dashboard)
 }) {
   const [open, setOpen] = useState(false);
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -67,7 +68,7 @@ export default function CyclingRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] border-l-marine px-[16px] py-[12px] transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
+        className={`flex items-center gap-[14px] border-l-[3px] border-l-marine transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
@@ -80,12 +81,12 @@ export default function CyclingRow({
             <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
           </div>
         )}
-        {centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={16} /></span>}
+        {centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={emphasis ? 20 : 16} /></span>}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
             {!centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={15} /></span>}
-            <span className="text-[16.5px] font-semibold text-ink truncate">{session.name}</span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{session.name}</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -96,7 +97,7 @@ export default function CyclingRow({
           {session.description && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>}
         </div>
         <div className="shrink-0 text-right w-[100px]">
-          <div className="font-display font-semibold text-[19px] leading-none text-ink">{duration ?? '—'}</div>
+          <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{duration ?? '—'}</div>
           {session.estimated_tss != null && (
             <div className="font-mono text-[12.5px] text-stone mt-[2px]">~{session.estimated_tss} TSS</div>
           )}
