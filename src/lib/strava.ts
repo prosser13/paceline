@@ -106,14 +106,16 @@ export async function getValidAccessToken(): Promise<string | null> {
   return refreshAccessToken(data.refresh_token);
 }
 
-const RUN_TYPES  = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide']);
+const RUN_TYPES      = new Set(['Run', 'TrailRun', 'VirtualRun']);
+const RIDE_TYPES     = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide']);
+const STRENGTH_TYPES = new Set(['WeightTraining', 'Workout', 'Crossfit']);
 
 // Strava activity → the plan activity kind it can fulfil, or null if unsupported.
 // Strava sets `sport_type` (newer) and `type` (legacy); either may carry the kind.
-function activityKind(sportType: string, type: string): 'run' | 'ride' | null {
-  if (RUN_TYPES.has(sportType)  || RUN_TYPES.has(type))  return 'run';
-  if (RIDE_TYPES.has(sportType) || RIDE_TYPES.has(type)) return 'ride';
+function activityKind(sportType: string, type: string): 'run' | 'ride' | 'strength' | null {
+  if (RUN_TYPES.has(sportType)      || RUN_TYPES.has(type))      return 'run';
+  if (RIDE_TYPES.has(sportType)     || RIDE_TYPES.has(type))     return 'ride';
+  if (STRENGTH_TYPES.has(sportType) || STRENGTH_TYPES.has(type)) return 'strength';
   return null;
 }
 
@@ -269,14 +271,14 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       // Pick the CLOSEST same-day run/race session within 20% by distance.
       let bestErr = Infinity;
       for (const s of planSessions) {
-        if (s.activity_type === 'cycling') continue;
+        if (s.session_type === 'STRENGTH' || s.activity_type === 'cycling') continue;
         if (s.scheduled_date !== activity.activity_date) continue;
         const planKm = Number(s.distance_km);
         if (!(planKm > 0)) continue;
         const err = Math.abs(actKm - planKm) / planKm;
         if (err <= 0.2 && err < bestErr) { bestErr = err; match = s; }
       }
-    } else {
+    } else if (kind === 'ride') {
       // Rides have no reliable distance target (a Z2 ride drifts far from plan),
       // so match the same-day cycling session; if a day has several, take the
       // closest by distance, otherwise the first.
@@ -288,6 +290,12 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
         const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
         if (err < bestErr) { bestErr = err; match = s; }
       }
+    } else {
+      // Strength has no distance, and recorded duration runs long (elapsed time can
+      // push a 1h session to 1h30), so don't gate on duration — match purely on the
+      // same-day strength session.
+      match = planSessions.find(s =>
+        s.session_type === 'STRENGTH' && s.scheduled_date === activity.activity_date) ?? null;
     }
     if (!match) continue;
 
@@ -304,10 +312,11 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     await insertCompletedWorkout({
       plan_session_id:        match.id,
       completed_date:         activity.activity_date,
-      actual_distance_km:     activity.distance_km,
+      // Strength carries no distance; rides/runs do.
+      actual_distance_km:     kind === 'strength' ? null : activity.distance_km,
       actual_duration_mins:   activity.duration_mins,
-      // Pace is meaningless for rides; leaving it null stops the plan view from
-      // deriving a bogus pace-based TSS against a cycling activity.
+      // Pace is meaningless for rides/strength; leaving it null stops the plan view
+      // from deriving a bogus pace-based TSS against a non-run activity.
       actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,
       actual_avg_hr:          activity.avg_hr ?? null,
       strava_activity_id:     activity.strava_activity_id,
