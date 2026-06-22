@@ -9,7 +9,7 @@ import CyclingHero from '@/components/CyclingHero';
 import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
 import WeekStrip from './WeekStrip';
-import { OXBLOOD, MARINE, FERN } from '@/lib/colors';
+import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
 
 function Node({ anchorId, dot, ring, label, labelColor, children }: {
   anchorId: string; dot?: string; ring?: string; label: string; labelColor: string; children: React.ReactNode;
@@ -18,7 +18,7 @@ function Node({ anchorId, dot, ring, label, labelColor, children }: {
     <div id={anchorId} className="relative pl-[44px] pb-[20px]" style={{ scrollMarginTop: '14px' }}>
       <div className="absolute left-[11px] top-[3px] w-[15px] h-[15px] rounded-full"
         style={dot ? { background: dot, outline: '3px solid #fbf8f2' } : { background: '#fbf8f2', border: `2px solid ${ring}`, outlineColor: '#fbf8f2' }} />
-      <div className="font-mono text-[11px] uppercase tracking-[.12em] mb-[9px]" style={{ color: labelColor }}>{label}</div>
+      {label && <div className="font-mono text-[11px] uppercase tracking-[.12em] mb-[9px]" style={{ color: labelColor }}>{label}</div>}
       {children}
     </div>
   );
@@ -89,12 +89,16 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           )}
         </Node>
 
-        <Node anchorId={`spine-${d.windowDays[1].iso}`} ring={MARINE}
-          label={`Tomorrow · ${formatSpineDay(d.windowDays[1].iso).date}`} labelColor={MARINE}>
+        <Node anchorId={`spine-${d.windowDays[1].iso}`} ring={MARINE} label="" labelColor={MARINE}>
           <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+            <div className="px-[18px] py-[8px]" style={{ background: MARINE }}>
+              <span className="font-mono text-[11px] tracking-[.14em] uppercase" style={{ color: BONE }}>
+                Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}
+              </span>
+            </div>
             <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
               zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}
-              restLabel="Rest day — recover" />
+              restLabel="Rest day — recover" emphasis />
           </div>
         </Node>
 

@@ -19,8 +19,8 @@ import { GOLD } from '@/lib/colors';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PlanSession } from './data';
 
-function RunRow({ session, thresholdPace, zones, hrZones }: {
-  session: PlanSession; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap;
+function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
+  session: PlanSession; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap; emphasis?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const intensity = session.intensity ?? 'easy';
@@ -35,14 +35,14 @@ function RunRow({ session, thresholdPace, zones, hrZones }: {
   return (
     <div>
       <div
-        className="flex items-center gap-[12px] px-[14px] py-[11px] cursor-pointer select-none hover:bg-fog/15 transition-colors"
+        className={`flex items-center gap-[14px] cursor-pointer select-none hover:bg-fog/15 transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[14px] py-[11px]'}`}
         style={{ borderLeft: `3px solid ${hex}` }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: hex }}><RunGlyph /></span>
+        <span style={{ color: hex }}><RunGlyph size={emphasis ? 20 : 16} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            <span className="text-[16px] font-semibold text-ink truncate">{session.name}</span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>{session.name}</span>
             <span className="font-mono text-[13px] text-stone leading-none"
               style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
           </div>
@@ -63,7 +63,7 @@ function RunRow({ session, thresholdPace, zones, hrZones }: {
   );
 }
 
-function StrengthRowCompact({ session }: { session: PlanSession }) {
+function StrengthRowCompact({ session, emphasis = false }: { session: PlanSession; emphasis?: boolean }) {
   const [open, setOpen] = useState(false);
   const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
   const hasDetail = exercises.length > 0;
@@ -71,25 +71,25 @@ function StrengthRowCompact({ session }: { session: PlanSession }) {
   return (
     <div>
       <div
-        className={`flex items-center gap-[12px] px-[14px] py-[11px] ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
+        className={`flex items-center gap-[14px] ${emphasis ? 'px-[18px] py-[15px]' : 'px-[14px] py-[11px]'} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
         style={{ borderLeft: `3px solid ${GOLD}` }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
       >
-        <span style={{ color: GOLD }}><Dumbbell /></span>
+        <span style={{ color: GOLD }}><Dumbbell size={emphasis ? 20 : 16} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            <span className="text-[16px] font-semibold text-ink truncate">Strength</span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>Strength</span>
             {hasDetail && (
               <span className="font-mono text-[13px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             )}
           </div>
           {session.description && (
-            <div className="text-[13.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
+            <div className={`${emphasis ? 'text-[14.5px]' : 'text-[13.5px]'} leading-tight mt-[2px] truncate text-stone`}>{session.description}</div>
           )}
         </div>
         <div className="shrink-0 text-right">
-          <div className="font-display font-semibold text-[18px] leading-none text-ink">{humanHMM(session.estimated_duration ?? null) ?? '—'}</div>
+          <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(session.estimated_duration ?? null) ?? '—'}</div>
           {hasDetail && <div className="font-mono text-[12px] text-stone mt-[3px]">{exercises.length} ex</div>}
         </div>
       </div>
@@ -104,10 +104,10 @@ function StrengthRowCompact({ session }: { session: PlanSession }) {
 }
 
 export default function SessionRows({
-  sessions, thresholdPace, zones, hrZones, powerZones, bikeHrZones, restLabel = 'Rest day',
+  sessions, thresholdPace, zones, hrZones, powerZones, bikeHrZones, restLabel = 'Rest day', emphasis = false,
 }: {
   sessions: PlanSession[]; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap;
-  powerZones?: PowerZoneMap; bikeHrZones?: BikeHrZoneMap; restLabel?: string;
+  powerZones?: PowerZoneMap; bikeHrZones?: BikeHrZoneMap; restLabel?: string; emphasis?: boolean;
 }) {
   if (!sessions.length || sessions.every(s => s.status === 'rest')) {
     return (
@@ -125,10 +125,10 @@ export default function SessionRows({
     <div className="divide-y divide-fog/50">
       {sessions.filter(s => s.status !== 'rest').map(s =>
         s.session_type === 'STRENGTH'
-          ? <StrengthRowCompact key={s.id} session={s} />
+          ? <StrengthRowCompact key={s.id} session={s} emphasis={emphasis} />
           : s.activity_type === 'cycling'
-            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph />
-            : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} />,
+            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph emphasis={emphasis} />
+            : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} emphasis={emphasis} />,
       )}
     </div>
   );

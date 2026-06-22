@@ -190,8 +190,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
     list.push(s);
     byDate.set(s.scheduled_date, list);
   }
+  // Same-day ordering: strength leads on strength-priority plans (Dragon 50),
+  // otherwise the run/ride leads. Mirrors the plan page.
+  const planId = (weekRow?.plan_id as number | null) ?? null;
+  const strengthFirst = planId ? await getPlanStrengthPriority(planId) : false;
   for (const list of byDate.values()) {
-    list.sort((a, b) => (a.session_type === 'STRENGTH' ? 1 : 0) - (b.session_type === 'STRENGTH' ? 1 : 0));
+    list.sort((a, b) => {
+      const aS = a.session_type === 'STRENGTH' ? 1 : 0;
+      const bS = b.session_type === 'STRENGTH' ? 1 : 0;
+      return strengthFirst ? bS - aS : aS - bS;
+    });
   }
   function pickRun(list?: PlanSession[]): PlanSession | null {
     return list?.find(s => s.session_type !== 'STRENGTH') ?? null;
@@ -287,7 +295,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   const weekLabel   = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
   const weekPurpose = (weekRow?.purpose as string | null) ?? null;
-  const planId      = (weekRow?.plan_id as number | null) ?? null;
 
   let daysToRace: number | null = null;
   if (raceRow?.race_date) {
@@ -300,7 +307,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [cw, strengthCw, weekData, planWeeks, strengthFirst] = await Promise.all([
+  const [cw, strengthCw, weekData, planWeeks] = await Promise.all([
     todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
     todayStrength ? getCompletedForSession(todayStrength.id) : Promise.resolve(null),
     weekRow?.date_from && weekRow?.date_to
@@ -310,7 +317,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
         ])
       : Promise.resolve(null),
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
-    planId ? getPlanStrengthPriority(planId) : Promise.resolve(false),
   ]);
 
   let todayCompleted: CompletedToday | null = null;
