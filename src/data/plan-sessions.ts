@@ -150,6 +150,11 @@ export async function insertCompletedWorkout(
   await supabaseAdmin.from('completed_workouts').insert(row);
 }
 
+// Remove the completion(s) for a planned session (manual unlink).
+export async function deleteCompletedForSession(planSessionId: string): Promise<void> {
+  await supabaseAdmin.from('completed_workouts').delete().eq('plan_session_id', planSessionId);
+}
+
 // Strava completions still missing per-segment pace or HR, capped at `limit`.
 export async function listCompletedMissingSegments(limit: number) {
   const { data } = await supabaseAdmin

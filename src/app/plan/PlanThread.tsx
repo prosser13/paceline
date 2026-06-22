@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
@@ -10,8 +11,10 @@ import {
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
-import OffPlanRow from '@/components/OffPlanRow';
+import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
+import { activityKind } from '@/lib/activity-types';
+import { unlinkSession } from './match-actions';
 import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
@@ -182,12 +185,30 @@ function RaceBadge({ priority }: { priority: string }) {
   );
 }
 
+// Sub-row under a manually-linked session — lets the user undo the link.
+function UnlinkFooter({ sessionId }: { sessionId: string }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  return (
+    <div className="flex items-center gap-[8px] px-[16px] py-[6px] bg-bone/40 font-mono text-[11px] text-stone">
+      <span className="tracking-[.08em] uppercase">Linked manually</span>
+      <span className="text-fog">·</span>
+      <button type="button" disabled={pending}
+        onClick={() => start(async () => { await unlinkSession(sessionId); router.refresh(); })}
+        className="tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer">
+        {pending ? 'Unlinking…' : 'Unlink'}
+      </button>
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 interface Props {
   weeks: PlanWeek[];
   byWeek: Record<number, PlanSession[]>;
   offPlanByDate?: Record<string, OffPlanActivity[]>;
+  manualMatchIds?: string[];
   todayStr: string;
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
@@ -199,11 +220,12 @@ interface Props {
 }
 
 export default function PlanThread({
-  weeks, byWeek, offPlanByDate = {}, todayStr, completedMap, nextSessionId,
+  weeks, byWeek, offPlanByDate = {}, manualMatchIds = [], todayStr, completedMap, nextSessionId,
   thresholdPace, zones, hrZones, powerZones, bikeHrZones,
 }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const manualMatchSet = new Set(manualMatchIds);
 
   const toggleExpanded = (id: string) => setExpandedIds(prev => {
     const next = new Set(prev);
@@ -227,8 +249,14 @@ export default function PlanThread({
 
     if (isRest) return <RestCard key={session.id} />;
 
+    // Manually-linked sessions get an "Unlink" footer below the row.
+    const withUnlink = (node: React.ReactNode) =>
+      manualMatchSet.has(session.id)
+        ? <div key={session.id}>{node}<UnlinkFooter sessionId={session.id} /></div>
+        : node;
+
     if (session.session_type === 'STRENGTH') {
-      return (
+      return withUnlink(
         <StrengthRow
           key={session.id}
           compact
@@ -243,7 +271,7 @@ export default function PlanThread({
     }
 
     if (session.activity_type === 'cycling') {
-      return (
+      return withUnlink(
         <CyclingRow
           key={session.id}
           compact
@@ -301,7 +329,7 @@ export default function PlanThread({
       tssDelta != null && tssPct != null && durDelta != null && durPct != null
         ? { tssDelta, tssPct, durDelta, durPct } : null;
 
-    return (
+    return withUnlink(
       <div key={session.id}>
         <div
           className={`flex items-center gap-[14px] border-l-[3px] border-l-fern px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
@@ -371,6 +399,19 @@ export default function PlanThread({
     // wasn't a rest day. Planned (non-rest) sessions still render above the extras.
     const sessions = offPlan.length ? daySessions.filter(s => s.status !== 'rest') : daySessions;
 
+    // Same-day planned sessions still open for a manual link, by compatible type.
+    const linkTargetsFor = (a: OffPlanActivity): LinkTarget[] => {
+      const k = activityKind(a.activityType);
+      return daySessions
+        .filter(s => {
+          if (s.status === 'rest' || s.id in completedMap) return false;
+          if (k === 'ride')     return s.activity_type === 'cycling';
+          if (k === 'strength') return s.session_type === 'STRENGTH';
+          return s.session_type !== 'STRENGTH' && s.activity_type !== 'cycling';
+        })
+        .map(s => ({ id: s.id, name: s.name || (s.session_type === 'STRENGTH' ? 'Strength' : 'Session') }));
+    };
+
     return (
       <div key={dateStr} className={`flex gap-[14px] ${dim ? 'opacity-55' : ''}`}>
         <div className="w-[52px] shrink-0 pt-[8px] text-right">
@@ -387,7 +428,7 @@ export default function PlanThread({
           )}
           <div className="divide-y divide-fog/50">
             {sessions.map(s => renderSessionRow(s))}
-            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} />)}
+            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} linkTargets={linkTargetsFor(a)} />)}
           </div>
         </div>
       </div>
