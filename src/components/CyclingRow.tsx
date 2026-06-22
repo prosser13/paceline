@@ -50,7 +50,7 @@ export default function CyclingRow({
   short?: string;
   date?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  session: { name: string; description?: string | null; estimated_duration?: string | null; structure?: any[] | null };
+  session: { name: string; description?: string | null; estimated_duration?: string | null; estimated_tss?: number | null; structure?: any[] | null };
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
   today?: boolean;
@@ -68,7 +68,7 @@ export default function CyclingRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] border-l-marine/50 px-[16px] py-[12px] ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
+        className={`flex items-center gap-[14px] border-l-[3px] border-l-marine px-[16px] py-[12px] transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
@@ -81,15 +81,10 @@ export default function CyclingRow({
             <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
           </div>
         )}
-        <span className="text-marine shrink-0"><BikeGlyph size={compact ? 16 : 15} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            {today && (
-              <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
-                Today
-              </span>
-            )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
+            <span className="text-marine shrink-0"><BikeGlyph size={15} /></span>
             <span className="text-[16.5px] font-semibold text-ink truncate">{session.name}</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
@@ -103,6 +98,9 @@ export default function CyclingRow({
         <div className="shrink-0 text-right w-[100px]">
           <div className="font-display font-semibold text-[19px] leading-none text-ink">{duration ?? '—'}</div>
           {lead && <div className="font-mono text-[12.5px] text-stone mt-[3px]">{fmtPower(lead.powerMin, lead.powerMax)}</div>}
+          {session.estimated_tss != null && (
+            <div className="font-mono text-[12.5px] text-stone mt-[2px]">~{session.estimated_tss} TSS</div>
+          )}
         </div>
       </div>
 
