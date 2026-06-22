@@ -81,7 +81,7 @@ export default function RouteMap({
         <Legend color={MARINE} label="Checkpoint" ring />
         <Legend color={OXBLOOD} label="Finish" />
         <span className="font-mono text-[11px] text-stone ml-auto">
-          {parsed.totalKm.toFixed(1)} km · {parsed.ascentM} m ascent (GPX)
+          {parsed.totalKm.toFixed(1)} km · GPX route
         </span>
       </div>
     </div>

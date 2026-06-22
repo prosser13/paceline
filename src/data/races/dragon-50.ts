@@ -36,29 +36,45 @@ export const DRAGON_50: RaceGuide = {
     { index: 0, name: 'Start — Kenfig Nature Reserve', distanceKm: 0, ascentM: 0, cutoff: null,
       supplies: 'Toilets. 7.2 km loop of the reserve before CP1.' },
     { index: 1, name: 'CP1 · Kenfig', distanceKm: 7.2, ascentM: 30, cutoff: null,
-      supplies: 'Sweets, biscuits, crisps, crackers, fruit, water, squash. Toilets.' },
+      supplies: 'Sweets, biscuits, crisps, crackers, fruit, water, squash. Toilets.',
+      fuelBetween: 'Nothing yet — settle in, sip water.',
+      fuelAt: 'Run through. Top up water if needed.' },
     { index: 2, name: 'CP2 · Newton', distanceKm: 17.7, ascentM: 100, cutoff: null,
-      supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.' },
+      supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.',
+      fuelBetween: '1 pack of Beta Fuel chews.',
+      fuelAt: 'Crisps + a few sweets. Fill water.' },
     { index: 3, name: 'CP3 · Southerndown', distanceKm: 31.4, ascentM: 200, cutoff: '14:00',
-      supplies: 'Hot drinks, soup, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.' },
+      supplies: 'Hot drinks, soup, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
+      fuelBetween: '1 pack of chews. Start the Hi5 flask if it’s warm.',
+      fuelAt: '½ sandwich + biscuits. Fill water.' },
     { index: 4, name: 'CP4 · Llantwit Major', distanceKm: 43.5, ascentM: 650, cutoff: '17:00', dropBag: true,
       supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
-      note: 'Drop-bag access here.' },
+      note: 'Drop-bag access here.',
+      fuelBetween: '1 pack of chews.',
+      fuelAt: 'Drop bag: restock chews, refill Hi5 flask, ½ sandwich, grab your treat.' },
     { index: 5, name: 'CP5 · Aberthaw', distanceKm: 49.9, ascentM: 700, cutoff: '18:30',
       supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.',
-      note: 'No supporters or support crews at this checkpoint.' },
+      note: 'No supporters or support crews at this checkpoint.',
+      fuelBetween: '1 pack of chews.',
+      fuelAt: 'Quick stop — crisps/sweets, fill water.' },
     { index: 6, name: 'CP6 · Porthkerry Park', distanceKm: 60.4, ascentM: 900, cutoff: '20:00',
-      supplies: 'Hot dogs, hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets nearby.' },
+      supplies: 'Hot dogs, hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets nearby.',
+      fuelBetween: '1 pack of chews.',
+      fuelAt: 'Hot dog! Fill water.' },
     { index: 7, name: 'CP7 · Sully', distanceKm: 70.0, ascentM: 1000, cutoff: '22:00',
-      supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.' },
+      supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
+      fuelBetween: '1 pack of chews.',
+      fuelAt: 'Sweets/biscuits if the stomach allows. Fill water.' },
     { index: 8, name: 'Finish — Norwegian Church', distanceKm: 81.3, ascentM: 1150, cutoff: '00:00',
-      supplies: 'Cardiff Bay. Midnight cut-off (16.5 h).' },
+      supplies: 'Cardiff Bay.',
+      fuelBetween: 'Last pack of chews if you need it. Push to the line.',
+      fuelAt: 'Done — 2:50 pm finish.' },
   ],
 
   goalTiers: [
     { label: 'A', time: '7:30', note: 'Strong day — ~5:35/km moving, disciplined on the climbs.' },
-    { label: 'B', time: '8:30', note: 'Solid finish with margin in hand against every cut-off.' },
-    { label: 'C', time: '10:00', note: 'See it through — stay ahead of cut-offs, keep eating.' },
+    { label: 'B', time: '8:30', note: 'Solid finish with plenty held in reserve.' },
+    { label: 'C', time: '10:00', note: 'A tougher day — keep eating and grind it out.' },
   ],
 
   seasonalWeather:
@@ -75,70 +91,85 @@ export const DRAGON_50: RaceGuide = {
             'you’ve been lazy.' },
     { heading: 'Walk the climbs with intent',
       body: 'Power-hike every steep pitch from a long way out and run the flats and descents. A hard ' +
-            'march uphill costs little time versus running and saves the legs for the back third where ' +
-            'the cut-offs tighten.' },
+            'march uphill costs little time versus running and saves the legs for the relentless ' +
+            'back third.' },
     { heading: 'Use the drop bag at CP4',
       body: 'Llantwit Major (43.5 km) is your one drop bag and the gateway to the hard section. Restock ' +
-            'food, swap to fresh socks if wet, grab the head torch and any layers for the evening. ' +
-            'CP5 (Aberthaw) has no crew, so leave CP4 self-sufficient to CP6.' },
-    { heading: 'Respect the cut-offs late',
-      body: 'CP6 (20:00), CP7 (22:00) and the finish (midnight) all run at ~3 mph. If the day has gone ' +
-            'long, keep checkpoint stops short and keep moving — time lost standing around is the usual ' +
-            'reason runners miss a late cut-off.' },
+            'chews, refill the drink flask, swap to fresh socks if wet, and grab any layer you want for ' +
+            'the exposed back half. CP5 (Aberthaw) has no crew, so leave CP4 self-sufficient to CP6.' },
+    { heading: 'The race begins at CP4',
+      body: 'From Llantwit Major the climbs come thick and fast — 200 m to 1000 m of ascent in the final ' +
+            'third. This is where a 2:50 pm finish is earned: steady effort on the climbs, run the ' +
+            'runnable, and keep eating. No heroics in the first half.' },
     { heading: 'Mind the exposure',
       body: 'Wind off the channel is the wildcard. A headwind on the open clifftop sections saps more ' +
             'than the climbs do. Eat and drink to schedule regardless of how you feel — the cold-wind ' +
             'days are when fuelling quietly slips.' },
   ],
 
+  pacingNote:
+    'Times distributed by climb-weighted effort, not flat pace — the back half is slower for a reason.',
   fuel: {
-    carbsPerHourG: [50, 70],
+    carbsPerHourG: [60, 70],
     fluidPerHourMl: [400, 600],
     sodiumPerHourMg: 500,
-    carry: [
-      'Two 500 ml soft flasks (one water, one with hydration tabs)',
-      'Gels / chews for ~60 g carbs per hour between checkpoints',
-      'A couple of “real food” options (e.g. flapjack, savoury) for the long CP4–CP6 stretch',
-      'Hydration tablets to refill at checkpoints',
-    ],
-    checkpointStrategy: [
-      'Top both flasks at every checkpoint — don’t leave one empty',
-      'Take in quick carbs while moving out: biscuits, crisps, fruit',
-      'From CP3 onward use hot drinks/soup if it’s cold to keep eating',
-      'Keep stops short past CP5 where cut-offs tighten',
-    ],
-    dropBag: [
-      'Restock of gels/chews and real food to the finish',
-      'Spare socks (clifftop and beach sections can leave feet wet)',
-      'Head torch + spare batteries for the evening hours',
-      'Extra layer / spare base layer for the exposed back half',
-      'Anti-chafe, painkillers, any taping you might need',
-    ],
+    preStart:
+      'Plain bagel (~50 g carbs) 45–60 minutes before the gun — easy to digest and tops off ' +
+      'glycogen. Sip water or a weak carb drink up to the start; don’t line up thirsty.',
+    note:
+      'The backbone is one pack of Beta Fuel chews (46 g) on each leg, topped up with real food at the ' +
+      'checkpoints — about 60 g of carbs an hour. Carry the Hi5 2:1 flask for warm spells. Rehearse this ' +
+      'exact combination on long runs first.',
   },
 
-  kitCompulsory: [
-    { label: 'Rucksack or means to carry kit' },
-    { label: 'Waterproof jacket', detail: 'With taped seams' },
-    { label: 'Long-sleeve base layer / thermal top', detail: 'Upper body, warm' },
-    { label: 'Head covering', detail: 'Warm hat or buff' },
+  kitNote:
+    'Compulsory kit is carried or worn at all times and checked at registration before you get your number.',
+  kitWear: [
+    { label: 'Long-sleeve top' },
+    { label: 'Adidas Adizero shorts' },
+    { label: 'Danish Endurance socks' },
+    { label: 'New Balance Hierro trail shoes' },
+    { label: 'Cap / hat' },
+    { label: 'Sunglasses' },
+    { label: 'Garmin heart-rate strap' },
+    { label: 'Garmin Fenix watch', detail: 'GPS route loaded, fully charged' },
+  ],
+  kitCarry: [
+    { label: 'Salomon ADV Skin 12', detail: 'The pack itself' },
+    { label: 'Long-sleeve base layer', detail: 'Compulsory spare warm top' },
+    { label: 'Innov8 waterproof jacket', detail: 'Taped seams — compulsory' },
+    { label: 'Buff', detail: 'Head covering — compulsory' },
     { label: 'Torch and spare batteries' },
-    { label: 'Whistle', detail: 'The one on your pack is fine' },
-    { label: 'Trail running shoes', detail: 'Adequate grip for slippery off-road' },
-    { label: 'Foil survival blanket or foil bivy bag' },
+    { label: 'Whistle' },
+    { label: 'Foil survival blanket' },
     { label: 'Small first aid kit', detail: 'Blister plasters, sterile dressing, bandage or tape' },
     { label: 'Mobile phone' },
-    { label: 'Emergency map', detail: 'Provided at registration' },
-    { label: 'Water bottle 500 ml min and/or cup', detail: 'For drinks at checkpoints' },
-    { label: 'Food / energy products', detail: 'Appropriate for your expected finish time' },
-    { label: 'GPS device with the route loaded', detail: 'Phone app, watch or handheld — enough battery to last' },
-    { label: 'Solid plastic cup with handle', detail: 'Required if you want hot drinks at checkpoints' },
-  ],
-  kitAdvisory: [
-    { label: 'Thermal / fleece top', detail: 'In addition to the compulsory base layer' },
-    { label: 'Lower body base layer or trousers' },
-    { label: 'Hydration tablets or similar' },
-    { label: 'Money' },
-    { label: 'Sunglasses' },
+    { label: 'Emergency map', detail: 'Compulsory — provided at registration (added to your list)' },
+    { label: 'Collapsible cup', detail: 'Compulsory for hot drinks / soup at checkpoints (added to your list)' },
+    { label: 'Water bladder, filled' },
+    { label: 'Soft-shell water flask', detail: 'For carb drink / if hot' },
+    { label: 'Spare Danish Endurance socks' },
     { label: 'Sun cream' },
+  ],
+  kitDropBag: [
+    { label: 'SIS Beta Fuel chews ×4', detail: 'Back-half resupply, CP4 → finish' },
+    { label: 'Hi5 2:1 drink mix sachets', detail: 'Refill the soft flask' },
+    { label: 'Spare dry base layer', detail: 'In case the wind picks up on the back half' },
+    { label: 'Foot care + anti-chafe', detail: 'Blister kit, Vaseline / nut butter' },
+    { label: 'Paracetamol' },
+    { label: 'Caffeine gels or tablets', detail: 'Save for the back half' },
+    { label: 'Wet wipes', detail: 'A quick freshen-up at halfway' },
+    { label: 'Cap / sunglasses', detail: 'If it’s bright on the exposed coast' },
+    { label: 'A treat', detail: 'Something you’ll actually fancy at 43.5 km' },
+  ],
+  nightBefore: [
+    'Charge watch',
+    'Load GPS route to watch',
+    'Charge phone',
+    'Lay out race kit; fill the water bladder',
+    'Pack the drop bag and race pack',
+    'Prep the morning bagel and breakfast',
+    'Check all items against this list',
+    'Set the alarm — registration & kit check is 05:15–06:00 (number collected there)',
   ],
 };

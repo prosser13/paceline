@@ -75,8 +75,8 @@ export async function getRaceForecast(
 
   let json: OpenMeteoResponse;
   try {
-    // Revalidate every 3 hours — the forecast updates a few times a day.
-    const res = await fetch(url, { next: { revalidate: 60 * 60 * 3 } });
+    // Revalidate every 6 hours — the forecast updates a few times a day.
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
     if (!res.ok) return null;
     json = (await res.json()) as OpenMeteoResponse;
   } catch {

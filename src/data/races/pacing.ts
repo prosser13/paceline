@@ -14,10 +14,8 @@ export interface PacingRow {
   arrival: string;
   /** This leg's pace, min/km, e.g. "6:12". null at the start. */
   legPace: string | null;
-  /** Official cut-off, 12-hour, e.g. "2:00 PM", or null. */
-  cutoff: string | null;
-  /** Minutes of margin vs cut-off (negative = behind). null when no cut-off. */
-  marginMin: number | null;
+  /** Metres of ascent on this leg. 0 at the start. */
+  legClimbM: number;
   dropBag: boolean;
 }
 
@@ -27,6 +25,14 @@ const CLIMB_PENALTY_PER_M = 0.01;
 function toSeconds(hhmm: string): number {
   const [h, m, s] = hhmm.split(':').map(Number);
   return h * 3600 + m * 60 + (s || 0);
+}
+
+// Display a target time, dropping a leading zero-hours part so a sub-hour race
+// stored as "0:33:59" reads as "33:59" (while "2:39:40" / "7:30" pass through).
+export function formatTargetTime(t: string): string {
+  const parts = t.split(':');
+  if (parts.length === 3 && Number(parts[0]) === 0) return `${Number(parts[1])}:${parts[2]}`;
+  return t;
 }
 
 // Time-of-day as 12-hour with AM/PM. Rounds to the minute first so 11:59:40
@@ -78,18 +84,13 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
   for (let i = 0; i < cps.length; i++) {
     const cp = cps[i];
     let legPace: string | null = null;
+    let legClimbM = 0;
     if (i > 0) {
       const legSec = (legEffort[i] / totalEffort) * targetSec;
       cumSec += legSec;
       const legKm = cp.distanceKm - cps[i - 1].distanceKm;
       legPace = paceMinKm(legSec, legKm);
-    }
-
-    let marginMin: number | null = null;
-    if (cp.cutoff) {
-      let cutoffSec = toSeconds(cp.cutoff) - startSec;
-      if (cutoffSec < 0) cutoffSec += 86400; // past-midnight cut-off
-      marginMin = Math.round((cutoffSec - cumSec) / 60);
+      legClimbM = Math.max(0, (cp.ascentM ?? 0) - (cps[i - 1].ascentM ?? 0));
     }
 
     rows.push({
@@ -98,8 +99,7 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
       cumElapsed: elapsed(cumSec),
       arrival: clock(startSec + cumSec),
       legPace,
-      cutoff: cp.cutoff ? clock(toSeconds(cp.cutoff)) : null,
-      marginMin,
+      legClimbM,
       dropBag: !!cp.dropBag,
     });
   }

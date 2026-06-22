@@ -1,19 +1,17 @@
-// Checkpoint pacing schedule — target arrivals, leg pace and cut-off margins
+// Checkpoint pacing schedule — target arrivals, leg pace and per-leg ascent
 // derived from the target finish time (see data/races/pacing.ts).
 
 import { CardHeader, cardClass } from '@/components/dashboard-graphics';
 import { OXBLOOD } from '@/lib/colors';
 import type { PacingRow } from '@/data/races/pacing';
 
-function marginLabel(min: number): string {
-  const a = Math.abs(min);
-  const h = Math.floor(a / 60);
-  const m = a % 60;
-  const body = h > 0 ? `${h}h ${m}m` : `${m}m`;
-  return min < 0 ? `-${body}` : `+${body}`;
-}
-
-export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; targetTime: string }) {
+export default function PacingTable({
+  rows, targetTime, note,
+}: {
+  rows: PacingRow[];
+  targetTime: string;
+  note?: string | null;
+}) {
   return (
     <div className={cardClass}>
       <CardHeader accent={OXBLOOD} right={`Target ${targetTime}`}>Pacing plan</CardHeader>
@@ -26,7 +24,7 @@ export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; t
               <th className="text-right font-normal px-[10px] py-[9px]">Elapsed</th>
               <th className="text-right font-normal px-[10px] py-[9px]">Arrive</th>
               <th className="text-right font-normal px-[10px] py-[9px]">Leg /km</th>
-              <th className="text-right font-normal px-[16px] py-[9px]">Cut-off</th>
+              <th className="text-right font-normal px-[16px] py-[9px]">Climb</th>
             </tr>
           </thead>
           <tbody>
@@ -44,19 +42,8 @@ export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; t
                 <td className="px-[10px] py-[9px] text-right font-mono text-ink">{r.cumElapsed}</td>
                 <td className="px-[10px] py-[9px] text-right font-mono text-ink">{r.arrival}</td>
                 <td className="px-[10px] py-[9px] text-right font-mono text-stone">{r.legPace ?? '—'}</td>
-                <td className="px-[16px] py-[9px] text-right font-mono">
-                  {r.cutoff ? (
-                    <span>
-                      {r.cutoff}
-                      {r.marginMin != null && (
-                        <span className={`ml-[6px] text-[11px] ${r.marginMin < 30 ? 'text-oxblood' : 'text-fern'}`}>
-                          {marginLabel(r.marginMin)}
-                        </span>
-                      )}
-                    </span>
-                  ) : (
-                    <span className="text-stone/50">—</span>
-                  )}
+                <td className="px-[16px] py-[9px] text-right font-mono text-stone">
+                  {r.legClimbM > 0 ? `+${r.legClimbM} m` : <span className="text-stone/50">—</span>}
                 </td>
               </tr>
             ))}
@@ -64,8 +51,7 @@ export default function PacingTable({ rows, targetTime }: { rows: PacingRow[]; t
         </table>
       </div>
       <p className="px-[16px] py-[9px] border-t border-fog font-mono text-[10px] text-stone">
-        Times distributed by climb-weighted effort, not flat pace. Margin = time in hand vs the cut-off;
-        red means under 30 min.
+        {note ?? 'Splits distributed by climb-weighted effort, not flat pace.'}
       </p>
     </div>
   );

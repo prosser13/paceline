@@ -20,8 +20,8 @@ export default async function RacesPage() {
 
   // Soonest race first; undated last.
   cards.sort((a, b) => {
-    const da = a.plan?.race_date ?? '9999';
-    const db = b.plan?.race_date ?? '9999';
+    const da = a.plan?.race_date ?? a.guide.date ?? '9999';
+    const db = b.plan?.race_date ?? b.guide.date ?? '9999';
     return da < db ? -1 : da > db ? 1 : 0;
   });
 
@@ -35,7 +35,7 @@ export default async function RacesPage() {
 
         <div className="grid sm:grid-cols-2 gap-[14px]">
           {cards.map(({ guide, plan }) => {
-            const date = plan?.race_date ?? null;
+            const date = plan?.race_date ?? guide.date ?? null;
             const days = date ? daysUntil(date) : null;
             const dateLong = date
               ? new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })

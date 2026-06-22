@@ -19,6 +19,10 @@ export interface RaceCheckpoint {
   dropBag?: boolean;
   /** Notes, e.g. "no crew access". */
   note?: string | null;
+  /** Fuelling: what to eat on the leg TO this point. */
+  fuelBetween?: string | null;
+  /** Fuelling: what to take on AT this checkpoint. */
+  fuelAt?: string | null;
 }
 
 export interface GoalTier {
@@ -29,11 +33,10 @@ export interface GoalTier {
 
 export interface FuelPlan {
   carbsPerHourG: [number, number];   // target range, grams/hour
-  fluidPerHourMl: [number, number];  // target range, ml/hour
+  fluidPerHourMl: [number, number];  // base ml/hour (adjusted up/down by weather)
   sodiumPerHourMg?: number | null;
-  carry: string[];                   // what to carry on-body
-  checkpointStrategy: string[];      // how to use aid stations
-  dropBag: string[];                 // what to stash in the CP4 drop bag
+  preStart: string;                  // what to eat before the gun
+  note?: string | null;              // carb-rate maths / reminder
 }
 
 export interface KitItem {
@@ -55,6 +58,11 @@ export interface RaceGuide {
   ascentM: number;
   /** Mass-start time, "HH:MM" local — anchors cut-off margins. */
   startTime: string;
+  /** Fallbacks used when the race has no dedicated `plans` row (e.g. a B-race
+   *  tune-up inside another plan). The live plan row wins when present. */
+  date?: string | null;        // yyyy-mm-dd
+  targetTime?: string | null;
+  targetPace?: string | null;
   /** Static GPX path under /public, or null if not yet supplied. */
   gpxPath: string | null;
 
@@ -69,7 +77,13 @@ export interface RaceGuide {
   seasonalWeather: string;
 
   coachNotes: { heading: string; body: string }[];
+  /** Footer note under the pacing table (e.g. how splits are derived). */
+  pacingNote?: string | null;
   fuel: FuelPlan;
-  kitCompulsory: KitItem[];
-  kitAdvisory: KitItem[];
+  /** Intro line above the kit checklist (e.g. mandatory-kit / bag-drop note). */
+  kitNote?: string | null;
+  kitWear: KitItem[];        // worn on the day
+  kitCarry: KitItem[];       // carried on the day
+  kitDropBag: KitItem[];     // stashed in a drop bag (empty for races without one)
+  nightBefore: string[];     // night-before checklist tasks
 }

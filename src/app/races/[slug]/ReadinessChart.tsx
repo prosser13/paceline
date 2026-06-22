@@ -23,11 +23,15 @@ export default function ReadinessChart({
   projection,
   readiness,
   daysToGo,
+  startLabel = 'today',
+  assumedNote,
 }: {
   history: FitnessPoint[] | null;
   projection: ProjectionPoint[];
   readiness: RaceDayReadiness;
   daysToGo: number | null;
+  startLabel?: string;
+  assumedNote?: string | null;
 }) {
   const hist = history ?? [];
   const Hn = hist.length;
@@ -73,12 +77,15 @@ export default function ReadinessChart({
           </span>
           <span className="text-[14px] text-stone">predicted form on race morning</span>
         </div>
-        <p className="text-[13px] text-stone leading-snug mb-[8px]">{readiness.verdict}</p>
+        <p className="text-[13px] text-stone leading-snug mb-[2px]">{readiness.verdict}</p>
+        {assumedNote && (
+          <p className="font-mono text-[10px] text-stone/80 leading-snug mb-[6px]">{assumedNote}</p>
+        )}
 
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" aria-label="Predicted fitness and fatigue to race day">
-          {/* today divider */}
-          <line x1={todayX} y1={Y0 - 6} x2={todayX} y2={Y1} stroke={FOG} strokeWidth={1} />
-          <text x={todayX} y={Y0 - 10} textAnchor="middle" style={{ font: '500 8px var(--font-mono, monospace)', fill: '#9a958a' }}>today</text>
+          {/* start divider (only meaningful when there's real history to its left) */}
+          {Hn > 1 && <line x1={todayX} y1={Y0 - 6} x2={todayX} y2={Y1} stroke={FOG} strokeWidth={1} />}
+          <text x={Hn > 1 ? todayX : X0} y={Y0 - 10} textAnchor={Hn > 1 ? 'middle' : 'start'} style={{ font: '500 8px var(--font-mono, monospace)', fill: '#9a958a' }}>{startLabel}</text>
 
           {/* history (solid) */}
           {Hn > 1 && <polyline points={solidCtl} fill="none" stroke={MARINE} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}

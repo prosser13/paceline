@@ -9,7 +9,7 @@ import AppShell from '@/components/AppShell';
 import { WeeklyBars, FitnessChart, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
-import { buildPacing } from '@/data/races/pacing';
+import { buildPacing, formatTargetTime } from '@/data/races/pacing';
 import { listPlannedTssBetween, listRunningDoneForPlan } from '@/data/plan-sessions';
 import { parseGpx, type ParsedGpx } from '@/lib/gpx';
 import { getRaceForecast } from '@/lib/weather';
@@ -20,7 +20,7 @@ import RouteMap from './RouteMap';
 import ElevationProfile from './ElevationProfile';
 import WeatherPanel from './WeatherPanel';
 import PacingTable from './PacingTable';
-import FuelPlan from './FuelPlan';
+import FuelPlan, { type FuelStop } from './FuelPlan';
 import CoachNotes from './CoachNotes';
 import KitChecklist from './KitChecklist';
 import ReadinessChart from './ReadinessChart';
@@ -50,11 +50,12 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   const plan = await getPlanBySlug(slug);
 
-  // Live data wins; fall back to curated guide values.
-  const raceDate = plan?.race_date ?? null;
-  const targetTime = plan?.target_time ?? guide.goalTiers[0].time;
-  const targetPace = plan?.target_pace ?? null;
-  const distanceKm = plan?.distance_km ?? null;
+  // Live plan row wins; otherwise fall back to the guide's own values (for races
+  // without a dedicated plan, e.g. a B-race tune-up).
+  const raceDate = plan?.race_date ?? guide.date ?? null;
+  const targetTime = plan?.target_time ?? guide.targetTime ?? guide.goalTiers[0].time;
+  const targetPace = plan?.target_pace ?? guide.targetPace ?? null;
+  const distanceKm = plan?.distance_km ?? guide.distanceKm;
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -93,17 +94,61 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   const doneTotal = runningDone.reduce((s, d) => s + d.km, 0);
   const plannedTotal = planWeeks.reduce((s, w) => s + (w.planned_volume_km ?? 0), 0);
 
-  // Project fitness/fatigue forward to race day when we have a seed (current
-  // intervals.icu values) and the race is still ahead.
+  // Fitness/fatigue projection across the plan, up to race day.
+  //  • Plan already underway → seed from real intervals.icu values and show the
+  //    history-then-projection from today.
+  //  • Plan not started yet → project the whole plan from an assumed start
+  //    (fitness 50 / form 50), swapped for real data once day 1 lands.
   const seed = wellness.form;
-  const projection =
-    seed && raceDate && raceDate >= todayStr
-      ? projectFitness({ fitness: seed.fitness, fatigue: seed.fatigue }, plannedTss, todayStr, raceDate)
-      : null;
+  const daysToGo = raceDate ? daysUntil(raceDate) : null;
+  const planStart = planWeeks[0]?.date_from ?? null;
+  const planStarted = planStart ? todayStr >= planStart : true;
+
+  let projection: ReturnType<typeof projectFitness> | null = null;
+  let projectionHistory = wellness.history;
+  let readinessStartLabel = 'today';
+  let assumedNote: string | null = null;
+
+  if (raceDate && raceDate >= todayStr && plannedTss.length > 0) {
+    if (planStarted && seed) {
+      projection = projectFitness({ fitness: seed.fitness, fatigue: seed.fatigue }, plannedTss, todayStr, raceDate);
+    } else if (planStart) {
+      projection = projectFitness({ fitness: 50, fatigue: 50 }, plannedTss, planStart, raceDate);
+      projectionHistory = null;
+      readinessStartLabel = 'plan start';
+      const startLabel = new Date(planStart + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      assumedNote = `Assumed start: fitness 50 · fatigue 50 — replaced by real data when the plan begins (${startLabel}).`;
+    }
+  }
   const readiness = projection ? readinessFromProjection(projection) : null;
 
   const pacing = buildPacing(guide, targetTime);
-  const daysToGo = raceDate ? daysUntil(raceDate) : null;
+  const targetTimeDisplay = formatTargetTime(targetTime);
+
+  // Checkpoint-by-checkpoint fuelling plan: zip the curated fuel notes with the
+  // pacing arrival times. Skip the start row (no fuel note).
+  const fuelSchedule: FuelStop[] = guide.checkpoints
+    .map((c, i) => ({
+      name: c.name,
+      distanceKm: c.distanceKm,
+      time: pacing[i].arrival,
+      between: c.fuelBetween ?? '',
+      atStop: c.fuelAt ?? '',
+      dropBag: !!c.dropBag,
+    }))
+    .filter(s => s.between || s.atStop);
+
+  // Fluid target flexes with the race-day forecast (null until ~16 days out).
+  let fluidRange: [number, number] = guide.fuel.fluidPerHourMl;
+  let fluidNote: string | null = null;
+  if (forecast) {
+    const high = forecast.high;
+    if (high >= 22) { fluidRange = [600, 800]; fluidNote = `Raised for a warm forecast (${high}°C high) — drink to thirst and keep sodium up.`; }
+    else if (high >= 18) { fluidRange = [500, 700]; fluidNote = `Nudged up for the ${high}°C forecast.`; }
+    else if (high <= 12) { fluidRange = [350, 500]; fluidNote = `Cool forecast (${high}°C) — the lower end is plenty.`; }
+    else { fluidNote = `Forecast ${high}°C — base intake is about right.`; }
+  }
+
   const raceDateLong = raceDate
     ? new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', {
         weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -141,7 +186,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
             {[
               { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
               { label: 'Ascent', value: `${guide.ascentM} m` },
-              { label: 'Target time', value: targetTime },
+              { label: 'Target time', value: targetTimeDisplay },
               { label: 'Target pace', value: targetPace ? `${targetPace}/km` : '—' },
             ].map(({ label, value }) => (
               <div key={label} className="px-[18px] py-[14px]">
@@ -152,7 +197,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           </div>
         </div>
 
-        <p className="text-[15px] text-ink leading-relaxed mt-[18px] max-w-[760px]">{guide.summary}</p>
+        <p className="text-[15px] text-ink leading-relaxed mt-[18px]">{guide.summary}</p>
 
         {/* ── Course ── */}
         <SectionLabel>Course</SectionLabel>
@@ -184,7 +229,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               {guide.goalTiers.map(t => (
                 <div key={t.label} className="flex items-baseline gap-[14px] px-[18px] py-[12px]">
                   <span className="font-display font-semibold text-[18px] text-oxblood w-[20px]">{t.label}</span>
-                  <span className="font-display font-semibold text-[18px] text-ink w-[64px] tabular-nums">{t.time}</span>
+                  <span className="font-display font-semibold text-[18px] text-ink w-[64px] tabular-nums">{formatTargetTime(t.time)}</span>
                   <span className="text-[13px] text-stone leading-snug">{t.note}</span>
                 </div>
               ))}
@@ -192,10 +237,12 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           </div>
           {projection && readiness ? (
             <ReadinessChart
-              history={wellness.history}
+              history={projectionHistory}
               projection={projection}
               readiness={readiness}
               daysToGo={daysToGo}
+              startLabel={readinessStartLabel}
+              assumedNote={assumedNote}
             />
           ) : (
             // No intervals.icu seed (not connected) — fall back to the trend
@@ -219,15 +266,22 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
         {/* ── Pacing ── */}
         <SectionLabel>Pacing plan</SectionLabel>
-        <PacingTable rows={pacing} targetTime={targetTime} />
+        <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
 
         {/* ── Fuel ── */}
         <SectionLabel>Nutrition &amp; hydration</SectionLabel>
-        <FuelPlan fuel={guide.fuel} />
+        <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
 
         {/* ── Kit ── */}
         <SectionLabel>Equipment</SectionLabel>
-        <KitChecklist slug={guide.slug} compulsory={guide.kitCompulsory} advisory={guide.kitAdvisory} />
+        <KitChecklist
+          slug={guide.slug}
+          intro={guide.kitNote}
+          wear={guide.kitWear}
+          carry={guide.kitCarry}
+          dropBag={guide.kitDropBag}
+          nightBefore={guide.nightBefore}
+        />
 
         {/* weekly running volume across the plan (reuses dashboard graphic) */}
         {weekBars.length > 0 && (
