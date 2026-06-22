@@ -65,10 +65,10 @@ export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) 
 // A strength session row — compact (duration + focus), expandable to the
 // prescribed exercises + an optional note.
 export default function StrengthRow({
-  short, date, focus, duration, today, done, note, exercises = [],
+  short, date, focus, duration, today, done, note, exercises = [], compact = false,
 }: {
-  short: string; date: string; focus: string | null; duration: string | null;
-  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[];
+  short?: string; date?: string; focus: string | null; duration: string | null;
+  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = exercises.length > 0;
@@ -83,10 +83,12 @@ export default function StrengthRow({
         aria-expanded={hasDetail ? open : undefined}
         onKeyDown={hasDetail ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } } : undefined}
       >
-        <div className="w-[46px] shrink-0">
-          <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
-          <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
-        </div>
+        {!compact && (
+          <div className="w-[46px] shrink-0">
+            <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
+            <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
             {today && (
