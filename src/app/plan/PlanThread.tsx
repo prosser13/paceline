@@ -10,6 +10,8 @@ import {
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
+import OffPlanRow from '@/components/OffPlanRow';
+import type { OffPlanActivity } from '@/data/activities';
 import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
@@ -185,6 +187,7 @@ function RaceBadge({ priority }: { priority: string }) {
 interface Props {
   weeks: PlanWeek[];
   byWeek: Record<number, PlanSession[]>;
+  offPlanByDate?: Record<string, OffPlanActivity[]>;
   todayStr: string;
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
@@ -196,7 +199,7 @@ interface Props {
 }
 
 export default function PlanThread({
-  weeks, byWeek, todayStr, completedMap, nextSessionId,
+  weeks, byWeek, offPlanByDate = {}, todayStr, completedMap, nextSessionId,
   thresholdPace, zones, hrZones, powerZones, bikeHrZones,
 }: Props) {
   const [showPast, setShowPast] = useState(false);
@@ -357,12 +360,16 @@ export default function PlanThread({
     );
   }
 
-  function renderDay(dateStr: string, daySessions: PlanSession[], dimPast: boolean) {
+  function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean) {
     const isToday   = dateStr === todayStr;
     const d         = new Date(dateStr + 'T00:00:00');
     const weekday   = d.toLocaleDateString('en-GB', { weekday: 'short' });
     const dateLabel = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const dim       = dimPast && !isToday;
+
+    // If an extra activity was done this day, drop any "rest" filler — the day
+    // wasn't a rest day. Planned (non-rest) sessions still render above the extras.
+    const sessions = offPlan.length ? daySessions.filter(s => s.status !== 'rest') : daySessions;
 
     return (
       <div key={dateStr} className={`flex gap-[14px] ${dim ? 'opacity-55' : ''}`}>
@@ -379,7 +386,8 @@ export default function PlanThread({
             </div>
           )}
           <div className="divide-y divide-fog/50">
-            {daySessions.map(s => renderSessionRow(s))}
+            {sessions.map(s => renderSessionRow(s))}
+            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} />)}
           </div>
         </div>
       </div>
@@ -402,7 +410,11 @@ export default function PlanThread({
 
     const byDate: Record<string, PlanSession[]> = {};
     for (const s of sessions) (byDate[s.scheduled_date] ??= []).push(s);
-    const dates = Object.keys(byDate).sort();
+
+    // Include days that have ONLY an off-plan activity (e.g. an extra on a past
+    // rest day) — past weeks aren't rest-filled, so those days have no session.
+    const offPlanDates = Object.keys(offPlanByDate).filter(dt => dt >= week.date_from && dt <= week.date_to);
+    const dates = Array.from(new Set([...Object.keys(byDate), ...offPlanDates])).sort();
 
     return (
       <div key={week.week_number} className="mb-5">
@@ -418,7 +430,7 @@ export default function PlanThread({
           />
         </div>
         <div className="flex flex-col gap-[10px] pl-[2px]">
-          {dates.map(date => renderDay(date, byDate[date], dimPast))}
+          {dates.map(date => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast))}
         </div>
       </div>
     );

@@ -4,6 +4,8 @@ import AppShell from '@/components/AppShell';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
+import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { activityKind } from '@/lib/activity-types';
 import PlanThread from './PlanThread';
 import RaceBlock from './RaceBlock';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
@@ -237,6 +239,21 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       ))
     : null;
 
+  // Off-plan activities (synced but unmatched) within the plan range, bucketed by
+  // date. Run TSS is derived from pace; rides/strength carry none.
+  const offPlanByDate: Record<string, OffPlanActivity[]> = {};
+  if (planStart) {
+    const tp = thresholdPace.split(':').map(Number);
+    const threshMinKm = tp[0] + (tp[1] || 0) / 60;
+    for (const a of await listOffPlanActivitiesBetween(planStart, todayStr)) {
+      if (activityKind(a.activityType) === 'run' && a.durationMins != null && a.avgPaceMinKm && a.avgPaceMinKm > 0) {
+        const IF = threshMinKm / a.avgPaceMinKm;
+        a.tss = Math.round((a.durationMins / 60) * IF * IF * 100);
+      }
+      (offPlanByDate[a.date] ??= []).push(a);
+    }
+  }
+
   const planBlock = (p: PlanRow) => (
     <RaceBlock
       name={p.name}
@@ -293,6 +310,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       <PlanThread
         weeks={viewWeeks}
         byWeek={byWeek}
+        offPlanByDate={offPlanByDate}
         todayStr={todayStr}
         completedMap={completedMap}
         nextSessionId={nextSessionId}

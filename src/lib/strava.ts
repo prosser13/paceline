@@ -7,6 +7,7 @@ import {
 } from '@/data/plan-sessions';
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
+import { activityKind } from '@/lib/activity-types';
 
 export interface StravaActivity {
   id: number;
@@ -104,19 +105,6 @@ export async function getValidAccessToken(): Promise<string | null> {
     return data.access_token;
   }
   return refreshAccessToken(data.refresh_token);
-}
-
-const RUN_TYPES      = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const RIDE_TYPES     = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide']);
-const STRENGTH_TYPES = new Set(['WeightTraining', 'Workout', 'Crossfit']);
-
-// Strava activity → the plan activity kind it can fulfil, or null if unsupported.
-// Strava sets `sport_type` (newer) and `type` (legacy); either may carry the kind.
-function activityKind(sportType: string, type: string): 'run' | 'ride' | 'strength' | null {
-  if (RUN_TYPES.has(sportType)      || RUN_TYPES.has(type))      return 'run';
-  if (RIDE_TYPES.has(sportType)     || RIDE_TYPES.has(type))     return 'ride';
-  if (STRENGTH_TYPES.has(sportType) || STRENGTH_TYPES.has(type)) return 'strength';
-  return null;
 }
 
 // ── Per-segment pacing (Strava streams) ──────────────────────

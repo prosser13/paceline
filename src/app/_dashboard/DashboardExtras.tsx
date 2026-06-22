@@ -3,7 +3,12 @@
 // stays focused on the top (today / tomorrow / coming-up) redesign.
 
 import { CountdownRing, WeeklyBars, FitnessChart } from '@/components/dashboard-graphics';
+import OffPlanRow from '@/components/OffPlanRow';
 import type { DashboardData } from './data';
+
+function fmtDay(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
 
 export default function DashboardExtras({ d }: { d: DashboardData }) {
   return (
@@ -37,6 +42,17 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           </div>
         </div>
       </div>
+
+      {d.offPlanRecent.length > 0 && (
+        <div className="mb-6">
+          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">Extras · not in plan</p>
+          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden divide-y divide-fog/50">
+            {d.offPlanRecent.map(a => (
+              <OffPlanRow key={a.id} activity={a} dateLabel={fmtDay(a.date)} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {d.last7.sessions > 0 && (
         <div>
