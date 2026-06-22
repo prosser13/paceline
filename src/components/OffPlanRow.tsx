@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { RunGlyph, BikeGlyph, Dumbbell } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
 import { FERN, MARINE, GOLD } from '@/lib/colors';
-import { linkActivityToSession } from '@/app/plan/match-actions';
+import { linkActivityToSession, promoteActivityToSession } from '@/app/plan/match-actions';
 import type { OffPlanActivity } from '@/data/activities';
 
 export interface LinkTarget { id: string; name: string; }
@@ -77,6 +77,21 @@ function LinkMenu({ stravaActivityId, targets }: { stravaActivityId: number; tar
   );
 }
 
+function PromoteButton({ stravaActivityId }: { stravaActivityId: number }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => start(async () => { await promoteActivityToSession(stravaActivityId); router.refresh(); })}
+      className="font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer"
+    >
+      {pending ? 'Adding…' : '+ Add to plan'}
+    </button>
+  );
+}
+
 export default function OffPlanRow({ activity, dateLabel, linkTargets }: {
   activity: OffPlanActivity; dateLabel?: string; linkTargets?: LinkTarget[];
 }) {
@@ -100,7 +115,7 @@ export default function OffPlanRow({ activity, dateLabel, linkTargets }: {
             Extra
           </span>
         </div>
-        <div className="mt-[3px] flex items-center gap-[8px]">
+        <div className="mt-[3px] flex items-center gap-[8px] flex-wrap">
           <span className="font-mono text-[12px] text-stone/80">Not in plan</span>
           {linkTargets && linkTargets.length > 0 && (
             <>
@@ -108,6 +123,8 @@ export default function OffPlanRow({ activity, dateLabel, linkTargets }: {
               <LinkMenu stravaActivityId={activity.stravaActivityId} targets={linkTargets} />
             </>
           )}
+          <span className="text-fog">·</span>
+          <PromoteButton stravaActivityId={activity.stravaActivityId} />
         </div>
       </div>
 

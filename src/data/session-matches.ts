@@ -23,13 +23,17 @@ export async function insertSessionMatch(row: SessionMatchInput): Promise<void> 
   await supabaseAdmin.from('session_matches').insert(row);
 }
 
-// Plan-session ids that were linked to an activity by hand (not the auto-matcher).
-export async function listManualMatchSessionIds(): Promise<string[]> {
+// Sessions a user attached by hand — `manual` (linked to an existing planned
+// session) or `promoted` (an off-plan activity turned into a plan session).
+export interface UserMatch { id: string; source: 'manual' | 'promoted'; }
+export async function listUserMatches(): Promise<UserMatch[]> {
   const { data } = await supabaseAdmin
     .from('session_matches')
-    .select('plan_session_id')
-    .eq('match_source', 'manual');
-  return (data ?? []).map(r => r.plan_session_id).filter((id): id is string => !!id);
+    .select('plan_session_id, match_source')
+    .in('match_source', ['manual', 'promoted']);
+  return (data ?? [])
+    .filter(r => !!r.plan_session_id)
+    .map(r => ({ id: r.plan_session_id as string, source: r.match_source as 'manual' | 'promoted' }));
 }
 
 // Remove the match row for a planned session (manual unlink).

@@ -155,6 +155,20 @@ export async function deleteCompletedForSession(planSessionId: string): Promise<
   await supabaseAdmin.from('completed_workouts').delete().eq('plan_session_id', planSessionId);
 }
 
+// Insert a plan session (promoting an off-plan activity into the plan); returns its id.
+export async function insertPlanSession(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  row: Record<string, any>,
+): Promise<string | null> {
+  const { data } = await supabaseAdmin.from('plan_sessions').insert(row).select('id').single();
+  return data?.id ?? null;
+}
+
+// Delete a plan session (undo a promotion).
+export async function deletePlanSession(id: string): Promise<void> {
+  await supabaseAdmin.from('plan_sessions').delete().eq('id', id);
+}
+
 // Strava completions still missing per-segment pace or HR, capped at `limit`.
 export async function listCompletedMissingSegments(limit: number) {
   const { data } = await supabaseAdmin
