@@ -256,15 +256,20 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     let match: (typeof planSessions)[number] | null = null;
 
     if (kind === 'run') {
-      // Pick the CLOSEST same-day run/race session within 20% by distance.
-      let bestErr = Infinity;
-      for (const s of planSessions) {
-        if (s.session_type === 'STRENGTH' || s.activity_type === 'cycling') continue;
-        if (s.scheduled_date !== activity.activity_date) continue;
-        const planKm = Number(s.distance_km);
-        if (!(planKm > 0)) continue;
-        const err = Math.abs(actKm - planKm) / planKm;
-        if (err <= 0.2 && err < bestErr) { bestErr = err; match = s; }
+      // Same-day run/race sessions. A single planned run matches the day's run
+      // regardless of distance (running long/short shouldn't drop the match);
+      // distance only disambiguates when several runs are planned that day.
+      const sameDay = planSessions.filter(s =>
+        s.session_type !== 'STRENGTH' && s.activity_type !== 'cycling' &&
+        s.scheduled_date === activity.activity_date && Number(s.distance_km) > 0);
+      if (sameDay.length === 1) {
+        match = sameDay[0];
+      } else if (sameDay.length > 1) {
+        let bestErr = Infinity;
+        for (const s of sameDay) {
+          const err = Math.abs(actKm - Number(s.distance_km)) / Number(s.distance_km);
+          if (err < bestErr) { bestErr = err; match = s; }
+        }
       }
     } else if (kind === 'ride') {
       // Rides have no reliable distance target (a Z2 ride drifts far from plan),

@@ -5,6 +5,7 @@ import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { listManualMatchSessionIds } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
 import PlanThread from './PlanThread';
 import RaceBlock from './RaceBlock';
@@ -89,7 +90,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans] = await Promise.all([
+  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatchIds] = await Promise.all([
     listAllSessions(),
     listWeeksByNumber(),
     getThresholdPace(),
@@ -99,6 +100,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     listPowerZones(),
     listBikeHrZones(),
     listPlansBySortOrder(),
+    listManualMatchSessionIds(),
   ]);
 
   const thresholdPace = thresholdPaceRaw ?? '3:40';
@@ -311,6 +313,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         weeks={viewWeeks}
         byWeek={byWeek}
         offPlanByDate={offPlanByDate}
+        manualMatchIds={manualMatchIds}
         todayStr={todayStr}
         completedMap={completedMap}
         nextSessionId={nextSessionId}
