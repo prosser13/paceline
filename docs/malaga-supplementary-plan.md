@@ -62,6 +62,8 @@ Lower block as a circuit ×2; upper lifts as straight sets, heavier.
 
 Weekly frequency: chest press ~2×, OHP ~1.5–2×, pull-up 2×, curls 1–2×.
 
+**Loads** (dumbbells per hand): step-up 8 kg · single-leg RDL 10 kg · reverse lunge 7 kg · single-leg calf raise 12 kg · overhead press 8 kg — from the imported exercise library's defaults. Chest press 14 kg · bicep curl 8 kg are starting recommendations (not in that library). Squat (goblet, load as able), eccentric calf, pull-ups, planks, glute bridge and core are bodyweight/band. Adjust all to your working weight.
+
 **Muscle-retention rules:** lift heavy, stop 1–2 reps short of failure (RPE 8); protein 1.6–2.2 g/kg/day; do not add volume in peak weeks (4 & 7).
 
 ---

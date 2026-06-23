@@ -31,33 +31,38 @@ const sx = (name, sets, reps, reps_type, weight, target) => ({ name, sets, reps,
 // Yoga uses the YogaPose shape: [name, reps, reps_type, target]
 const yp = (name, reps, reps_type, target) => ({ name, reps, reps_type, target });
 
+// Weights (kg) sourced from the imported exercise library's maintain defaults
+// (src/data/strength-exercises.ts) where the lift exists there; the upper-body
+// aesthetic lifts (chest press, pull-up, bicep curl) and plain squat aren't in
+// that running-rehab library, so those are coach starting recommendations —
+// dumbbells per hand — to adjust to your working weight. null = bodyweight/band.
 const STRENGTH_A = [
-  sx('Step-up with knee raise', 2, 8, 'reps', null, 'Legs · per leg'),
-  sx('Single-leg Romanian deadlift', 2, 8, 'reps', null, 'Posterior · per leg'),
-  sx('Squat', 2, 12, 'reps', null, 'Legs'),
-  sx('Calf raise (3s eccentric)', 2, 12, 'reps', null, 'Calves'),
-  sx('Chest press', 3, 8, 'reps', null, 'Chest'),
-  sx('Overhead press', 3, 8, 'reps', null, 'Shoulders'),
-  sx('Pull-up', 3, 8, 'reps', null, 'Back'),
+  sx('Step-up with knee raise', 2, 8, 'reps', 8, 'Legs · per leg'),        // lib: Single Leg Step Up (weighted)
+  sx('Single-leg Romanian deadlift', 2, 8, 'reps', 10, 'Posterior · per leg'), // lib
+  sx('Squat', 2, 12, 'reps', null, 'Legs'),                                  // goblet, load as able
+  sx('Calf raise (3s eccentric)', 2, 12, 'reps', null, 'Calves'),            // bodyweight, add DBs as able
+  sx('Chest press', 3, 8, 'reps', 14, 'Chest'),                              // DB, starting rec
+  sx('Overhead press', 3, 8, 'reps', 8, 'Shoulders'),                        // lib: Dumbbell overhead press
+  sx('Pull-up', 3, 8, 'reps', null, 'Back'),                                 // bodyweight
   sx('Side plank', 2, 20, 'secs', null, 'Core · per side'),
 ];
 const STRENGTH_B = [
-  sx('Reverse lunge', 2, 12, 'reps', null, 'Legs · per leg'),
-  sx('Single-leg glute bridge', 2, 10, 'reps', null, 'Glutes · per leg'),
-  sx('Clamshell / mini-band step', 2, 12, 'reps', null, 'Glute med · per side'),
-  sx('Single-leg calf raise', 2, 12, 'reps', null, 'Calves · per leg'),
-  sx('Pull-up', 3, 8, 'reps', null, 'Back'),
-  sx('Bicep curl', 3, 10, 'reps', null, 'Arms'),
-  sx('Chest press', 3, 8, 'reps', null, 'Chest'),
+  sx('Reverse lunge', 2, 12, 'reps', 7, 'Legs · per leg'),                   // lib: Backwards lunge (alternating)
+  sx('Single-leg glute bridge', 2, 10, 'reps', null, 'Glutes · per leg'),    // bodyweight
+  sx('Clamshell / mini-band step', 2, 12, 'reps', null, 'Glute med · per side'), // band
+  sx('Single-leg calf raise', 2, 12, 'reps', 12, 'Calves · per leg'),        // lib: Single leg calf raise (weighted)
+  sx('Pull-up', 3, 8, 'reps', null, 'Back'),                                 // bodyweight
+  sx('Bicep curl', 3, 10, 'reps', 8, 'Arms'),                                // DB, starting rec
+  sx('Chest press', 3, 8, 'reps', 14, 'Chest'),                              // DB, starting rec
   sx('Bird dog', 2, 12, 'reps', null, 'Core · per side'),
 ];
 // Taper upper-body hold (week 11) — keeps shape without loading the legs.
 const STRENGTH_UPPER = [
-  sx('Pull-up', 3, 8, 'reps', null, 'Back'),
-  sx('Chest press', 3, 8, 'reps', null, 'Chest'),
-  sx('Overhead press', 2, 8, 'reps', null, 'Shoulders'),
-  sx('Bicep curl', 2, 10, 'reps', null, 'Arms'),
-  sx('Single-leg glute bridge', 2, 10, 'reps', null, 'Glutes · per leg'),
+  sx('Pull-up', 3, 8, 'reps', null, 'Back'),                                 // bodyweight
+  sx('Chest press', 3, 8, 'reps', 14, 'Chest'),                              // DB, starting rec
+  sx('Overhead press', 2, 8, 'reps', 8, 'Shoulders'),                        // lib: Dumbbell overhead press
+  sx('Bicep curl', 2, 10, 'reps', 8, 'Arms'),                                // DB, starting rec
+  sx('Single-leg glute bridge', 2, 10, 'reps', null, 'Glutes · per leg'),    // bodyweight
   sx('Side plank', 2, 20, 'secs', null, 'Core · per side'),
 ];
 const CORE = [
