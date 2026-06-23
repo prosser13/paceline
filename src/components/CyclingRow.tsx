@@ -11,9 +11,31 @@ import {
 // Column grid for the ride segment table — mirrors the run segment table.
 export const CYCLING_COLS = '1fr 104px 84px 70px';
 
+// Whole minutes (may be fractional) → "61:24".
+function fmtMinSec(mins: number): string {
+  const total = Math.round(mins * 60);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// One cell that shows the actual value (bold) over the planned target (small).
+function ActualCell({ value, target }: { value: string; target: string }) {
+  return (
+    <span className="text-right leading-tight">
+      <span className="font-mono text-[13.5px] text-ink tabular-nums block">{value}</span>
+      <span className="font-mono text-[11px] text-stone tabular-nums block mt-[1px]">{target}</span>
+    </span>
+  );
+}
+
 // The segment table body (header + one row per segment), shared by the ride row
-// and the dashboard CyclingHero. Each caller supplies its own wrapper.
-export function CyclingDetailTable({ segments }: { segments: CyclingSegment[] }) {
+// and the dashboard CyclingHero. When `actual` is supplied for a single-segment
+// ride (no per-segment splits exist for rides), the row shows the whole-ride
+// actuals over the planned targets — mirroring the run segment table.
+export function CyclingDetailTable({ segments, actual = null }: {
+  segments: CyclingSegment[];
+  actual?: { avgPower: number | null; avgHr: number | null; durationMins: number | null } | null;
+}) {
+  const showActual = !!actual && segments.length === 1;
   return (
     <>
       <div
@@ -32,9 +54,19 @@ export function CyclingDetailTable({ segments }: { segments: CyclingSegment[] })
             <span className="truncate">{seg.label}</span>
             {seg.zoneKey && <ZoneChip zone={seg.zoneKey} />}
           </span>
-          <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtPower(seg.powerMin, seg.powerMax)}</span>
-          <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtHr(seg.hrMin, seg.hrMax)}</span>
-          <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{seg.durationMins ? fmtRideClock(seg.durationMins) : '—'}</span>
+          {showActual ? (
+            <>
+              <ActualCell value={actual!.avgPower != null ? `${actual!.avgPower} W` : '—'} target={fmtPower(seg.powerMin, seg.powerMax)} />
+              <ActualCell value={actual!.avgHr != null ? `${actual!.avgHr}` : '—'} target={fmtHr(seg.hrMin, seg.hrMax)} />
+              <ActualCell value={actual!.durationMins != null ? fmtMinSec(actual!.durationMins) : '—'} target={seg.durationMins ? fmtRideClock(seg.durationMins) : '—'} />
+            </>
+          ) : (
+            <>
+              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtPower(seg.powerMin, seg.powerMax)}</span>
+              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtHr(seg.hrMin, seg.hrMax)}</span>
+              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{seg.durationMins ? fmtRideClock(seg.durationMins) : '—'}</span>
+            </>
+          )}
         </div>
       ))}
     </>

@@ -19,6 +19,8 @@ export interface StravaActivity {
   start_date_local: string;   // "2026-06-19T07:30:00"
   average_heartrate?: number;
   average_speed?: number;     // m/s
+  average_watts?: number;     // rides with a power meter / smart trainer
+  weighted_average_watts?: number;
 }
 
 interface TokenResponse {
@@ -222,6 +224,9 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   // Strava id → which plan kind this activity can fulfil (runs match by distance,
   // rides by date), resolved once here so the matcher needn't re-classify.
   const kindByStravaId = new Map(relevant.map(a => [a.id, activityKind(a.sport_type, a.type)!]));
+  // Strava id → average power (rides only) — kept here because the stored activity
+  // row doesn't carry watts; used to write the ride completion's actual_avg_power.
+  const powerByStravaId = new Map(relevant.map(a => [a.id, a.average_watts != null ? Math.round(a.average_watts) : null]));
 
   await upsertActivities(
     relevant.map(a => ({
@@ -318,6 +323,8 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       // from deriving a bogus pace-based TSS against a non-run activity.
       actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,
       actual_avg_hr:          activity.avg_hr ?? null,
+      // Rides carry average power; runs/strength/yoga don't.
+      actual_avg_power:       kind === 'ride' ? (powerByStravaId.get(activity.strava_activity_id) ?? null) : null,
       strava_activity_id:     activity.strava_activity_id,
       source:                 'strava',
       // Rides carry no distance-segment pacing; store empty arrays (not null) so

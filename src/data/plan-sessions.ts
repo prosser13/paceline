@@ -154,7 +154,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, segment_actuals, segment_hr')
+    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr')
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
