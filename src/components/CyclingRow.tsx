@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -95,7 +95,7 @@ export default function CyclingRow({
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
   const hasDetail = segments.length > 0;
   const totalMins = sumCyclingMinutes(segments);
-  const duration  = totalMins > 0 ? fmtRideClock(totalMins) : session.estimated_duration ?? null;
+  const duration  = totalMins > 0 ? fmtClock(totalMins * 60) : humanHMM(session.estimated_duration ?? null);
 
   return (
     <div>
