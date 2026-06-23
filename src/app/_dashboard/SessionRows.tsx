@@ -14,6 +14,7 @@ import {
 } from '@/components/session-ui';
 import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
+import YogaRow, { type YogaPose } from '@/components/YogaRow';
 import { RunGlyph, Dumbbell } from '@/components/glyphs';
 import { GOLD } from '@/lib/colors';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
@@ -67,6 +68,7 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
   const [open, setOpen] = useState(false);
   const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
   const hasDetail = exercises.length > 0;
+  const title = session.session_type === 'CORE' ? 'Core' : 'Strength';
 
   return (
     <div>
@@ -78,7 +80,7 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
         <span style={{ color: GOLD }}><Dumbbell size={emphasis ? 20 : 16} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>Strength</span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>{title}</span>
             {hasDetail && (
               <span className="font-mono text-[13px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
@@ -124,11 +126,14 @@ export default function SessionRows({
   return (
     <div className="divide-y divide-fog/50">
       {sessions.filter(s => s.status !== 'rest').map(s =>
-        s.session_type === 'STRENGTH'
+        s.session_type === 'STRENGTH' || s.session_type === 'CORE'
           ? <StrengthRowCompact key={s.id} session={s} emphasis={emphasis} />
-          : s.activity_type === 'cycling'
-            ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph emphasis={emphasis} />
-            : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} emphasis={emphasis} />,
+          : s.session_type === 'YOGA'
+            ? <YogaRow key={s.id} compact focus={s.description ?? null} duration={s.estimated_duration ?? null}
+                poses={(s.structure as unknown as YogaPose[] | null) ?? []} />
+            : s.activity_type === 'cycling'
+              ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph emphasis={emphasis} />
+              : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} emphasis={emphasis} />,
       )}
     </div>
   );

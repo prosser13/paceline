@@ -283,12 +283,18 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
         const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
         if (err < bestErr) { bestErr = err; match = s; }
       }
-    } else {
+    } else if (kind === 'strength') {
       // Strength has no distance, and recorded duration runs long (elapsed time can
       // push a 1h session to 1h30), so don't gate on duration — match purely on the
-      // same-day strength session.
+      // same-day strength/core session.
       match = planSessions.find(s =>
-        s.session_type === 'STRENGTH' && s.scheduled_date === activity.activity_date) ?? null;
+        (s.session_type === 'STRENGTH' || s.session_type === 'CORE') &&
+        s.scheduled_date === activity.activity_date) ?? null;
+    } else {
+      // Yoga (mobility/stretch) — no distance, short duration; match the same-day
+      // planned yoga session.
+      match = planSessions.find(s =>
+        s.session_type === 'YOGA' && s.scheduled_date === activity.activity_date) ?? null;
     }
     if (!match) continue;
 
@@ -305,8 +311,8 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     await insertCompletedWorkout({
       plan_session_id:        match.id,
       completed_date:         activity.activity_date,
-      // Strength carries no distance; rides/runs do.
-      actual_distance_km:     kind === 'strength' ? null : activity.distance_km,
+      // Strength/yoga carry no distance; rides/runs do.
+      actual_distance_km:     kind === 'strength' || kind === 'yoga' ? null : activity.distance_km,
       actual_duration_mins:   activity.duration_mins,
       // Pace is meaningless for rides/strength; leaving it null stops the plan view
       // from deriving a bogus pace-based TSS against a non-run activity.

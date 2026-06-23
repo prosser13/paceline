@@ -5,9 +5,11 @@ import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import SessionHero from './SessionHero';
 import SessionRows from './SessionRows';
 import StrengthHero from '@/components/StrengthHero';
+import YogaHero from '@/components/YogaHero';
 import CyclingHero from '@/components/CyclingHero';
 import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
+import { type YogaPose } from '@/components/YogaRow';
 import WeekStrip from './WeekStrip';
 import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
 
@@ -37,6 +39,11 @@ export default function AgendaA({ d }: { d: DashboardData }) {
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
       exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} done={done} />
+  ) : null;
+  const yogaBlock = (s: PlanSession | null, label: string, done = false) => s ? (
+    <YogaHero label={label} focus={s.description ?? null}
+      duration={s.estimated_duration ?? null} note={s.rationale ?? null}
+      poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done} />
   ) : null;
 
   // The day's primary activity hero — a ride or a run, depending on activity_type.
@@ -73,11 +80,13 @@ export default function AgendaA({ d }: { d: DashboardData }) {
             <>
               {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today')}
+              {yogaBlock(d.todayYoga, d.todayYogaDone ? 'Done' : 'Today', d.todayYogaDone)}
             </>
           ) : (
             <>
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
               {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
+              {yogaBlock(d.todayYoga, d.todayYogaDone ? 'Done' : 'Today', d.todayYogaDone)}
             </>
           )}
           {d.offPlanToday.length > 0 && (

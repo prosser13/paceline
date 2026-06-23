@@ -66,10 +66,10 @@ export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) 
 // A strength session row — compact (duration + focus), expandable to the
 // prescribed exercises + an optional note.
 export default function StrengthRow({
-  short, date, focus, duration, today, done, note, exercises = [], compact = false,
+  short, date, focus, duration, today, done, note, exercises = [], compact = false, title = 'Strength',
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
-  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean;
+  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string;
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = exercises.length > 0;
@@ -95,7 +95,7 @@ export default function StrengthRow({
           <div className="flex items-center gap-[7px] leading-tight">
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
             <Dumbbell size={15} className="text-stone shrink-0" />
-            <span className="text-[16.5px] font-semibold text-ink">Strength</span>
+            <span className="text-[16.5px] font-semibold text-ink">{title}</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>

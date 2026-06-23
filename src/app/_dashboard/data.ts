@@ -54,6 +54,7 @@ export interface WindowDay {
   hasRun: boolean;
   hasRide: boolean;
   hasStrength: boolean;
+  hasYoga: boolean;
 }
 
 export interface DashboardData {
@@ -66,8 +67,10 @@ export interface DashboardData {
   tomorrowSession: PlanSession | null;
   todayStrength: PlanSession | null;
   tomorrowStrength: PlanSession | null;
+  todayYoga: PlanSession | null;
   todayCompleted: CompletedToday | null;
   todayStrengthDone: boolean;
+  todayYogaDone: boolean;
   strengthFirst: boolean;
 
   upcomingWithRest: PlanSession[]; // days +2..+7, rest-filled
@@ -192,24 +195,28 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // otherwise the run/ride leads. Mirrors the plan page.
   const planId = (weekRow?.plan_id as number | null) ?? null;
   const strengthFirst = planId ? await getPlanStrengthPriority(planId) : false;
+  // Display order within a day: run/ride first, then strength/core, then yoga
+  // (or the reverse on strength-priority plans). STRENGTH and CORE share a tier.
+  const isStrengthTier = (s: PlanSession) => s.session_type === 'STRENGTH' || s.session_type === 'CORE';
+  const rank = (s: PlanSession) => (isStrengthTier(s) ? 1 : s.session_type === 'YOGA' ? 2 : 0);
   for (const list of byDate.values()) {
-    list.sort((a, b) => {
-      const aS = a.session_type === 'STRENGTH' ? 1 : 0;
-      const bS = b.session_type === 'STRENGTH' ? 1 : 0;
-      return strengthFirst ? bS - aS : aS - bS;
-    });
+    list.sort((a, b) => (strengthFirst ? rank(b) - rank(a) : rank(a) - rank(b)));
   }
   function pickRun(list?: PlanSession[]): PlanSession | null {
-    return list?.find(s => s.session_type !== 'STRENGTH') ?? null;
+    return list?.find(s => !isStrengthTier(s) && s.session_type !== 'YOGA') ?? null;
   }
   function pickStrength(list?: PlanSession[]): PlanSession | null {
-    return list?.find(s => s.session_type === 'STRENGTH') ?? null;
+    return list?.find(isStrengthTier) ?? null;
+  }
+  function pickYoga(list?: PlanSession[]): PlanSession | null {
+    return list?.find(s => s.session_type === 'YOGA') ?? null;
   }
 
   const todaySession     = pickRun(byDate.get(todayStr));
   const tomorrowSession  = pickRun(byDate.get(tomorrowStr));
   const todayStrength    = pickStrength(byDate.get(todayStr));
   const tomorrowStrength = pickStrength(byDate.get(tomorrowStr));
+  const todayYoga        = pickYoga(byDate.get(todayStr));
 
   const fitnessForm    = wellness.form;
   const fitnessHistory = wellness.history;
@@ -271,9 +278,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
       isTomorrow: i === 1,
       sessions,
       volumeKm,
-      hasRun: sessions.some(s => s.session_type !== 'STRENGTH' && !isRide(s)),
+      hasRun: sessions.some(s => !isStrengthTier(s) && s.session_type !== 'YOGA' && !isRide(s)),
       hasRide: sessions.some(isRide),
-      hasStrength: sessions.some(s => s.session_type === 'STRENGTH'),
+      hasStrength: sessions.some(isStrengthTier),
+      hasYoga: sessions.some(s => s.session_type === 'YOGA'),
     });
   }
 
@@ -305,9 +313,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [cw, strengthCw, weekData, planWeeks] = await Promise.all([
+  const [cw, strengthCw, yogaCw, weekData, planWeeks] = await Promise.all([
     todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
     todayStrength ? getCompletedForSession(todayStrength.id) : Promise.resolve(null),
+    todayYoga ? getCompletedForSession(todayYoga.id) : Promise.resolve(null),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
           listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
@@ -404,8 +413,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   return {
     firstName, greeting: greet(), todayFull, todayStr,
-    todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayCompleted,
+    todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayYoga, todayCompleted,
     todayStrengthDone: !!strengthCw,
+    todayYogaDone: !!yogaCw,
     strengthFirst,
     upcomingWithRest, windowDays,
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
