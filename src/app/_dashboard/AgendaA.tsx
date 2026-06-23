@@ -52,7 +52,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   // owns it.
   const activityHero = (s: PlanSession, label: string, completed: DashboardData['todayCompleted']) =>
     s.activity_type === 'cycling'
-      ? <CyclingHero label={label} session={s} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+      ? <CyclingHero label={label} session={s} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} />
       : <SessionHero label={label} session={s} thresholdPace={d.thresholdPace}
           zones={d.zones} hrZones={d.hrZones} completed={completed} />;
 

@@ -40,6 +40,7 @@ export interface PlanSession {
 export interface CompletedToday {
   durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null;
   avgHr: number | null;
+  avgPower: number | null;   // rides only
   segmentActuals: (number | null)[] | null;
   segmentHr: (number | null)[] | null;
 }
@@ -331,22 +332,31 @@ export async function loadDashboardData(): Promise<DashboardData> {
     ? todayCompletions[todaySessions.findIndex(s => s.id === todaySession.id)] ?? null
     : null;
 
+  // FTP proxy = the top of the Threshold (Z4) power zone — drives ride TSS the
+  // same way threshold pace drives run TSS. Updates if the zones are edited.
+  const ftp = powerZones['Z4']?.powerMax ?? null;
+
   let todayCompleted: CompletedToday | null = null;
   if (cw) {
     const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
     const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+    const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
     const durationStr = mins != null
       ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
       : '';
     let tss: number | null = null;
     if (mins != null && pace != null && pace > 0) {
-      const IF = threshMinKm / pace;
+      const IF = threshMinKm / pace;                 // run: pace vs threshold
+      tss = Math.round((mins / 60) * IF * IF * 100);
+    } else if (mins != null && avgPower != null && ftp && ftp > 0) {
+      const IF = avgPower / ftp;                      // ride: power vs FTP
       tss = Math.round((mins / 60) * IF * IF * 100);
     }
     todayCompleted = {
       durationStr, mins, tss,
       distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
       avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+      avgPower,
       segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
       segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     };
