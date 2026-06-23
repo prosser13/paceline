@@ -7,6 +7,7 @@ import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { listUserMatches } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
+import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import PlanThread from './PlanThread';
 import RaceBlock from './RaceBlock';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
@@ -153,11 +154,14 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     };
   }
 
-  // First non-done, non-rest session in date order — used for next-up row highlight
+  // First non-done, non-rest run/ride in date order — used for next-up row
+  // highlight. Skip supplementary (strength/core/yoga) so "next up" tracks the
+  // next actual workout, not a warm-up that shares the day.
   const nextSessionId = allSessions.find(s => {
     if (s.id in completedMap) return false;
     const st = s.status;
     if (st === 'rest' || st === 'skipped' || st === 'missed_injury') return false;
+    if (s.session_type === 'STRENGTH' || s.session_type === 'CORE' || s.session_type === 'YOGA') return false;
     return true;
   })?.id ?? null;
 
@@ -209,10 +213,11 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     }
     wk.sort((a, b) => {
       if (a.scheduled_date !== b.scheduled_date) return a.scheduled_date < b.scheduled_date ? -1 : 1;
-      // Same day: strength first on strength-priority plans, otherwise run/race first.
-      const aS = a.session_type === 'STRENGTH' ? 1 : 0;
-      const bS = b.session_type === 'STRENGTH' ? 1 : 0;
-      return strengthFirst ? bS - aS : aS - bS;
+      // Same day: chronological (warm-up → run → stretch → core → strength), or
+      // strength-first on strength-priority plans.
+      return strengthFirst
+        ? strengthFirstOrder(a) - strengthFirstOrder(b)
+        : intraDayOrder(a) - intraDayOrder(b);
     });
   }
 

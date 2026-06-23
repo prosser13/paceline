@@ -68,14 +68,27 @@ const CORE = [
   sx('Bicycle crunch', 2, 12, 'reps', null, 'Core · per side'),
   sx('Prone plank with leg lift', 2, 30, 'secs', null, 'Core'),
 ];
-const YOGA_WARMUP = [
+// Dynamic flexibility — done BEFORE longer / harder runs as a warm-up.
+const YOGA_DYNAMIC = [
   yp('Cat-cow', 6, 'reps', null),
-  yp('Leg swings — front', 12, 'reps', 'per leg'),
-  yp('Leg swings — lateral', 12, 'reps', 'per leg'),
+  yp('Leg swing (front)', 12, 'reps', 'per leg'),
+  yp('Side swing (lateral)', 12, 'reps', 'per leg'),
   yp('Side lunge', 6, 'reps', 'per side'),
   yp('Walking knee hugs', 8, 'reps', 'per leg'),
-  yp("World's greatest stretch", 5, 'reps', 'per side'),
+  yp('Side skip', 12, 'reps', 'each way'),
 ];
+// Static stretches — done AFTER a run (or to finish a strength session).
+const YOGA_STATIC = [
+  yp('Bent-leg calf stretch', 30, 'secs', 'per side'),
+  yp('Straight-leg calf stretch', 30, 'secs', 'per side'),
+  yp('Lying hamstring stretch', 30, 'secs', 'per side'),
+  yp('Quad stretch', 30, 'secs', 'per side'),
+  yp('Hip flexor stretch', 30, 'secs', 'per side'),
+  yp('Glute stretch', 30, 'secs', 'per side'),
+  yp('Hip rotator stretch', 30, 'secs', 'per side'),
+  yp('Shoulder & lat stretch', 30, 'secs', 'per side'),
+];
+// Rest-day mobility flow.
 const YOGA_MOBILITY = [
   yp('Downward dog', 30, 'secs', null),
   yp('Low lunge (hip flexor)', 30, 'secs', 'per side'),
@@ -90,18 +103,18 @@ const strengthA = (light = false) => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
   description: light ? 'Lower + upper push (lighter)' : 'Lower + upper push',
   estimated_duration: light ? '0:30' : '0:40', structure: STRENGTH_A,
-  rationale: light ? 'Race week — maintenance load only. Run AM / lift PM.'
-                   : 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7.',
+  rationale: light ? 'Race week — maintenance load only. Run AM / lift PM. Finish with the static-stretch routine.'
+                   : 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7. Finish with the static-stretch routine.',
 });
 const strengthB = () => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
   description: 'Lower + upper pull', estimated_duration: '0:40', structure: STRENGTH_B,
-  rationale: 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7.',
+  rationale: 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7. Finish with the static-stretch routine.',
 });
 const strengthUpper = () => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
   description: 'Upper-body — hold shape', estimated_duration: '0:30', structure: STRENGTH_UPPER,
-  rationale: 'Taper: light, keep the lifts moving — does not fatigue the legs.',
+  rationale: 'Taper: light, keep the lifts moving — does not fatigue the legs. Finish with the static-stretch routine.',
 });
 const core = (light = false) => ({
   session_type: 'CORE', activity_type: 'strength', name: 'Core',
@@ -109,10 +122,17 @@ const core = (light = false) => ({
   estimated_duration: '0:12', structure: CORE,
   rationale: 'Not immediately before a hard run.',
 });
-const yogaWarmup = () => ({
+// Dynamic warm-up — sorts FIRST in the day (before the run).
+const yogaDynamic = () => ({
   session_type: 'YOGA', activity_type: 'yoga', name: 'Yoga',
-  description: 'Dynamic warm-up', estimated_duration: '0:08', structure: YOGA_WARMUP,
-  rationale: 'Before the long run — mobilise; save static holds for afterwards.',
+  description: 'Dynamic warm-up', estimated_duration: '0:08', structure: YOGA_DYNAMIC,
+  rationale: 'Do this first — mobilise before the run; save static holds for afterwards.',
+});
+// Static stretches — sorts AFTER the run.
+const yogaStatic = () => ({
+  session_type: 'YOGA', activity_type: 'yoga', name: 'Yoga',
+  description: 'Static stretches', estimated_duration: '0:10', structure: YOGA_STATIC,
+  rationale: 'After the run — 2–3× per side, 15–30s each. Can also finish a strength session.',
 });
 const yogaMobility = () => ({
   session_type: 'YOGA', activity_type: 'yoga', name: 'Yoga',
@@ -122,39 +142,52 @@ const yogaMobility = () => ({
 
 // ── Per-week schedule (day_of_week → session) ────────────────
 // Days: 1 Mon(rest) 2 Tue 3 Wed 4 Thu 5 Fri 6 Sat 7 Sun
+// Within a day the app orders by role (warm-up → run → stretch → core/strength),
+// so insertion order here doesn't matter. Dynamic warm-ups go before the longer/
+// harder runs; static stretches after the longer runs (strength days finish with
+// them instead). Mon = rest-day mobility + core.
 function weekPlan(week) {
-  // Race weeks 8 & 10: Sat (day 6) is a tune-up race — drop Strength B + Sat core.
+  // Race weeks 8 & 10: Sat (day 6) is a tune-up race — drop Strength B + Sat core;
+  // warm up before the race.
   if (week === 8 || week === 10) {
     return [
-      [1, core()], [1, yogaMobility()],
-      [2, strengthA(true)],
+      [1, yogaMobility()], [1, core()],
+      [2, yogaDynamic()], [2, strengthA(true)],
+      [3, yogaDynamic()], [3, yogaStatic()],
       [4, core()],
-      [7, yogaWarmup()],
+      [6, yogaDynamic()],
+      [7, yogaDynamic()], [7, yogaStatic()],
     ];
   }
   // Week 11: sharpening taper, VO₂ on Thu (day 4) — upper-body hold on Tue, light core.
   if (week === 11) {
     return [
-      [1, core(true)], [1, yogaMobility()],
-      [2, strengthUpper()],
+      [1, yogaMobility()], [1, core(true)],
+      [2, yogaDynamic()], [2, strengthUpper()],
+      [4, yogaDynamic()],
       [6, core(true)],
-      [7, yogaWarmup()],
+      [7, yogaDynamic()], [7, yogaStatic()],
     ];
   }
-  // Week 12: race week — mobility + one light core only.
+  // Week 12: race week (Sun) — mobility + light core, warm-ups before the quality
+  // runs and the race; no strength, no heavy stretching.
   if (week === 12) {
     return [
-      [1, core(true)], [1, yogaMobility()],
+      [1, yogaMobility()], [1, core(true)],
+      [3, yogaDynamic()],
+      [5, yogaDynamic()],
+      [7, yogaDynamic()],
     ];
   }
   // Weeks 1–7 and 9: full load.
   return [
-    [1, core()], [1, yogaMobility()],
-    [2, strengthA()],
+    [1, yogaMobility()], [1, core()],
+    [2, yogaDynamic()], [2, strengthA()],
+    [3, yogaDynamic()], [3, yogaStatic()],
     [4, core()],
-    [5, strengthB()],
+    [5, yogaDynamic()], [5, strengthB()],
     [6, core()],
-    [7, yogaWarmup()],
+    [7, yogaDynamic()], [7, yogaStatic()],
   ];
 }
 

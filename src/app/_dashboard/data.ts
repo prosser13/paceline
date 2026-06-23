@@ -13,6 +13,7 @@ import {
 } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
+import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
@@ -195,12 +196,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // otherwise the run/ride leads. Mirrors the plan page.
   const planId = (weekRow?.plan_id as number | null) ?? null;
   const strengthFirst = planId ? await getPlanStrengthPriority(planId) : false;
-  // Display order within a day: run/ride first, then strength/core, then yoga
-  // (or the reverse on strength-priority plans). STRENGTH and CORE share a tier.
+  // Display order within a day: the sequence sessions are actually done in
+  // (warm-up → run → stretch → core → strength), or strength-first on
+  // strength-priority plans. STRENGTH and CORE share a tier.
   const isStrengthTier = (s: PlanSession) => s.session_type === 'STRENGTH' || s.session_type === 'CORE';
-  const rank = (s: PlanSession) => (isStrengthTier(s) ? 1 : s.session_type === 'YOGA' ? 2 : 0);
   for (const list of byDate.values()) {
-    list.sort((a, b) => (strengthFirst ? rank(b) - rank(a) : rank(a) - rank(b)));
+    list.sort((a, b) =>
+      strengthFirst
+        ? strengthFirstOrder(a) - strengthFirstOrder(b)
+        : intraDayOrder(a) - intraDayOrder(b));
   }
   function pickRun(list?: PlanSession[]): PlanSession | null {
     return list?.find(s => !isStrengthTier(s) && s.session_type !== 'YOGA') ?? null;
