@@ -23,10 +23,16 @@ export function intraDayOrder(s: { session_type?: string | null; description?: s
   return 30;                               // run / ride / race
 }
 
-// Strength-priority plans: strength leads, then run/ride, then yoga.
-export function strengthFirstOrder(s: { session_type?: string | null }): number {
+// Strength-priority plans (e.g. Dragon 50): strength leads, but a dynamic
+// warm-up still comes before the run and a static stretch after it.
+export function strengthFirstOrder(s: { session_type?: string | null; description?: string | null }): number {
   const t = s.session_type;
   if (t === 'STRENGTH' || t === 'CORE') return 0;
-  if (t === 'YOGA') return 2;
-  return 1;
+  if (t === 'YOGA') {
+    const d = (s.description ?? '').toLowerCase();
+    if (d.includes('warm')) return 1;      // dynamic warm-up — before the run
+    if (d.includes('mobility')) return 4;   // rest-day flow — last
+    return 3;                               // static stretches — after the run
+  }
+  return 2;                                // run / ride / race
 }
