@@ -30,6 +30,36 @@ export async function getActivityByStravaId(stravaId: number) {
   return data;
 }
 
+// Parts needed to combine activities into one (the merge feature). Power comes
+// from the raw Strava payload (the `activities` table has no power column).
+export async function getActivitiesForMerge(stravaIds: number[]) {
+  const { data } = await supabaseAdmin
+    .from('activities')
+    .select('strava_activity_id, activity_type, distance_km, duration_mins, moving_time_secs, avg_hr, avg_pace_min_km, raw_data')
+    .in('strava_activity_id', stravaIds);
+  return (data ?? []).map(a => ({
+    stravaActivityId: Number(a.strava_activity_id),
+    activityType:     a.activity_type as string,
+    distanceKm:       a.distance_km != null ? Number(a.distance_km) : null,
+    durationMins:     a.duration_mins != null ? Number(a.duration_mins) : null,
+    movingSecs:       a.moving_time_secs != null ? Number(a.moving_time_secs) : null,
+    avgHr:            a.avg_hr != null ? Number(a.avg_hr) : null,
+    avgPaceMinKm:     a.avg_pace_min_km != null ? Number(a.avg_pace_min_km) : null,
+    avgPower:         (a.raw_data as Record<string, unknown> | null)?.average_watts != null
+      ? Math.round(Number((a.raw_data as Record<string, unknown>).average_watts)) : null,
+  }));
+}
+
+// strava_activity_id → display name (for showing what a completion absorbed).
+export async function getActivityNamesByStravaIds(stravaIds: number[]) {
+  if (!stravaIds.length) return [];
+  const { data } = await supabaseAdmin
+    .from('activities')
+    .select('strava_activity_id, name')
+    .in('strava_activity_id', stravaIds);
+  return (data ?? []).map(a => ({ stravaActivityId: Number(a.strava_activity_id), name: (a.name as string | null) ?? null }));
+}
+
 // strava_activity_id → avg_hr, for backfilling completions missing HR.
 export async function getActivityHrByStravaIds(stravaIds: number[]) {
   const { data } = await supabaseAdmin
@@ -69,13 +99,18 @@ export async function listOffPlanActivitiesBetween(
       .order('activity_date', { ascending: false }),
     supabaseAdmin
       .from('completed_workouts')
-      .select('strava_activity_id')
-      .not('strava_activity_id', 'is', null)
+      .select('strava_activity_id, merged_strava_ids')
       .gte('completed_date', from)
       .lte('completed_date', to),
   ]);
 
-  const matchedIds = new Set((matched ?? []).map(m => Number(m.strava_activity_id)));
+  // An activity is "accounted for" if it's a completion's primary activity OR was
+  // merged into one — either way it shouldn't show as an off-plan extra.
+  const matchedIds = new Set<number>();
+  for (const m of matched ?? []) {
+    if (m.strava_activity_id != null) matchedIds.add(Number(m.strava_activity_id));
+    for (const id of (m.merged_strava_ids as number[] | null) ?? []) matchedIds.add(Number(id));
+  }
 
   return (acts ?? [])
     .filter(a => !matchedIds.has(Number(a.strava_activity_id)))

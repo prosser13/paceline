@@ -174,8 +174,28 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
 export async function listAllCompleted() {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, segment_actuals, segment_hr');
+    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr, strava_activity_id, merged_strava_ids');
   return data ?? [];
+}
+
+// The completion's identity for the merge feature: its id, primary Strava id and
+// the ids already merged in.
+export async function getCompletionForMerge(planSessionId: string) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, completed_date, strava_activity_id, merged_strava_ids')
+    .eq('plan_session_id', planSessionId)
+    .maybeSingle();
+  return data;
+}
+
+// Patch the completion attached to a planned session (merge / unmerge).
+export async function updateCompletedForSession(
+  planSessionId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  patch: Record<string, any>,
+): Promise<void> {
+  await supabaseAdmin.from('completed_workouts').update(patch).eq('plan_session_id', planSessionId);
 }
 
 // Whether a planned session already has a logged completion (Strava idempotency).

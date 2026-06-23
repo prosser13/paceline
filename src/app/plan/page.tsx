@@ -4,7 +4,7 @@ import AppShell from '@/components/AppShell';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
-import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { listOffPlanActivitiesBetween, getActivityNamesByStravaIds, type OffPlanActivity } from '@/data/activities';
 import { listUserMatches } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
@@ -152,6 +152,24 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
       segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     };
+  }
+
+  // Activities merged into a completion (a ride Strava split in two) → shown under
+  // the session with an unmerge control. Resolve their display names.
+  const mergedBySession: Record<string, { stravaId: number; name: string | null }[]> = {};
+  const allMergedIds: number[] = [];
+  for (const cw of completed ?? []) {
+    const ids = ((cw.merged_strava_ids as number[] | null) ?? []).map(Number).filter(Boolean);
+    if (cw.plan_session_id && ids.length) {
+      mergedBySession[cw.plan_session_id as string] = ids.map(id => ({ stravaId: id, name: null }));
+      allMergedIds.push(...ids);
+    }
+  }
+  if (allMergedIds.length) {
+    const names = new Map((await getActivityNamesByStravaIds(allMergedIds)).map(n => [n.stravaActivityId, n.name]));
+    for (const list of Object.values(mergedBySession)) {
+      for (const m of list) m.name = names.get(m.stravaId) ?? null;
+    }
   }
 
   // First non-done, non-rest run/ride in date order — used for next-up row
@@ -320,6 +338,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         byWeek={byWeek}
         offPlanByDate={offPlanByDate}
         manualMatches={manualMatches}
+        mergedBySession={mergedBySession}
         todayStr={todayStr}
         completedMap={completedMap}
         nextSessionId={nextSessionId}
