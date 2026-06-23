@@ -50,10 +50,10 @@ export function YogaDetailTable({ poses }: { poses: YogaPose[] }) {
 // in EMBER and expands to the flow's poses. Yoga has no active-session flow, so
 // it is display-only (completion comes from a matched Strava activity).
 export default function YogaRow({
-  short, date, focus, duration, today, done, note, poses = [], compact = false,
+  short, date, focus, duration, today, done, note, poses = [], compact = false, emphasis = false,
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
-  today?: boolean; done?: boolean; note?: string | null; poses?: YogaPose[]; compact?: boolean;
+  today?: boolean; done?: boolean; note?: string | null; poses?: YogaPose[]; compact?: boolean; emphasis?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = poses.length > 0;
@@ -61,7 +61,7 @@ export default function YogaRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
+        className={`flex items-center gap-[14px] border-l-[3px] transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
         style={{ borderLeftColor: EMBER }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
@@ -78,8 +78,8 @@ export default function YogaRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-            <span style={{ color: EMBER }}><YogaGlyph size={15} /></span>
-            <span className="text-[16.5px] font-semibold text-ink">Yoga</span>
+            <span style={{ color: EMBER }} className="shrink-0"><YogaGlyph size={emphasis ? 18 : 15} /></span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink`}>Yoga</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
