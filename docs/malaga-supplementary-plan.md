@@ -81,13 +81,15 @@ Mon / Thu / Sat. Run twice through. Never inside a hard-run warm-up.
 
 ## Dynamic flexibility / yoga — warm-up (before longer/harder runs)
 
-Before Tue, Wed, Fri, Sun especially:
+Coded into the plan as a **Dynamic warm-up** yoga session that sorts *before* the run on the quality/long days (Tue, Wed, Fri, Sun; Thu on VO₂ taper weeks):
 Cat-cow × 6 → leg swing × 12 / leg → side swing × 12 / leg → side lunge × 6 / side → walking knee hugs × 8 / leg → side skip × 12 each way.
 
 ## Static stretches — after runs / end of strength
 
-Pick 3–4, 2–3 reps/side, 15–30s, targeting what the day loaded:
+Coded in as a **Static stretches** yoga session that sorts *after* the longer runs (Wed, Sun); on strength days (Tue, Fri) the same routine finishes the lift instead. The full set, 2–3× / side, 15–30s each:
 Bent-leg calf · straight-leg calf · lying hamstring · quad · hip flexor · glute · hip rotator · shoulder & lat.
+
+**Intra-day ordering:** the app sequences each day as it's done — dynamic warm-up → run → static stretch → core → strength (lift goes last, as an evening session).
 
 ---
 

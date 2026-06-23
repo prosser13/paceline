@@ -64,6 +64,10 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   // On strength-priority plans (e.g. Dragon 50) strength leads; the ride/run sits
   // beneath it. Otherwise the run/ride hero leads and strength follows.
   const strengthLeads = d.strengthFirst && !!d.todayStrength;
+  // A dynamic warm-up is done before the run; everything else (static stretch,
+  // rest-day mobility) after it.
+  const yogaIsWarmup = !!d.todayYoga && /warm/i.test(d.todayYoga.description ?? '');
+  const todayYogaLabel = d.todayYogaDone ? 'Done' : 'Today';
 
   return (
     <>
@@ -80,13 +84,14 @@ export default function AgendaA({ d }: { d: DashboardData }) {
             <>
               {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today')}
-              {yogaBlock(d.todayYoga, d.todayYogaDone ? 'Done' : 'Today', d.todayYogaDone)}
+              {yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
             </>
           ) : (
             <>
+              {yogaIsWarmup && yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
               {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
               {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
-              {yogaBlock(d.todayYoga, d.todayYogaDone ? 'Done' : 'Today', d.todayYogaDone)}
+              {!yogaIsWarmup && yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
             </>
           )}
           {d.offPlanToday.length > 0 && (
