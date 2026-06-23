@@ -4,9 +4,9 @@ import { useState } from 'react';
 import { CyclingDetailTable } from './CyclingRow';
 import { BikeGlyph } from './glyphs';
 import { MARINE, FERN, BONE } from '@/lib/colors';
-import { humanHMM } from './session-ui';
+import { humanHMM, fmtClock } from './session-ui';
 import {
-  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock,
+  normalizeCyclingStructure, sumCyclingMinutes,
   type PowerZoneMap, type BikeHrZoneMap,
 } from '@/lib/cycling';
 
@@ -75,7 +75,7 @@ export default function CyclingHero({
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
   const totalMins = sumCyclingMinutes(segments);
   const plannedMins = totalMins > 0 ? totalMins : null;
-  const duration  = totalMins > 0 ? fmtRideClock(totalMins) : session.estimated_duration ?? null;
+  const duration  = totalMins > 0 ? fmtClock(totalMins * 60) : humanHMM(session.estimated_duration ?? null);
 
   // Deltas (done only)
   const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;

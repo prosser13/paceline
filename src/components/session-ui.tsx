@@ -64,17 +64,23 @@ export function fmtHMM(totalSec: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-// Human-readable duration: "1h 35m" / "38m" / "1h". Accepts an "H:MM" string
-// (the format stored in the DB and produced by fmtHMM) so hour/minute durations
-// don't read like minute/second paces. Returns the input unchanged if not H:MM.
+// Canonical session-duration format: HH:MM:SS, hours always shown even under an
+// hour (e.g. "00:40:00", "01:07:00"). One format across runs, rides, strength,
+// yoga so they never read inconsistently.
+export function fmtClock(totalSeconds: number): string {
+  const t = Math.max(0, Math.round(totalSeconds));
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
+}
+
+// Session duration as HH:MM:SS. Accepts an "H:MM" string (the format stored in
+// the DB and produced by fmtHMM). Returns the input unchanged if not H:MM.
 export function humanHMM(str: string | null | undefined): string | null {
   if (!str) return null;
   const parts = str.split(':').map(Number);
   if (parts.length !== 2 || parts.some(isNaN)) return str;
   const [h, m] = parts;
-  if (h <= 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+  return fmtClock(h * 3600 + m * 60);
 }
 
 // Planned duration = Σ (distance × zone mid-pace) across all segments (repeats expanded).
