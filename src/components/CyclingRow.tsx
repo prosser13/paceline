@@ -17,6 +17,49 @@ function fmtMinSec(mins: number): string {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
+function parseDurMins(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const p = str.split(':').map(Number);
+  if (p.length !== 2 || p.some(isNaN)) return null;
+  return p[0] * 60 + p[1];
+}
+
+function deltaClass(pct: number | null): string {
+  if (pct == null) return 'text-stone/60';
+  const a = Math.abs(pct);
+  if (a < 0.10) return 'text-stone/60';
+  if (a < 0.20) return 'text-ember';
+  return 'text-oxblood';
+}
+
+function signedMin(deltaMin: number): string {
+  const sign = deltaMin >= 0 ? '+' : '−';
+  const sec = Math.round(Math.abs(deltaMin) * 60);
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  if (h > 0) return `${sign}${h}h ${m}m`;
+  if (m > 0) return `${sign}${m}m${s ? ` ${s}s` : ''}`;
+  return `${sign}${s}s`;
+}
+
+// "vs plan" mini-block — TSS + time delta, matching the run row's DeltaBlock.
+function CyclingDelta({ tssDelta, durDelta, plannedTss, plannedMins }: {
+  tssDelta: number | null; durDelta: number | null; plannedTss: number | null; plannedMins: number | null;
+}) {
+  if (tssDelta == null && durDelta == null) return null;
+  const tssPct = tssDelta != null && plannedTss ? tssDelta / plannedTss : null;
+  const durPct = durDelta != null && plannedMins ? durDelta / plannedMins : null;
+  return (
+    <div className="shrink-0 w-[72px] text-right leading-tight">
+      <div className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">vs plan</div>
+      <div className="font-mono text-[13px] mt-[2px] flex items-center justify-end gap-[4px] whitespace-nowrap">
+        {tssDelta != null && <span className={deltaClass(tssPct)}>{tssDelta >= 0 ? '+' : '−'}{Math.abs(tssDelta)}</span>}
+        {tssDelta != null && durDelta != null && <span className="text-fog">·</span>}
+        {durDelta != null && <span className={deltaClass(durPct)}>{signedMin(durDelta)}</span>}
+      </div>
+    </div>
+  );
+}
+
 // One cell that shows the actual value (bold) over the planned target (small).
 function ActualCell({ value, target }: { value: string; target: string }) {
   return (
@@ -77,16 +120,18 @@ export function CyclingDetailTable({ segments, actual = null }: {
 // Used on the plan page (with a day column) and, via the compact variant, on the
 // dashboard.
 export default function CyclingRow({
-  short, date, session, powerZones, bikeHrZones, today, done, compact = false, centeredGlyph = false, emphasis = false,
+  short, date, session, powerZones, bikeHrZones, today, done, completed = null, compact = false, centeredGlyph = false, emphasis = false, next = false,
 }: {
   short?: string;
   date?: string;
+  next?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   session: { name: string; description?: string | null; estimated_duration?: string | null; estimated_tss?: number | null; structure?: any[] | null };
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
   today?: boolean;
   done?: boolean;
+  completed?: { durationMins?: number | null; distanceKm?: number | null; tss?: number | null; avgHr?: number | null; avgPower?: number | null } | null;
   compact?: boolean;
   centeredGlyph?: boolean;   // glyph as a vertically-centred left column (dashboard) vs inline (plan)
   emphasis?: boolean;        // roomier row (tomorrow card on the dashboard)
@@ -96,6 +141,18 @@ export default function CyclingRow({
   const hasDetail = segments.length > 0;
   const totalMins = sumCyclingMinutes(segments);
   const duration  = totalMins > 0 ? fmtClock(totalMins * 60) : humanHMM(session.estimated_duration ?? null);
+
+  // Done: show actuals + vs-plan deltas, mirroring the run row.
+  const isDone      = !!done && !!completed;
+  const plannedMins = totalMins > 0 ? totalMins : parseDurMins(session.estimated_duration ?? null);
+  const plannedTss  = session.estimated_tss ?? null;
+  const actualMins  = completed?.durationMins ?? null;
+  const actualTss   = completed?.tss ?? null;
+  const tssDelta    = isDone && actualTss != null && plannedTss != null ? actualTss - plannedTss : null;
+  const durDelta    = isDone && actualMins != null && plannedMins != null ? actualMins - plannedMins : null;
+  const dispDuration = isDone && actualMins != null ? fmtClock(actualMins * 60) : duration;
+  const dispDistance = isDone ? completed?.distanceKm ?? null : null;
+  const dispTss      = isDone ? actualTss : plannedTss;
 
   return (
     <div>
@@ -116,6 +173,9 @@ export default function CyclingRow({
         {centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={emphasis ? 20 : 16} /></span>}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
+            {next && (
+              <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">Next up</span>
+            )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
             {!centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={15} /></span>}
             <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{session.name}</span>
@@ -128,17 +188,24 @@ export default function CyclingRow({
           </div>
           {session.description && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>}
         </div>
+        {isDone && <CyclingDelta tssDelta={tssDelta} durDelta={durDelta} plannedTss={plannedTss} plannedMins={plannedMins} />}
         <div className="shrink-0 text-right w-[100px]">
-          <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{duration ?? '—'}</div>
-          {session.estimated_tss != null && (
-            <div className="font-mono text-[12.5px] text-stone mt-[2px]">~{session.estimated_tss} TSS</div>
+          <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{dispDuration ?? '—'}</div>
+          {dispDistance != null && (
+            <div className="font-mono text-[13px] text-ink mt-[3px]">{dispDistance % 1 === 0 ? dispDistance : dispDistance.toFixed(1)} km</div>
+          )}
+          {dispTss != null && (
+            <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
           )}
         </div>
       </div>
 
       {open && hasDetail && (
         <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
-          <CyclingDetailTable segments={segments} />
+          <CyclingDetailTable
+            segments={segments}
+            actual={isDone ? { avgPower: completed!.avgPower ?? null, avgHr: completed!.avgHr ?? null, durationMins: completed!.durationMins ?? null } : null}
+          />
         </div>
       )}
     </div>

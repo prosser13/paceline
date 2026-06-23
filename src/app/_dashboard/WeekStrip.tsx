@@ -41,14 +41,15 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
               className="flex-1 flex flex-col items-center gap-[6px] rounded-[8px] py-[6px] cursor-pointer transition-colors hover:bg-fog/25"
               style={day.isToday ? { outline: `1.5px solid ${AMBER}` } : undefined}
               aria-label={`Jump to ${day.short} ${day.dateLabel}`}>
-              <span className="font-mono text-[10px] uppercase tracking-[.06em]" style={{ color: labelColor }}>{day.short}</span>
+              <span className="font-mono text-[10px] uppercase tracking-[.06em] inline-flex items-center gap-[2px]" style={{ color: labelColor }}>
+                {day.short}
+                {day.isToday && todayDone && <span className="text-[11px] leading-none" style={{ color: FERN }}>✓</span>}
+              </span>
               <div className="flex items-end" style={{ height: '46px' }}>
                 <div className="w-[8px] rounded-[3px]" style={{ height: `${barH}px`, background: barColor }} />
               </div>
               <div className="flex items-center gap-[2px] h-[15px]">
-                {day.isToday && todayDone ? (
-                  <span className="text-[13px] leading-none" style={{ color: FERN }}>✓</span>
-                ) : isRest ? (
+                {isRest ? (
                   <BedMini color="#a39c8c" />
                 ) : (
                   <>

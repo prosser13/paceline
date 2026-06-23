@@ -64,23 +64,35 @@ export function fmtHMM(totalSec: number): string {
   return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-// Canonical session-duration format: HH:MM:SS, hours always shown even under an
-// hour (e.g. "00:40:00", "01:07:00"). One format across runs, rides, strength,
-// yoga so they never read inconsistently.
+// Canonical session-duration format. Under an hour: "M:SS" (e.g. "34:20", "8:00").
+// An hour or more: "H:MM:SS" (e.g. "1:00:00", "1:07:00"). One format across runs,
+// rides, strength and yoga so they never read inconsistently.
 export function fmtClock(totalSeconds: number): string {
   const t = Math.max(0, Math.round(totalSeconds));
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
   const p = (n: number) => String(n).padStart(2, '0');
-  return `${p(Math.floor(t / 3600))}:${p(Math.floor((t % 3600) / 60))}:${p(t % 60)}`;
+  return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
 }
 
-// Session duration as HH:MM:SS. Accepts an "H:MM" string (the format stored in
-// the DB and produced by fmtHMM). Returns the input unchanged if not H:MM.
+// "H:MM:SS" intermediate (always 3-part, seconds preserved) — what run/race rows
+// pass to humanHMM so the precise duration (e.g. a 10k at 3:26/km = 34:20) isn't
+// rounded to the minute the way fmtHMM does.
+export function fmtHMMSS(totalSec: number): string {
+  const t = Math.max(0, Math.round(totalSec));
+  return `${Math.floor(t / 3600)}:${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+// Session duration display. Accepts "H:MM" (DB / fmtHMM) or "H:MM:SS" (fmtHMMSS)
+// and renders it via fmtClock. Returns the input unchanged if not parseable.
 export function humanHMM(str: string | null | undefined): string | null {
   if (!str) return null;
   const parts = str.split(':').map(Number);
-  if (parts.length !== 2 || parts.some(isNaN)) return str;
-  const [h, m] = parts;
-  return fmtClock(h * 3600 + m * 60);
+  if (parts.some(isNaN)) return str;
+  if (parts.length === 2) return fmtClock(parts[0] * 3600 + parts[1] * 60);
+  if (parts.length === 3) return fmtClock(parts[0] * 3600 + parts[1] * 60 + parts[2]);
+  return str;
 }
 
 // Planned duration = Σ (distance × zone mid-pace) across all segments (repeats expanded).

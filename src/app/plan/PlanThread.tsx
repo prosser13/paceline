@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, WorkoutDetail, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import YogaRow, { type YogaPose } from '@/components/YogaRow';
@@ -48,6 +49,7 @@ interface PlanSession {
   target_pace_end?: string | null;
   priority?: string | null;
   rationale?: string | null;
+  race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
 }
@@ -58,6 +60,7 @@ interface CompletedData {
   distanceKm?: number | null;
   tss: number | null;
   avgHr?: number | null;
+  avgPower?: number | null;
   segmentActuals?: (number | null)[] | null;
   segmentHr?: (number | null)[] | null;
 }
@@ -306,6 +309,7 @@ export default function PlanThread({
           focus={session.description ?? null}
           duration={session.estimated_duration ?? null}
           today={isFocus}
+          next={isNext && !isToday}
           done={isDone}
           note={session.rationale ?? null}
           exercises={(session.structure as StrengthEx[] | null) ?? []}
@@ -321,6 +325,7 @@ export default function PlanThread({
           focus={session.description ?? null}
           duration={session.estimated_duration ?? null}
           today={isFocus}
+          next={isNext && !isToday}
           done={isDone}
           note={session.rationale ?? null}
           poses={(session.structure as YogaPose[] | null) ?? []}
@@ -337,7 +342,9 @@ export default function PlanThread({
           powerZones={powerZones}
           bikeHrZones={bikeHrZones}
           today={isFocus}
+          next={isNext && !isToday}
           done={isDone}
+          completed={isDone ? completed : null}
         />
       );
     }
@@ -367,7 +374,7 @@ export default function PlanThread({
     );
 
     const plannedSec         = sumSegmentSeconds(detailSteps);
-    const plannedDurationStr = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+    const plannedDurationStr = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
     const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
     const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
 
@@ -418,6 +425,12 @@ export default function PlanThread({
             </div>
             {session.description && (
               <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>
+            )}
+            {session.race_slug && (
+              <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
+                className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
+                Race Guide →
+              </Link>
             )}
           </div>
 

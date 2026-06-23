@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMM, fmtMMSS, humanHMM, wholeRunActuals,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMMSS, fmtMMSS, humanHMM, wholeRunActuals,
 } from '@/components/session-ui';
 import CollapsibleSession from '../CollapsibleSession';
 import { RunGlyph } from '@/components/glyphs';
@@ -93,7 +93,7 @@ export default function SessionHero({
     segHr,
   );
   const plannedSec = sumSegmentSeconds(steps);
-  const plannedDur = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+  const plannedDur = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
   const profileSession = { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) };
   const isDone     = !!completed;
   const accent     = HERO_ACCENT[accentKey ?? (isDone ? 'fern' : label === 'Today' ? 'oxblood' : 'marine')];

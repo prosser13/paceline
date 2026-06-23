@@ -10,7 +10,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMM, humanHMM,
+  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM,
 } from '@/components/session-ui';
 import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
@@ -31,7 +31,7 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
     zones, null, hrZones,
   );
   const plannedSec = sumSegmentSeconds(steps);
-  const duration   = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+  const duration   = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
 
   return (
     <div>
