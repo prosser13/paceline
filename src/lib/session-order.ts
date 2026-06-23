@@ -20,7 +20,8 @@ export function intraDayOrder(s: { session_type?: string | null; description?: s
   }
   if (t === 'CORE') return 50;
   if (t === 'STRENGTH') return 60;
-  return 30;                               // run / ride / race
+  if (t === 'RACE') return 35;             // race after a warm-up run
+  return 30;                               // run / ride
 }
 
 // Strength-priority plans (e.g. Dragon 50): strength leads, but a dynamic
@@ -34,5 +35,6 @@ export function strengthFirstOrder(s: { session_type?: string | null; descriptio
     if (d.includes('mobility')) return 4;   // rest-day flow — last
     return 3;                               // static stretches — after the run
   }
-  return 2;                                // run / ride / race
+  if (t === 'RACE') return 2.5;            // race after a warm-up run
+  return 2;                                // run / ride
 }

@@ -28,6 +28,7 @@ interface PlanSession {
   estimated_tss?: number | null;
   estimated_duration?: string | null;
   target_pace?: string | null;
+  race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
 }
@@ -127,12 +128,17 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     bikeHrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
+  // FTP proxy = top of the Threshold (Z4) power zone — drives ride TSS the same
+  // way threshold pace drives run TSS.
+  const ftp = powerZones['Z4']?.powerMax ?? null;
+
   // Build map of plan_session_id → actual display values for done sessions
-  const completedMap: Record<string, { durationStr: string; durationMins: number | null; distanceKm: number | null; tss: number | null; avgHr: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
+  const completedMap: Record<string, { durationStr: string; durationMins: number | null; distanceKm: number | null; tss: number | null; avgHr: number | null; avgPower: number | null; segmentActuals: (number | null)[] | null; segmentHr: (number | null)[] | null }> = {};
   for (const cw of completed ?? []) {
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
     const pace  = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+    const power = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
     const durationStr = mins != null
       ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
       : null;
@@ -140,7 +146,10 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     if (mins != null && pace != null && pace > 0) {
       const parts = thresholdPace.split(':').map(Number);
       const threshMinKm = parts[0] + parts[1] / 60;
-      const IF = threshMinKm / pace;
+      const IF = threshMinKm / pace;                    // run: pace vs threshold
+      tss = Math.round((mins / 60) * IF * IF * 100);
+    } else if (mins != null && power != null && ftp && ftp > 0) {
+      const IF = power / ftp;                            // ride: power vs FTP
       tss = Math.round((mins / 60) * IF * IF * 100);
     }
     completedMap[cw.plan_session_id] = {
@@ -149,6 +158,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       distanceKm: cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null,
       tss,
       avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+      avgPower: power,
       segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
       segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     };
@@ -171,17 +181,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       for (const m of list) m.name = names.get(m.stravaId) ?? null;
     }
   }
-
-  // First non-done, non-rest run/ride in date order — used for next-up row
-  // highlight. Skip supplementary (strength/core/yoga) so "next up" tracks the
-  // next actual workout, not a warm-up that shares the day.
-  const nextSessionId = allSessions.find(s => {
-    if (s.id in completedMap) return false;
-    const st = s.status;
-    if (st === 'rest' || st === 'skipped' || st === 'missed_injury') return false;
-    if (s.session_type === 'STRENGTH' || s.session_type === 'CORE' || s.session_type === 'YOGA') return false;
-    return true;
-  })?.id ?? null;
 
   // Derive plan status from dates: archived (ended) / active (spans today) / future.
   const planRows = (plans ?? []) as Omit<PlanRow, 'status'>[];
@@ -211,6 +210,22 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     (acc[s.week_number] ??= []).push(s);
     return acc;
   }, {});
+
+  // "Next up": the very next session still to do — earliest by date, then by the
+  // same intra-day order the rows render in (so it lands on whatever genuinely
+  // comes first that day, e.g. strength before the run on strength-priority plans).
+  const nextSessionId = planSessions
+    .filter(s => {
+      if (s.scheduled_date < todayStr) return false;     // upcoming only
+      if (s.id in completedMap) return false;
+      const st = s.status;
+      return st !== 'rest' && st !== 'skipped' && st !== 'missed_injury';
+    })
+    .sort((a, b) =>
+      a.scheduled_date !== b.scheduled_date
+        ? (a.scheduled_date < b.scheduled_date ? -1 : 1)
+        : (strengthFirst ? strengthFirstOrder(a) - strengthFirstOrder(b) : intraDayOrder(a) - intraDayOrder(b)))
+    [0]?.id ?? null;
 
   // Fill empty days of the current and future weeks with rest days (render-only,
   // not persisted). Past weeks are left as-is.

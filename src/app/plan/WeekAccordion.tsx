@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import YogaRow, { type YogaPose } from '@/components/YogaRow';
@@ -363,7 +363,7 @@ export default function WeekAccordion({
             // Planned duration derived from the zone-paced segments (falls back to the
             // stored estimate when a session has no usable segments).
             const plannedSec         = sumSegmentSeconds(detailSteps);
-            const plannedDurationStr = plannedSec > 0 ? fmtHMM(plannedSec) : session.estimated_duration ?? null;
+            const plannedDurationStr = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
 
             const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
             const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
