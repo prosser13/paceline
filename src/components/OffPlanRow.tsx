@@ -15,6 +15,11 @@ import type { OffPlanActivity } from '@/data/activities';
 
 export interface LinkTarget { id: string; name: string; }
 
+// "+ Add to plan" (promote an off-plan activity into a brand-new plan session) is
+// hidden for now — plan additions are made directly in the DB. The PromoteButton
+// and its server action are kept intact; flip this to re-enable the UI.
+const SHOW_ADD_TO_PLAN = false;
+
 const KIND_COLOR: Record<ActivityKind, string> = { run: FERN, ride: MARINE, strength: GOLD, yoga: EMBER };
 const KIND_LABEL: Record<ActivityKind, string> = { run: 'Run', ride: 'Ride', strength: 'Strength', yoga: 'Yoga' };
 
@@ -176,8 +181,12 @@ export default function OffPlanRow({ activity, dateLabel, linkTargets, mergeTarg
               <LinkMenu stravaActivityId={activity.stravaActivityId} targets={linkTargets} />
             </>
           )}
-          <span className="text-fog">·</span>
-          <PromoteButton stravaActivityId={activity.stravaActivityId} />
+          {SHOW_ADD_TO_PLAN && (
+            <>
+              <span className="text-fog">·</span>
+              <PromoteButton stravaActivityId={activity.stravaActivityId} />
+            </>
+          )}
         </div>
       </div>
 
