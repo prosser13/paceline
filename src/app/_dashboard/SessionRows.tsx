@@ -36,19 +36,19 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] cursor-pointer select-none hover:bg-fog/15 transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[14px] py-[11px]'}`}
+        className={`flex items-center gap-[14px] cursor-pointer select-none hover:bg-fog/15 transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'}`}
         style={{ borderLeft: `3px solid ${hex}` }}
         onClick={() => setOpen(o => !o)}
       >
-        <span style={{ color: hex }}><RunGlyph size={emphasis ? 20 : 16} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>{session.name}</span>
+            <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{session.name}</span>
             <span className="font-mono text-[13px] text-stone leading-none"
               style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
           </div>
           {session.description && (
-            <div className="text-[13.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
+            <div className="text-[14.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
           )}
         </div>
         <ProfileChart bars={buildProfileBars(session, thresholdPace, zones)} size="xs" color={hex} opacity={0.6} />
@@ -73,21 +73,21 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] ${emphasis ? 'px-[18px] py-[15px]' : 'px-[14px] py-[11px]'} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
+        className={`flex items-center gap-[14px] ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15 transition-colors' : ''}`}
         style={{ borderLeft: `3px solid ${GOLD}` }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
       >
-        <span style={{ color: GOLD }}><Dumbbell size={emphasis ? 20 : 16} /></span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-[7px] leading-tight">
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16px]'} font-semibold text-ink truncate`}>{title}</span>
+            <span style={{ color: GOLD }} className="shrink-0"><Dumbbell size={emphasis ? 18 : 15} /></span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{title}</span>
             {hasDetail && (
               <span className="font-mono text-[13px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             )}
           </div>
           {session.description && (
-            <div className={`${emphasis ? 'text-[14.5px]' : 'text-[13.5px]'} leading-tight mt-[2px] truncate text-stone`}>{session.description}</div>
+            <div className="text-[14.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
           )}
         </div>
         <div className="shrink-0 text-right">
@@ -129,10 +129,10 @@ export default function SessionRows({
         s.session_type === 'STRENGTH' || s.session_type === 'CORE'
           ? <StrengthRowCompact key={s.id} session={s} emphasis={emphasis} />
           : s.session_type === 'YOGA'
-            ? <YogaRow key={s.id} compact focus={s.description ?? null} duration={s.estimated_duration ?? null}
+            ? <YogaRow key={s.id} compact emphasis={emphasis} focus={s.description ?? null} duration={s.estimated_duration ?? null}
                 poses={(s.structure as unknown as YogaPose[] | null) ?? []} />
             : s.activity_type === 'cycling'
-              ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact centeredGlyph emphasis={emphasis} />
+              ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact emphasis={emphasis} />
               : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} emphasis={emphasis} />,
       )}
     </div>
