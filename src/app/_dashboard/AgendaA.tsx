@@ -1,6 +1,7 @@
 // Option A — the week strip + agenda-spine body of the dashboard
 // (src/app/page.tsx). Server component.
 
+import { Fragment } from 'react';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import SessionHero from './SessionHero';
 import SessionRows from './SessionRows';
@@ -46,28 +47,32 @@ export default function AgendaA({ d }: { d: DashboardData }) {
       poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done} />
   ) : null;
 
-  // The day's primary activity hero — a ride or a run, depending on activity_type.
-  const activityHero = (s: PlanSession | null, label: string) => {
-    if (!s) return null;
-    return s.activity_type === 'cycling'
+  // The day's activity hero — a ride or a run, depending on activity_type. The
+  // run hero gets its rich completion (pace/HR) only when this is the run that
+  // owns it.
+  const activityHero = (s: PlanSession, label: string, completed: DashboardData['todayCompleted']) =>
+    s.activity_type === 'cycling'
       ? <CyclingHero label={label} session={s} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
       : <SessionHero label={label} session={s} thresholdPace={d.thresholdPace}
-          zones={d.zones} hrZones={d.hrZones} completed={d.todayCompleted} />;
-  };
+          zones={d.zones} hrZones={d.hrZones} completed={completed} />;
 
-  const noRunBox = (
+  const restBox = (
     <div className="border border-fog rounded-[18px] bg-paper px-[22px] py-[16px] mb-[18px] text-stone text-[16px]">
-      No run today — rest day.
+      Nothing scheduled today — rest day.
     </div>
   );
 
-  // On strength-priority plans (e.g. Dragon 50) strength leads; the ride/run sits
-  // beneath it. Otherwise the run/ride hero leads and strength follows.
-  const strengthLeads = d.strengthFirst && !!d.todayStrength;
-  // A dynamic warm-up is done before the run; everything else (static stretch,
-  // rest-day mobility) after it.
-  const yogaIsWarmup = !!d.todayYoga && /warm/i.test(d.todayYoga.description ?? '');
-  const todayYogaLabel = d.todayYogaDone ? 'Done' : 'Today';
+  // One block per today session, in the SAME order as the plan (data.ts sorts
+  // todaySessions via the shared session-order helper). This is the single
+  // source of truth — the Today node no longer hardcodes its own ordering.
+  const doneIds = new Set(d.todayDoneIds);
+  const renderTodayBlock = (s: PlanSession) => {
+    const done  = doneIds.has(s.id);
+    const label = done ? 'Done' : 'Today';
+    if (s.session_type === 'STRENGTH' || s.session_type === 'CORE') return strengthBlock(s, label, done);
+    if (s.session_type === 'YOGA') return yogaBlock(s, label, done);
+    return activityHero(s, label, s.id === d.todaySession?.id ? d.todayCompleted : null);
+  };
 
   return (
     <>
@@ -80,20 +85,9 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           dot={todayDone ? FERN : OXBLOOD}
           label={todayDone ? 'Done today' : 'Now · today'}
           labelColor={todayDone ? FERN : OXBLOOD}>
-          {strengthLeads ? (
-            <>
-              {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
-              {activityHero(d.todaySession, todayDone ? 'Done' : 'Today')}
-              {yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
-            </>
-          ) : (
-            <>
-              {yogaIsWarmup && yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
-              {activityHero(d.todaySession, todayDone ? 'Done' : 'Today') ?? noRunBox}
-              {strengthBlock(d.todayStrength, d.todayStrengthDone ? 'Done' : 'Today', d.todayStrengthDone)}
-              {!yogaIsWarmup && yogaBlock(d.todayYoga, todayYogaLabel, d.todayYogaDone)}
-            </>
-          )}
+          {d.todaySessions.length === 0
+            ? restBox
+            : d.todaySessions.map(s => <Fragment key={s.id}>{renderTodayBlock(s)}</Fragment>)}
           {d.offPlanToday.length > 0 && (
             <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
               <div className="divide-y divide-fog/50">
