@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
 import { FERN, MARINE, GOLD, EMBER } from '@/lib/colors';
-import { linkActivityToSession, promoteActivityToSession } from '@/app/plan/match-actions';
+import { linkActivityToSession, promoteActivityToSession, mergeActivityIntoSession } from '@/app/plan/match-actions';
 import type { OffPlanActivity } from '@/data/activities';
 
 export interface LinkTarget { id: string; name: string; }
@@ -78,6 +78,52 @@ function LinkMenu({ stravaActivityId, targets }: { stravaActivityId: number; tar
   );
 }
 
+// Fold this extra into a same-day completed session — for a ride/run that Strava
+// split into two activities. Mirrors LinkMenu but targets completed sessions.
+function MergeMenu({ stravaActivityId, targets }: { stravaActivityId: number; targets: LinkTarget[] }) {
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+
+  function merge(planSessionId: string) {
+    setOpen(false);
+    start(async () => {
+      await mergeActivityIntoSession(stravaActivityId, planSessionId);
+      router.refresh();
+    });
+  }
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        disabled={pending}
+        className="font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer"
+      >
+        {pending ? 'Merging…' : 'Merge into ▾'}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-[18px] z-20 min-w-[200px] rounded-[8px] border border-fog bg-paper shadow-lg overflow-hidden">
+            {targets.map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => merge(t.id)}
+                className="block w-full text-left px-[12px] py-[8px] text-[13.5px] text-ink hover:bg-fog/30 transition-colors"
+              >
+                {t.name}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </span>
+  );
+}
+
 function PromoteButton({ stravaActivityId }: { stravaActivityId: number }) {
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -93,8 +139,8 @@ function PromoteButton({ stravaActivityId }: { stravaActivityId: number }) {
   );
 }
 
-export default function OffPlanRow({ activity, dateLabel, linkTargets }: {
-  activity: OffPlanActivity; dateLabel?: string; linkTargets?: LinkTarget[];
+export default function OffPlanRow({ activity, dateLabel, linkTargets, mergeTargets }: {
+  activity: OffPlanActivity; dateLabel?: string; linkTargets?: LinkTarget[]; mergeTargets?: LinkTarget[];
 }) {
   const kind = activityKind(activity.activityType) ?? 'run';
   const title = activity.name?.trim() || KIND_LABEL[kind];
@@ -118,6 +164,12 @@ export default function OffPlanRow({ activity, dateLabel, linkTargets }: {
         </div>
         <div className="mt-[3px] flex items-center gap-[8px] flex-wrap">
           <span className="font-mono text-[12px] text-stone/80">Not in plan</span>
+          {mergeTargets && mergeTargets.length > 0 && (
+            <>
+              <span className="text-fog">·</span>
+              <MergeMenu stravaActivityId={activity.stravaActivityId} targets={mergeTargets} />
+            </>
+          )}
           {linkTargets && linkTargets.length > 0 && (
             <>
               <span className="text-fog">·</span>

@@ -2,12 +2,13 @@
 
 import { requireUser } from '@/lib/auth';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
-import { getActivityByStravaId } from '@/data/activities';
+import { getActivityByStravaId, getActivitiesForMerge } from '@/data/activities';
 import {
   insertCompletedWorkout, completedWorkoutExistsForSession, deleteCompletedForSession,
-  insertPlanSession, deletePlanSession,
+  insertPlanSession, deletePlanSession, getCompletionForMerge, updateCompletedForSession,
 } from '@/data/plan-sessions';
 import { insertSessionMatch, deleteSessionMatch } from '@/data/session-matches';
+import { combineActivities } from '@/lib/activity-merge';
 import { getCurrentWeek } from '@/data/plans';
 import { revalidatePath } from 'next/cache';
 
@@ -134,6 +135,74 @@ export async function removePromotedSession(planSessionId: string): Promise<{ ok
   await deleteCompletedForSession(planSessionId);
   await deleteSessionMatch(planSessionId);
   await deletePlanSession(planSessionId);
+  revalidate();
+  return { ok: true };
+}
+
+// Recompute a completion's actuals from its primary activity + the given merged
+// ids, and write them (with the merged-id list). Shared by merge + unmerge.
+async function recomputeCompletion(planSessionId: string, primaryStravaId: number, mergedIds: number[]) {
+  const allIds = [primaryStravaId, ...mergedIds];
+  const parts  = await getActivitiesForMerge(allIds);
+  const primary = parts.find(p => p.stravaActivityId === primaryStravaId) ?? parts[0];
+  const kind   = primary ? activityKind(primary.activityType) : null;
+  const totals = combineActivities(parts, kind);
+  // Per-segment splits don't apply to a stitched activity. Leave them null only
+  // when a run is back to a single activity (so the sync can refill); otherwise [].
+  const cleared = mergedIds.length === 0 && kind === 'run' ? null : [];
+  await updateCompletedForSession(planSessionId, {
+    ...totals,
+    merged_strava_ids: mergedIds,
+    segment_actuals:   cleared,
+    segment_hr:        cleared,
+  });
+  return kind;
+}
+
+// Merge an off-plan extra into a completed session — the two Strava activities
+// are treated as one. Combines distance/time and (moving-time-weighted) HR/power;
+// pace + TSS are re-derived downstream from the new totals.
+export async function mergeActivityIntoSession(
+  extraStravaId: number,
+  planSessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+
+  const comp = await getCompletionForMerge(planSessionId);
+  if (!comp?.strava_activity_id) return { ok: false, error: 'That session has no completed activity to merge into' };
+  const primaryId = Number(comp.strava_activity_id);
+  const merged    = ((comp.merged_strava_ids as number[] | null) ?? []).map(Number);
+  if (extraStravaId === primaryId || merged.includes(extraStravaId)) return { ok: true }; // already part of it
+
+  // Only merge like with like (a ride into a ride, a run into a run).
+  const both = await getActivitiesForMerge([primaryId, extraStravaId]);
+  const pk = both.find(p => p.stravaActivityId === primaryId);
+  const ek = both.find(p => p.stravaActivityId === extraStravaId);
+  if (!ek) return { ok: false, error: 'Activity not found' };
+  if (pk && activityKind(pk.activityType) !== activityKind(ek.activityType)) {
+    return { ok: false, error: 'Those activities are different types' };
+  }
+
+  await recomputeCompletion(planSessionId, primaryId, [...merged, extraStravaId]);
+  revalidate();
+  return { ok: true };
+}
+
+// Undo a merge — the extra activity returns to "off-plan" and the completion is
+// recomputed from what's left.
+export async function unmergeActivity(
+  extraStravaId: number,
+  planSessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+
+  const comp = await getCompletionForMerge(planSessionId);
+  if (!comp?.strava_activity_id) return { ok: false, error: 'Nothing to unmerge' };
+  const primaryId = Number(comp.strava_activity_id);
+  const merged    = ((comp.merged_strava_ids as number[] | null) ?? []).map(Number);
+  if (!merged.includes(extraStravaId)) return { ok: true };
+
+  await recomputeCompletion(planSessionId, primaryId, merged.filter(id => id !== extraStravaId));
   revalidate();
   return { ok: true };
 }

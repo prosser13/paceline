@@ -15,7 +15,7 @@ import CyclingRow from '@/components/CyclingRow';
 import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
-import { unlinkSession, removePromotedSession } from './match-actions';
+import { unlinkSession, removePromotedSession, unmergeActivity } from './match-actions';
 import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
@@ -208,13 +208,34 @@ function UnlinkFooter({ sessionId, source }: { sessionId: string; source: 'manua
   );
 }
 
+// Sub-row under a completed session listing an activity merged into it, with an
+// unmerge control that sends the extra back to "off-plan".
+function UnmergeFooter({ sessionId, stravaId, name }: { sessionId: string; stravaId: number; name: string | null }) {
+  const [pending, start] = useTransition();
+  const router = useRouter();
+  const run = () => start(async () => { await unmergeActivity(stravaId, sessionId); router.refresh(); });
+  return (
+    <div className="flex items-center gap-[8px] px-[16px] py-[6px] bg-bone/40 font-mono text-[11px] text-stone">
+      <span className="tracking-[.08em] uppercase">Merged: {name || 'activity'}</span>
+      <span className="text-fog">·</span>
+      <button type="button" disabled={pending} onClick={run}
+        className="tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer">
+        {pending ? '…' : 'Unmerge'}
+      </button>
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────
+
+export interface MergedActivity { stravaId: number; name: string | null; }
 
 interface Props {
   weeks: PlanWeek[];
   byWeek: Record<number, PlanSession[]>;
   offPlanByDate?: Record<string, OffPlanActivity[]>;
   manualMatches?: { id: string; source: 'manual' | 'promoted' }[];
+  mergedBySession?: Record<string, MergedActivity[]>;
   todayStr: string;
   completedMap: Record<string, CompletedData>;
   nextSessionId: string | null;
@@ -226,7 +247,7 @@ interface Props {
 }
 
 export default function PlanThread({
-  weeks, byWeek, offPlanByDate = {}, manualMatches = [], todayStr, completedMap, nextSessionId,
+  weeks, byWeek, offPlanByDate = {}, manualMatches = [], mergedBySession = {}, todayStr, completedMap, nextSessionId,
   thresholdPace, zones, hrZones, powerZones, bikeHrZones,
 }: Props) {
   const [showPast, setShowPast] = useState(false);
@@ -261,11 +282,19 @@ export default function PlanThread({
 
     if (isRest) return <RestCard key={session.id} />;
 
-    // User-attached sessions (manual link / promotion) get an undo footer.
+    // Footers under a session: an undo for manual links/promotions, and an
+    // unmerge for any activities folded into it.
     const matchSource = matchSourceById.get(session.id);
-    const withUnlink = (node: React.ReactNode) =>
-      matchSource
-        ? <div key={session.id}>{node}<UnlinkFooter sessionId={session.id} source={matchSource} /></div>
+    const mergedHere  = mergedBySession[session.id] ?? [];
+    const withUnlink  = (node: React.ReactNode) =>
+      matchSource || mergedHere.length > 0
+        ? (
+          <div key={session.id}>
+            {node}
+            {matchSource && <UnlinkFooter sessionId={session.id} source={matchSource} />}
+            {mergedHere.map(m => <UnmergeFooter key={m.stravaId} sessionId={session.id} stravaId={m.stravaId} name={m.name} />)}
+          </div>
+        )
         : node;
 
     if (session.session_type === 'STRENGTH' || session.session_type === 'CORE') {
@@ -443,6 +472,21 @@ export default function PlanThread({
         .map(s => ({ id: s.id, name: s.name || (s.session_type === 'STRENGTH' ? 'Strength' : s.session_type === 'CORE' ? 'Core' : s.session_type === 'YOGA' ? 'Yoga' : 'Session') }));
     };
 
+    // Same-day COMPLETED run/ride sessions this extra can be merged into (a ride
+    // Strava split in two). Only run/ride — strength/yoga aren't distance/time merges.
+    const mergeTargetsFor = (a: OffPlanActivity): LinkTarget[] => {
+      const k = activityKind(a.activityType);
+      if (k !== 'run' && k !== 'ride') return [];
+      return daySessions
+        .filter(s => {
+          if (!(s.id in completedMap)) return false;
+          return k === 'ride'
+            ? s.activity_type === 'cycling'
+            : s.session_type !== 'STRENGTH' && s.session_type !== 'CORE' && s.session_type !== 'YOGA' && s.activity_type !== 'cycling';
+        })
+        .map(s => ({ id: s.id, name: s.name || (s.activity_type === 'cycling' ? 'Ride' : 'Run') }));
+    };
+
     return (
       <div key={dateStr} className={`flex gap-[14px] ${dim ? 'opacity-55' : ''}`}>
         <div className="w-[52px] shrink-0 pt-[8px] text-right">
@@ -464,7 +508,7 @@ export default function PlanThread({
           )}
           <div className="divide-y divide-fog/50">
             {sessions.map(s => renderSessionRow(s))}
-            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} linkTargets={linkTargetsFor(a)} />)}
+            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} linkTargets={linkTargetsFor(a)} mergeTargets={mergeTargetsFor(a)} />)}
           </div>
         </div>
       </div>
