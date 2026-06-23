@@ -66,12 +66,10 @@ export interface DashboardData {
 
   todaySession: PlanSession | null;
   tomorrowSession: PlanSession | null;
-  todayStrength: PlanSession | null;
   tomorrowStrength: PlanSession | null;
-  todayYoga: PlanSession | null;
+  todaySessions: PlanSession[];   // all of today's non-rest sessions, in display order
+  todayDoneIds: string[];         // ids of today's sessions with a logged completion
   todayCompleted: CompletedToday | null;
-  todayStrengthDone: boolean;
-  todayYogaDone: boolean;
   strengthFirst: boolean;
 
   upcomingWithRest: PlanSession[]; // days +2..+7, rest-filled
@@ -212,15 +210,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
   function pickStrength(list?: PlanSession[]): PlanSession | null {
     return list?.find(isStrengthTier) ?? null;
   }
-  function pickYoga(list?: PlanSession[]): PlanSession | null {
-    return list?.find(s => s.session_type === 'YOGA') ?? null;
-  }
 
+  // Today's sessions in display order — the single source of truth for the
+  // dashboard's Today node, kept identical to the plan by the same sort above.
+  const todaySessions    = (byDate.get(todayStr) ?? []).filter(s => s.status !== 'rest');
   const todaySession     = pickRun(byDate.get(todayStr));
   const tomorrowSession  = pickRun(byDate.get(tomorrowStr));
-  const todayStrength    = pickStrength(byDate.get(todayStr));
   const tomorrowStrength = pickStrength(byDate.get(tomorrowStr));
-  const todayYoga        = pickYoga(byDate.get(todayStr));
 
   const fitnessForm    = wellness.form;
   const fitnessHistory = wellness.history;
@@ -317,10 +313,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     : null;
 
   // ── Tier 2 ──
-  const [cw, strengthCw, yogaCw, weekData, planWeeks] = await Promise.all([
-    todaySession ? getCompletedForSession(todaySession.id) : Promise.resolve(null),
-    todayStrength ? getCompletedForSession(todayStrength.id) : Promise.resolve(null),
-    todayYoga ? getCompletedForSession(todayYoga.id) : Promise.resolve(null),
+  const [todayCompletions, weekData, planWeeks] = await Promise.all([
+    Promise.all(todaySessions.map(s => getCompletedForSession(s.id))),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
           listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
@@ -329,6 +323,13 @@ export async function loadDashboardData(): Promise<DashboardData> {
       : Promise.resolve(null),
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
   ]);
+
+  // Per-session completion: which of today's sessions are logged, plus the run's
+  // rich completion (drives the run hero's pace/HR breakdown).
+  const todayDoneIds = todaySessions.filter((_, i) => todayCompletions[i]).map(s => s.id);
+  const cw = todaySession
+    ? todayCompletions[todaySessions.findIndex(s => s.id === todaySession.id)] ?? null
+    : null;
 
   let todayCompleted: CompletedToday | null = null;
   if (cw) {
@@ -417,9 +418,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   return {
     firstName, greeting: greet(), todayFull, todayStr,
-    todaySession, tomorrowSession, todayStrength, tomorrowStrength, todayYoga, todayCompleted,
-    todayStrengthDone: !!strengthCw,
-    todayYogaDone: !!yogaCw,
+    todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted,
     strengthFirst,
     upcomingWithRest, windowDays,
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
