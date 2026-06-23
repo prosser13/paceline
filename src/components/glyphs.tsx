@@ -41,3 +41,16 @@ export function Dumbbell({ size = 16, strokeWidth = 2, className = 'shrink-0' }:
     </svg>
   );
 }
+
+// Seated meditation figure — yoga / mobility / stretching.
+export function YogaGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <circle cx="12" cy="4.5" r="1.8" />
+      <path d="M12 7v4.5" />
+      <path d="M4.5 19c0 -3.6 3.4 -5.5 7.5 -5.5s7.5 1.9 7.5 5.5z" />
+      <path d="M7 12.5l5 2.5l5 -2.5" />
+    </svg>
+  );
+}

@@ -10,6 +10,7 @@ import {
   INTENSITY, WorkoutDetail, MetricBlock, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
+import YogaRow, { type YogaPose } from '@/components/YogaRow';
 import CyclingRow from '@/components/CyclingRow';
 import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
@@ -267,9 +268,25 @@ export default function PlanThread({
         ? <div key={session.id}>{node}<UnlinkFooter sessionId={session.id} source={matchSource} /></div>
         : node;
 
-    if (session.session_type === 'STRENGTH') {
+    if (session.session_type === 'STRENGTH' || session.session_type === 'CORE') {
       return withUnlink(
         <StrengthRow
+          key={session.id}
+          compact
+          title={session.session_type === 'CORE' ? 'Core' : 'Strength'}
+          focus={session.description ?? null}
+          duration={session.estimated_duration ?? null}
+          today={isFocus}
+          done={isDone}
+          note={session.rationale ?? null}
+          exercises={(session.structure as StrengthEx[] | null) ?? []}
+        />
+      );
+    }
+
+    if (session.session_type === 'YOGA') {
+      return withUnlink(
+        <YogaRow
           key={session.id}
           compact
           focus={session.description ?? null}
@@ -277,7 +294,7 @@ export default function PlanThread({
           today={isFocus}
           done={isDone}
           note={session.rationale ?? null}
-          exercises={(session.structure as StrengthEx[] | null) ?? []}
+          poses={(session.structure as YogaPose[] | null) ?? []}
         />
       );
     }
@@ -419,10 +436,11 @@ export default function PlanThread({
         .filter(s => {
           if (s.status === 'rest' || s.id in completedMap) return false;
           if (k === 'ride')     return s.activity_type === 'cycling';
-          if (k === 'strength') return s.session_type === 'STRENGTH';
-          return s.session_type !== 'STRENGTH' && s.activity_type !== 'cycling';
+          if (k === 'strength') return s.session_type === 'STRENGTH' || s.session_type === 'CORE';
+          if (k === 'yoga')     return s.session_type === 'YOGA';
+          return s.session_type !== 'STRENGTH' && s.session_type !== 'CORE' && s.session_type !== 'YOGA' && s.activity_type !== 'cycling';
         })
-        .map(s => ({ id: s.id, name: s.name || (s.session_type === 'STRENGTH' ? 'Strength' : 'Session') }));
+        .map(s => ({ id: s.id, name: s.name || (s.session_type === 'STRENGTH' ? 'Strength' : s.session_type === 'CORE' ? 'Core' : s.session_type === 'YOGA' ? 'Yoga' : 'Session') }));
     };
 
     return (

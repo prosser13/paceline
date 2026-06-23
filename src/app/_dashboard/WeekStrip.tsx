@@ -5,8 +5,8 @@
 // to that day's node.
 
 import type { WindowDay } from './data';
-import { RunGlyph, Dumbbell, BikeGlyph } from '@/components/glyphs';
-import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER } from '@/lib/colors';
+import { RunGlyph, Dumbbell, BikeGlyph, YogaGlyph } from '@/components/glyphs';
+import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER, EMBER } from '@/lib/colors';
 
 function BedMini({ color }: { color: string }) {
   return (
@@ -65,6 +65,11 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
                     {day.hasStrength && (
                       <span className="inline-flex" style={{ color: GOLD }}>
                         <Dumbbell size={13} strokeWidth={2.2} className="" />
+                      </span>
+                    )}
+                    {day.hasYoga && (
+                      <span className="inline-flex" style={{ color: EMBER }}>
+                        <YogaGlyph size={13} strokeWidth={2.2} className="" />
                       </span>
                     )}
                   </>

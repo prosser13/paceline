@@ -9,6 +9,7 @@ import {
   INTENSITY, WorkoutDetail, MetricBlock, RestDayRow, fmtHMM, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
+import YogaRow, { type YogaPose } from '@/components/YogaRow';
 import CyclingRow from '@/components/CyclingRow';
 import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
@@ -273,10 +274,28 @@ export default function WeekAccordion({
               return <RestDayRow key={session.id} short={d.short} date={d.date} />;
             }
 
-            // Strength — duration + focus, expandable to the prescribed exercises
-            if (session.session_type === 'STRENGTH') {
+            // Strength / Core — duration + focus, expandable to the prescribed exercises
+            if (session.session_type === 'STRENGTH' || session.session_type === 'CORE') {
               return (
                 <StrengthRow
+                  key={session.id}
+                  short={d.short}
+                  date={d.date}
+                  title={session.session_type === 'CORE' ? 'Core' : 'Strength'}
+                  focus={session.description ?? null}
+                  duration={session.estimated_duration ?? null}
+                  today={status === 'today'}
+                  done={isDone}
+                  note={session.rationale ?? null}
+                  exercises={(session.structure as StrengthEx[] | null) ?? []}
+                />
+              );
+            }
+
+            // Yoga — mobility / stretch flow, expandable to the poses
+            if (session.session_type === 'YOGA') {
+              return (
+                <YogaRow
                   key={session.id}
                   short={d.short}
                   date={d.date}
@@ -285,7 +304,7 @@ export default function WeekAccordion({
                   today={status === 'today'}
                   done={isDone}
                   note={session.rationale ?? null}
-                  exercises={(session.structure as StrengthEx[] | null) ?? []}
+                  poses={(session.structure as YogaPose[] | null) ?? []}
                 />
               );
             }

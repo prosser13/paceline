@@ -7,20 +7,21 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { RunGlyph, BikeGlyph, Dumbbell } from './glyphs';
+import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
-import { FERN, MARINE, GOLD } from '@/lib/colors';
+import { FERN, MARINE, GOLD, EMBER } from '@/lib/colors';
 import { linkActivityToSession, promoteActivityToSession } from '@/app/plan/match-actions';
 import type { OffPlanActivity } from '@/data/activities';
 
 export interface LinkTarget { id: string; name: string; }
 
-const KIND_COLOR: Record<ActivityKind, string> = { run: FERN, ride: MARINE, strength: GOLD };
-const KIND_LABEL: Record<ActivityKind, string> = { run: 'Run', ride: 'Ride', strength: 'Strength' };
+const KIND_COLOR: Record<ActivityKind, string> = { run: FERN, ride: MARINE, strength: GOLD, yoga: EMBER };
+const KIND_LABEL: Record<ActivityKind, string> = { run: 'Run', ride: 'Ride', strength: 'Strength', yoga: 'Yoga' };
 
 function KindGlyph({ kind }: { kind: ActivityKind }) {
   if (kind === 'ride')     return <BikeGlyph size={15} className="text-stone shrink-0" />;
   if (kind === 'strength') return <Dumbbell size={15} className="text-stone shrink-0" />;
+  if (kind === 'yoga')     return <YogaGlyph size={15} className="text-stone shrink-0" />;
   return <RunGlyph size={15} className="text-stone shrink-0" />;
 }
 
