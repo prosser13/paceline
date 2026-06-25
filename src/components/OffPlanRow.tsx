@@ -5,7 +5,8 @@
 // (planned rows use a solid rail) so it reads clearly as off-plan. On the plan
 // page it can be manually linked to a same-day planned session.
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
@@ -39,93 +40,100 @@ function fmtMins(mins: number | null): string {
   return h > 0 ? `${h}h${m > 0 ? ` ${m}m` : ''}` : `${m}m`;
 }
 
-function LinkMenu({ stravaActivityId, targets }: { stravaActivityId: number; targets: LinkTarget[] }) {
+// A button + dropdown of same-day target sessions. The menu is rendered in a
+// portal with fixed positioning so it escapes the plan card's `overflow-hidden`
+// and any row stacking context — otherwise it gets clipped / hidden behind the
+// row below. Used for both "Link to plan" and "Merge into".
+function ActionMenu({ label, pendingLabel, targets, onPick }: {
+  label: string; pendingLabel: string; targets: LinkTarget[];
+  onPick: (planSessionId: string) => Promise<unknown>;
+}) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [pending, start] = useTransition();
+  const btnRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
 
-  function link(planSessionId: string) {
+  function place() {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // Clamp so the menu never spills off the right edge of the viewport.
+    const left = Math.min(r.left, window.innerWidth - 220);
+    setPos({ top: r.bottom + 4, left: Math.max(8, left) });
+  }
+  function toggle() { if (!open) place(); setOpen(o => !o); }
+
+  // Close on scroll/resize — the fixed menu would otherwise detach from the button.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
+  }, [open]);
+
+  function pick(planSessionId: string) {
     setOpen(false);
-    start(async () => {
-      await linkActivityToSession(stravaActivityId, planSessionId);
-      router.refresh();
-    });
+    start(async () => { await onPick(planSessionId); router.refresh(); });
   }
 
   return (
-    <span className="relative inline-flex">
+    <span className="inline-flex">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
         disabled={pending}
         className="font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer"
       >
-        {pending ? 'Linking…' : 'Link to plan ▾'}
+        {pending ? pendingLabel : label}
       </button>
-      {open && (
+      {open && pos && createPortal(
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-[18px] z-20 min-w-[180px] rounded-[8px] border border-fog bg-paper shadow-lg overflow-hidden">
+          <div className="fixed inset-0 z-[100]" onClick={() => setOpen(false)} />
+          <div
+            className="fixed z-[101] min-w-[200px] rounded-[8px] border border-fog bg-paper shadow-lg overflow-hidden"
+            style={{ top: pos.top, left: pos.left }}
+          >
             {targets.map(t => (
               <button
                 key={t.id}
                 type="button"
-                onClick={() => link(t.id)}
+                onClick={() => pick(t.id)}
                 className="block w-full text-left px-[12px] py-[8px] text-[13.5px] text-ink hover:bg-fog/30 transition-colors"
               >
                 {t.name}
               </button>
             ))}
           </div>
-        </>
+        </>,
+        document.body,
       )}
     </span>
   );
 }
 
-// Fold this extra into a same-day completed session — for a ride/run that Strava
-// split into two activities. Mirrors LinkMenu but targets completed sessions.
-function MergeMenu({ stravaActivityId, targets }: { stravaActivityId: number; targets: LinkTarget[] }) {
-  const [open, setOpen] = useState(false);
-  const [pending, start] = useTransition();
-  const router = useRouter();
-
-  function merge(planSessionId: string) {
-    setOpen(false);
-    start(async () => {
-      await mergeActivityIntoSession(stravaActivityId, planSessionId);
-      router.refresh();
-    });
-  }
-
+function LinkMenu({ stravaActivityId, targets }: { stravaActivityId: number; targets: LinkTarget[] }) {
   return (
-    <span className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        disabled={pending}
-        className="font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark disabled:opacity-50 cursor-pointer"
-      >
-        {pending ? 'Merging…' : 'Merge into ▾'}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-[18px] z-20 min-w-[200px] rounded-[8px] border border-fog bg-paper shadow-lg overflow-hidden">
-            {targets.map(t => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => merge(t.id)}
-                className="block w-full text-left px-[12px] py-[8px] text-[13.5px] text-ink hover:bg-fog/30 transition-colors"
-              >
-                {t.name}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </span>
+    <ActionMenu
+      label="Link to plan ▾"
+      pendingLabel="Linking…"
+      targets={targets}
+      onPick={(planSessionId) => linkActivityToSession(stravaActivityId, planSessionId)}
+    />
+  );
+}
+
+// Fold this extra into a same-day completed session — for a ride/run that Strava
+// split into two activities. Same menu as LinkMenu but targets completed sessions.
+function MergeMenu({ stravaActivityId, targets }: { stravaActivityId: number; targets: LinkTarget[] }) {
+  return (
+    <ActionMenu
+      label="Merge into ▾"
+      pendingLabel="Merging…"
+      targets={targets}
+      onPick={(planSessionId) => mergeActivityIntoSession(stravaActivityId, planSessionId)}
+    />
   );
 }
 
