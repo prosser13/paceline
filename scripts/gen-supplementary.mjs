@@ -103,22 +103,55 @@ const YOGA_MOBILITY = [
   yp("Child's pose", 45, 'secs', null),
 ];
 
+// Exercise ordering within a strength session: TA Activation first (where
+// present) → alternate weighted/bodyweight → rotate muscle groups → never two
+// weighted same-group lifts adjacent → bodyweight takes the unavoidable repeats.
+// Group = target with the "· per leg/side" qualifier stripped.
+const grp = t => (t || '').split(' · ')[0];
+const cmpKey = (a, b) => { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; };
+function orderStructure(structure) {
+  const res = [];
+  let rem = structure.slice();
+  const ta = rem.find(x => x.name === 'TA Activation');
+  if (ta) { res.push(ta); rem = rem.filter(x => x !== ta); }
+  let prev = res.length ? res[res.length - 1] : null;
+  while (rem.length) {
+    const gc = {};
+    rem.forEach(x => { const g = grp(x.target); gc[g] = (gc[g] || 0) + 1; });
+    let best = null, bestKey = null;
+    for (const c of rem) {
+      const cg = grp(c.target), pg = prev ? grp(prev.target) : null;
+      const cw = c.weight != null, pw = prev && prev.weight != null;
+      let p = 0;
+      if (prev) {
+        if (cw === pw) p += 2;                          // weighted/bodyweight alternation
+        if (cg === pg) p += 4;                          // muscle-group rotation
+        if (cw && pw && cg === pg) p += 100;            // hard: no 2 weighted same group
+      }
+      const key = [p, -gc[cg], cw ? 0 : 1, -(c.weight || 0), c.name];
+      if (best === null || cmpKey(key, bestKey) < 0) { best = c; bestKey = key; }
+    }
+    res.push(best); rem = rem.filter(x => x !== best); prev = best;
+  }
+  return res;
+}
+
 // Session builders → a partial row (week/day added per week).
 const strengthA = (light = false) => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
   description: light ? 'Lower + upper push (lighter)' : 'Lower + upper push',
-  estimated_duration: light ? '0:30' : '0:40', structure: STRENGTH_A,
+  estimated_duration: light ? '0:30' : '0:40', structure: orderStructure(STRENGTH_A),
   rationale: light ? 'Race week — maintenance load only. Run AM / lift PM. Finish with the static-stretch routine.'
                    : 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7. Finish with the static-stretch routine.',
 });
 const strengthB = () => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
-  description: 'Lower + upper pull', estimated_duration: '0:40', structure: STRENGTH_B,
+  description: 'Lower + upper pull', estimated_duration: '0:40', structure: orderStructure(STRENGTH_B),
   rationale: 'Heavy, RPE 8 — stop 1–2 reps short. Run AM / lift PM. Progress load weeks 1–7. Finish with the static-stretch routine.',
 });
 const strengthUpper = () => ({
   session_type: 'STRENGTH', activity_type: 'strength', name: 'Strength',
-  description: 'Upper-body — hold shape', estimated_duration: '0:30', structure: STRENGTH_UPPER,
+  description: 'Upper-body — hold shape', estimated_duration: '0:30', structure: orderStructure(STRENGTH_UPPER),
   rationale: 'Taper: light, keep the lifts moving — does not fatigue the legs. Finish with the static-stretch routine.',
 });
 const core = (light = false) => ({
