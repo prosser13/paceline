@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import type { MouseEvent } from 'react';
 import PacelineMark from './PacelineMark';
 
 export default function Sidebar({
@@ -14,23 +16,38 @@ export default function Sidebar({
   const pathname = usePathname();
   const planParam = useSearchParams().get('plan');
 
-  function navClass(href: string) {
-    const active = pathname === href;
-    return `flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
-      active ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
-    }`;
-  }
+  // Optimistic navigation target: the moment a link is clicked we highlight it,
+  // before the new route commits, so the sidebar responds instantly even while
+  // the destination page is still loading. Cleared once the route lands.
+  const [target, setTarget] = useState<string | null>(null);
+  useEffect(() => { setTarget(null); }, [pathname, planParam]);
 
-  function dot(href: string) {
-    return `w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname === href ? 'bg-bone' : 'bg-fog'}`;
-  }
+  // Only optimistic-highlight a plain left click — let modifier/middle clicks
+  // (open-in-new-tab etc.) behave normally without sticking a highlight.
+  const go = (href: string) => (e: MouseEvent) => {
+    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) setTarget(href);
+  };
 
-  function planClass(slug: string) {
-    const active = pathname === '/plan' && planParam === slug;
-    return `flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-colors ${
-      active ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+  const active = (href: string) => (target !== null ? target === href : pathname === href);
+  const activePrefix = (href: string) => (target !== null ? target === href : pathname.startsWith(href));
+  const planParentActive = target !== null
+    ? (target === '/plan' || target.startsWith('/plan?'))
+    : pathname === '/plan';
+  const planActive = (slug: string) => {
+    const href = `/plan?plan=${slug}`;
+    return target !== null ? target === href : (pathname === '/plan' && planParam === slug);
+  };
+
+  const topClass = (isActive: boolean) =>
+    `flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
+      isActive ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
     }`;
-  }
+  const dotClass = (isActive: boolean) =>
+    `w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-bone' : 'bg-fog'}`;
+  const planClass = (isActive: boolean) =>
+    `flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-[background-color,transform] active:scale-[0.98] ${
+      isActive ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+    }`;
 
   return (
     <aside className="w-[180px] bg-paper border-r border-fog flex flex-col gap-1.5 p-[18px_14px] shrink-0 h-full">
@@ -40,18 +57,18 @@ export default function Sidebar({
         paceline
       </div>
 
-      <Link href="/" className={navClass('/')}>
-        <span className={dot('/')} />
+      <Link href="/" onClick={go('/')} className={topClass(active('/'))}>
+        <span className={dotClass(active('/'))} />
         Dashboard
       </Link>
 
-      <Link href="/plan" className={navClass('/plan')}>
-        <span className={dot('/plan')} />
+      <Link href="/plan" onClick={go('/plan')} className={topClass(planParentActive)}>
+        <span className={dotClass(planParentActive)} />
         Plan
       </Link>
       <div className="ml-[18px] flex flex-col gap-1">
         {plans.map(p => (
-          <Link key={p.slug} href={`/plan?plan=${p.slug}`} className={planClass(p.slug)}>
+          <Link key={p.slug} href={`/plan?plan=${p.slug}`} onClick={go(`/plan?plan=${p.slug}`)} className={planClass(planActive(p.slug))}>
             <span className="w-[6px] h-[6px] rounded-[2px] bg-oxblood/60 flex-shrink-0" />
             {p.label}
           </Link>
@@ -59,8 +76,9 @@ export default function Sidebar({
         {hasArchive && (
           <Link
             href="/plan/archive"
-            className={`flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-colors ${
-              pathname === '/plan/archive' ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+            onClick={go('/plan/archive')}
+            className={`flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-[background-color,transform] active:scale-[0.98] ${
+              active('/plan/archive') ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
             }`}
           >
             <span className="w-[6px] h-[6px] rounded-[2px] bg-stone/50 flex-shrink-0" />
@@ -71,27 +89,29 @@ export default function Sidebar({
 
       <Link
         href="/races"
-        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
-          pathname.startsWith('/races') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
+        onClick={go('/races')}
+        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
+          activePrefix('/races') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
         }`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname.startsWith('/races') ? 'bg-bone' : 'bg-fog'}`} />
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activePrefix('/races') ? 'bg-bone' : 'bg-fog'}`} />
         Races
       </Link>
 
       <Link
         href="/strength"
-        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-colors ${
-          pathname.startsWith('/strength') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
+        onClick={go('/strength')}
+        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
+          activePrefix('/strength') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
         }`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${pathname.startsWith('/strength') ? 'bg-bone' : 'bg-fog'}`} />
+        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activePrefix('/strength') ? 'bg-bone' : 'bg-fog'}`} />
         Strength
       </Link>
 
       <div className="mt-auto">
-        <Link href="/settings" className={navClass('/settings')}>
-          <span className={dot('/settings')} />
+        <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
+          <span className={dotClass(active('/settings'))} />
           Settings
         </Link>
       </div>
