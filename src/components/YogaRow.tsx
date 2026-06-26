@@ -17,32 +17,21 @@ export interface YogaPose {
 
 const holdStr = (p: YogaPose) => (p.reps_type === 'secs' ? `${p.reps}s` : `×${p.reps}`);
 
-const YOGA_COLS = '1fr 82px';
-
-// The pose list — shared by the row (plan views) and the dashboard hero.
+// The pose list — clean hairline rows matching the run / strength detail. Pose
+// names wrap (no truncation) so they stay readable on mobile.
 export function YogaDetailTable({ poses }: { poses: YogaPose[] }) {
   return (
-    <>
-      <div className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50" style={{ gridTemplateColumns: YOGA_COLS }}>
-        {['Pose / movement', 'Hold / reps'].map((h, i) => (
-          <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
-            {h}
-          </span>
-        ))}
-      </div>
+    <div className="flex flex-col">
       {poses.map((p, i) => (
-        <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: YOGA_COLS }}>
-          <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-            <span className="truncate">{p.name}</span>
-            {p.target && (
-              <span className="font-mono text-[11px] px-[5px] py-[1px] rounded-[4px] whitespace-nowrap shrink-0"
-                style={{ background: '#8a857a22', color: '#8a857a' }}>{p.target}</span>
-            )}
-          </span>
-          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{holdStr(p)}</span>
+        <div key={i} className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-medium text-ink leading-snug">{p.name}</div>
+            {p.target && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{p.target}</div>}
+          </div>
+          <div className="shrink-0 text-right font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap pt-[1px]">{holdStr(p)}</div>
         </div>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -99,7 +88,7 @@ export default function YogaRow({
       </div>
 
       {open && hasDetail && (
-        <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
+        <div className="border-l-2 border-fog pl-[16px] pr-[16px] py-[10px]">
           <YogaDetailTable poses={poses} />
           {note && <div className="text-[13.5px] text-stone leading-snug mt-[8px]">{note}</div>}
         </div>
