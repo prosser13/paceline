@@ -17,6 +17,12 @@ const PHASE_HEX: Record<string, string> = {
   Base: MARINE, Build: AMBER, Peak: EMBER, Taper: FERN,
 };
 
+// Label colours — Build uses amber-dark so it stays legible on the cream card
+// (the AMBER fill is too light for text).
+const PHASE_LABEL_HEX: Record<string, string> = {
+  Base: MARINE, Build: '#7a5a08', Peak: EMBER, Taper: FERN,
+};
+
 export function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-[18px] py-[10px]" style={{ background: accent, color: BONE }}>
@@ -77,12 +83,12 @@ export function PhaseTimeline({
                 />
               )}
             </div>
-            <div className="flex mt-[7px]">
+            <div className="flex justify-between mt-[7px]">
               {segments.map((s, i) => (
                 <span
                   key={i}
-                  className="font-mono text-[10px] uppercase tracking-[.1em] overflow-hidden whitespace-nowrap pr-1"
-                  style={{ width: `${s.pct}%`, color: PHASE_HEX[s.phase] ?? '#5f5a50' }}
+                  className="font-mono text-[10px] font-semibold uppercase tracking-[.1em] whitespace-nowrap"
+                  style={{ color: PHASE_LABEL_HEX[s.phase] ?? '#5f5a50' }}
                 >
                   {s.phase}
                 </span>

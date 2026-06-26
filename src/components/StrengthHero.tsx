@@ -8,10 +8,21 @@ import { Dumbbell } from './glyphs';
 import { GOLD, FERN, BONE } from '@/lib/colors';
 import { startPlannedSession } from '@/app/(app)/strength/actions';
 
+// A bordered stat box — value over a mono unit label, matching the run hero's
+// completed-stats and the mobile prototype's Today card.
+function Stat({ v, u }: { v: React.ReactNode; u: string }) {
+  return (
+    <div className="border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
+      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{v}</div>
+      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{u}</div>
+    </div>
+  );
+}
+
 // Dashboard hero for a strength session — mirrors the run SessionHero: coloured
-// header (label), session name + descriptor in the body, a "The session"
-// accordion with the exercises (in order, with a muscle-group pill), and a CTA
-// that loads the planned session.
+// header (Today · Strength), short session name + descriptor, three stat boxes
+// (duration / exercises / sets), a "Session detail" accordion with the clean
+// exercise rows, and a CTA that loads the planned session.
 export default function StrengthHero({
   label, planSessionId, focus, duration, note, exercises, done = false,
 }: {
@@ -26,6 +37,7 @@ export default function StrengthHero({
   // ("Upper body — chest, back, shoulders, arms" → "Upper body"). The groups
   // still show per-exercise in the detail rows.
   const shortFocus = focus ? focus.split(/\s*[—–·]\s*/)[0].trim() : null;
+  const totalSets = exercises.reduce((sum, ex) => sum + (ex.sets ?? 0), 0);
 
   function go() {
     start(async () => {
@@ -38,7 +50,7 @@ export default function StrengthHero({
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Header bar — gold when planned, fern when completed */}
       <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: done ? FERN : GOLD, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label} · Strength</span>
         {done && (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
             ✓ Completed
@@ -50,21 +62,20 @@ export default function StrengthHero({
       </div>
 
       <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
-        {/* Title + metric */}
-        <div className="flex justify-between items-start gap-4 sm:gap-6">
-          <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-              <Dumbbell size={24} className="shrink-0 text-ink" />{shortFocus ?? 'Strength'}
-            </h3>
-            {note && <div className="text-[15px] text-stone">{note}</div>}
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
-            <div className="font-mono text-[14px] text-stone mt-[3px]">{exercises.length} exercises</div>
-          </div>
+        {/* Title + description */}
+        <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+          <Dumbbell size={24} className="shrink-0 text-ink" />{shortFocus ?? 'Strength'}
+        </h3>
+        {note && <div className="text-[15px] text-stone leading-snug">{note}</div>}
+
+        {/* Stat boxes — duration / exercises / sets */}
+        <div className="grid grid-cols-3 gap-[9px] mt-[16px]">
+          <Stat v={humanHMM(duration) ?? '—'} u="dur" />
+          <Stat v={exercises.length} u="exercises" />
+          <Stat v={totalSets} u="sets" />
         </div>
 
-        {/* The session accordion */}
+        {/* Session detail accordion */}
         <div className="mt-[18px]">
           <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center gap-[8px] cursor-pointer select-none">
             <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">Session detail</span>
