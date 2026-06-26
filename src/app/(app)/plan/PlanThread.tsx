@@ -412,8 +412,9 @@ export default function PlanThread({
         : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
       const actMins  = completed.durationMins ?? parseDurationMins(completed.durationStr);
       const actPaceSec = actMins != null && actKm ? (actMins * 60) / actKm : null;
-      // Pace gap shown as +0:04 (slower) / −0:04 (faster).
-      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace) : null;
+      // Pace gap shown as +0:04 (slower) / −0:04 (faster). In a race, faster
+      // than the window reads marine; for a planned run it's off-plan (ember).
+      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace, isRace ? 'fast' : 'neg') : null;
       const distDelta  = planKm != null && actKm != null ? actKm - planKm : null;
 
       const hrBounds = plannedHrBounds(detailSteps);
@@ -522,7 +523,7 @@ export default function PlanThread({
           // (each interval's planned target vs the actual result).
           <>
             <CompareTable rows={compareRows} />
-            <WorkoutDetail steps={detailSteps} />
+            <WorkoutDetail steps={detailSteps} isRace={isRace} />
           </>
         ) : (
           <PlannedDetail steps={detailSteps} />
