@@ -107,13 +107,19 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
         role="button"
         aria-expanded={open}
       >
-        {/* Title row — name on the left; duration + distance + TSS stacked right */}
+        {/* Title row — name + description on the left; duration + distance +
+            TSS stacked on the right, all on the same line */}
         <div className="flex items-start justify-between gap-[12px]">
-          <div className="flex items-center gap-[7px] min-w-0 flex-1">
-            <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink leading-tight`}>{session.name}</span>
-            <span className="font-mono text-[13px] text-stone leading-none shrink-0"
-              style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-[7px]">
+              <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
+              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink leading-tight`}>{session.name}</span>
+              <span className="font-mono text-[13px] text-stone leading-none shrink-0"
+                style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
+            </div>
+            {description && (
+              <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{description}</div>
+            )}
           </div>
           <div className="shrink-0 text-right">
             <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
@@ -121,9 +127,6 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
             {tss && <div className="font-mono text-[12px] text-stone mt-[2px]">{tss}</div>}
           </div>
         </div>
-        {description && (
-          <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{description}</div>
-        )}
         {/* Session graph — centred underneath, segments coloured by zone (Z1 blue … Z5 red) */}
         {bars.length > 0 && (
           <div className="mt-[11px] flex justify-center">
