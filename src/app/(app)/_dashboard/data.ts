@@ -451,9 +451,18 @@ export async function loadDashboardData(): Promise<DashboardData> {
         raceKmByDate.set(s.scheduled_date, (raceKmByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
       }
     }
+    // "This week" tracks RUNNING volume only — exclude rides and
+    // strength/core/yoga completions so a logged ride doesn't inflate the km.
+    const NON_RUN = new Set(['STRENGTH', 'CORE', 'YOGA']);
+    const isRunCompletion = (c: { plan_sessions?: unknown }) => {
+      const ps = Array.isArray(c.plan_sessions) ? c.plan_sessions[0] : c.plan_sessions;
+      if (!ps) return true; // off-plan completion — assume a run
+      const p = ps as { session_type?: string | null; activity_type?: string | null };
+      return p.activity_type !== 'cycling' && !NON_RUN.has(p.session_type ?? '');
+    };
     const doneByDate = new Map<string, number>();
     for (const c of weekCompleted ?? []) {
-      if (!c.completed_date) continue;
+      if (!c.completed_date || !isRunCompletion(c)) continue;
       const km = Number(c.actual_distance_km) || 0;
       doneByDate.set(c.completed_date, (doneByDate.get(c.completed_date) ?? 0) + km);
       if (c.completed_date <= todayStr) weekDoneKm += km;

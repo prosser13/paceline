@@ -29,6 +29,16 @@ function devClass(pct: number | null): string {
   return 'text-oxblood';
 }
 
+// Bordered stat box, matching the run / strength heroes.
+function Stat({ v, u }: { v: React.ReactNode; u: string }) {
+  return (
+    <div className="border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
+      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{v}</div>
+      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{u}</div>
+    </div>
+  );
+}
+
 function signedTime(deltaMin: number): string {
   const sign = deltaMin >= 0 ? '+' : '−';
   const totalSec = Math.round(Math.abs(deltaMin) * 60);
@@ -89,7 +99,7 @@ export default function CyclingHero({
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: isDone ? FERN : MARINE, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label} · Ride</span>
         {isDone && (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
             ✓ Completed
@@ -101,20 +111,16 @@ export default function CyclingHero({
       </div>
 
       <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
-        <div className="flex justify-between items-start gap-4 sm:gap-6">
-          <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-              <BikeGlyph size={24} className="shrink-0 text-ink" />{session.name}
-            </h3>
-            {session.description && <div className="text-[15px] text-stone">{session.description}</div>}
+        <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+          <BikeGlyph size={24} className="shrink-0 text-ink" />{session.name}
+        </h3>
+        {session.description && <div className="text-[13px] text-stone leading-snug">{session.description}</div>}
+        {!isDone && (
+          <div className="grid grid-cols-2 gap-[9px] mt-[16px]">
+            <Stat v={duration ?? '—'} u="dur" />
+            <Stat v={tssPlanned != null ? `~${tssPlanned}` : '—'} u="TSS" />
           </div>
-          {!isDone && (
-            <div className="shrink-0 text-right">
-              <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{duration ?? '—'}</div>
-              {tssPlanned != null && <div className="font-mono text-[14px] text-stone mt-[3px]">~{tssPlanned} TSS</div>}
-            </div>
-          )}
-        </div>
+        )}
 
         {isDone && (
           <div className="grid grid-cols-5 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
@@ -143,13 +149,13 @@ export default function CyclingHero({
 
         {segments.length > 0 && (
           <div className="mt-[18px]">
-            <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center gap-[8px] cursor-pointer select-none">
-              <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">Session detail</span>
-              <span className="font-mono text-[13px] text-stone leading-none"
+            <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center justify-between w-full min-h-[40px] cursor-pointer select-none">
+              <span className="text-[14px] font-semibold text-stone">Session detail</span>
+              <span className="font-mono text-[15px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </button>
             {open && (
-              <div className="mt-[9px] border border-fog rounded-[12px] bg-bone px-[16px] py-[10px]">
+              <div className="mt-[10px] border-l-2 border-fog pl-[16px] pr-[16px]">
                 <CyclingDetailTable
                   segments={segments}
                   actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}

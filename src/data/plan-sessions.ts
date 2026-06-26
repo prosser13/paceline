@@ -184,7 +184,7 @@ export async function getCompletedForSession(planSessionId: string) {
 export async function listCompletedDistancesBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km')
+    .select('completed_date, actual_distance_km, plan_sessions(session_type, activity_type)')
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];

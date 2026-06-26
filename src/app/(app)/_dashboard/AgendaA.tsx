@@ -83,7 +83,10 @@ export default function AgendaA({ d }: { d: DashboardData }) {
 
       {/* Tomorrow */}
       <section id={`spine-${d.windowDays[1].iso}`} style={{ scrollMarginTop: '14px' }}>
-        <SectionLabel>Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}</SectionLabel>
+        <div className="font-display font-semibold text-[18px] text-marine mt-[22px] mb-[10px]">
+          Tomorrow
+          <span className="font-mono text-[12.5px] font-normal text-marine/70 ml-[6px]">{formatSpineDay(d.windowDays[1].iso).date}</span>
+        </div>
         <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
           <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
             zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}

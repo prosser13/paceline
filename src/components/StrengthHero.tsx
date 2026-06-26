@@ -84,7 +84,7 @@ export default function StrengthHero({
           </button>
 
           {open && (
-            <div className="mt-[10px] border-l-2 border-fog pl-[14px]">
+            <div className="mt-[10px] border-l-2 border-fog pl-[16px] pr-[16px]">
               <StrengthDetailTable exercises={exercises} />
             </div>
           )}

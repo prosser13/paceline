@@ -20,38 +20,54 @@ import { GOLD } from '@/lib/colors';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PlanSession } from './data';
 
-// Clean planned-segment list — one hairline row per segment: name (+ pace) on
-// the left, distance (+ zone) on the right. Mirrors the strength detail and the
-// mobile prototype, and fits narrow screens (the old 5-column grid overflowed).
-function PlannedDetail({ steps }: { steps: NormStep[] }) {
-  if (!steps.length) return null;
-  const Row = ({ label, sub, value, zone }: { label: string; sub: string | null; value: string | null; zone: string | null }) => (
+// Full pace window for a segment — "4:15–5:00/km" (or a single pace).
+function paceRange(s: { paceMin?: string; paceMax?: string }): string | null {
+  if (!s.paceMin) return null;
+  return s.paceMax && s.paceMax !== s.paceMin ? `${s.paceMin}–${s.paceMax}/km` : `${s.paceMin}/km`;
+}
+
+// Shared clean detail row — name (+ sub) on the left, value (+ sub) on the
+// right. Used by run / strength / yoga / cycling session details so they match.
+export function DetailRow({ label, sub, value, valueSub }: {
+  label: string; sub?: string | null; value?: string | null; valueSub?: string | null;
+}) {
+  return (
     <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
       <div className="flex-1 min-w-0">
         <div className="text-[14px] font-medium text-ink leading-snug">{label}</div>
         {sub && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{sub}</div>}
       </div>
-      {(value || zone) && (
-        <div className="shrink-0 text-right whitespace-nowrap leading-snug pt-[1px]">
-          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums">{value}</div>}
-          {zone && <div className="font-mono text-[11px] text-stone mt-[1px]">{zone}</div>}
+      {(value || valueSub) && (
+        <div className="shrink-0 text-right leading-snug pt-[1px]">
+          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{value}</div>}
+          {valueSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{valueSub}</div>}
         </div>
       )}
     </div>
   );
+}
+
+// The shared wrapper for an expanded session detail — left-border indent with
+// breathing room on both sides.
+export const DETAIL_WRAP = 'border-l-2 border-fog pl-[16px] pr-[16px]';
+
+// Clean planned-segment list — fits narrow screens (the old 5-column grid
+// overflowed) and shows the full pace window.
+function PlannedDetail({ steps }: { steps: NormStep[] }) {
+  if (!steps.length) return null;
   return (
-    <div className="border-l-2 border-fog pl-[14px] mt-[2px]">
+    <div className={DETAIL_WRAP}>
       {steps.map((step, i) => {
         if ('kind' in step && step.kind === 'repeat') {
           const sub = step.steps[0];
           const totalKm = step.steps.reduce((s, x) => s + (x.distanceKm || 0), 0) * step.count;
           const subLabel = step.steps.map(s => s.label).join(' + ');
-          return <Row key={i} label={`${step.count} × ${subLabel}`} sub={sub?.paceMin ? `${sub.paceMin}/km` : null}
-            value={totalKm ? `${totalKm.toFixed(1)} km` : null} zone={sub?.zoneKey ?? null} />;
+          return <DetailRow key={i} label={`${step.count} × ${subLabel}`} sub={sub ? paceRange(sub) : null}
+            value={totalKm ? `${totalKm.toFixed(1)} km` : null} valueSub={sub?.zoneKey ?? null} />;
         }
         const seg = step;
         const value = seg.distanceKm ? `${seg.distanceKm} km` : (seg.midSeconds ? fmtMMSS(seg.midSeconds) : null);
-        return <Row key={i} label={seg.label} sub={seg.paceMin ? `${seg.paceMin}/km` : null} value={value} zone={seg.zoneKey ?? null} />;
+        return <DetailRow key={i} label={seg.label} sub={paceRange(seg)} value={value} valueSub={seg.zoneKey ?? null} />;
       })}
     </div>
   );
@@ -70,10 +86,8 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
   const plannedSec = sumSegmentSeconds(steps);
   const duration   = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
   const bars = buildProfileBars(session, thresholdPace, zones);
-  const distTss = [
-    session.distance_km != null ? `${Number(session.distance_km)} km` : null,
-    session.estimated_tss != null ? `~${session.estimated_tss} TSS` : null,
-  ].filter(Boolean).join(' · ');
+  const distKm = session.distance_km != null ? `${Number(session.distance_km)} km` : null;
+  const tss    = session.estimated_tss != null ? `~${session.estimated_tss} TSS` : null;
   // Description from the structure — "6km Z2 • 12km Z2 • 19km Z2".
   const segDesc = steps
     .map(step =>
@@ -93,7 +107,7 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
         role="button"
         aria-expanded={open}
       >
-        {/* Title row — name gets the full width (no graph stealing space) */}
+        {/* Title row — name on the left; duration + distance + TSS stacked right */}
         <div className="flex items-start justify-between gap-[12px]">
           <div className="flex items-center gap-[7px] min-w-0 flex-1">
             <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
@@ -101,19 +115,21 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
             <span className="font-mono text-[13px] text-stone leading-none shrink-0"
               style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
           </div>
-          <div className={`shrink-0 font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
+          <div className="shrink-0 text-right">
+            <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
+            {distKm && <div className="font-mono text-[12px] text-stone mt-[5px]">{distKm}</div>}
+            {tss && <div className="font-mono text-[12px] text-stone mt-[2px]">{tss}</div>}
+          </div>
         </div>
         {description && (
           <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{description}</div>
         )}
-        {/* Session graph — underneath the title, like the Today hero; segments
-            coloured by zone (Z1 blue … Z5 red) */}
+        {/* Session graph — centred underneath, segments coloured by zone (Z1 blue … Z5 red) */}
         {bars.length > 0 && (
-          <div className="mt-[11px]">
+          <div className="mt-[11px] flex justify-center">
             <ProfileChart bars={bars} size="lg" color={hex} opacity={0.95} />
           </div>
         )}
-        {distTss && <div className="font-mono text-[12px] text-stone mt-[8px] text-right">{distTss}</div>}
       </div>
       {open && <PlannedDetail steps={steps} />}
     </div>
@@ -153,7 +169,7 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
       </div>
 
       {open && hasDetail && (
-        <div className="border-t border-fog/60 pl-[44px] pr-[18px] py-[12px]">
+        <div className={`${DETAIL_WRAP} py-[10px]`}>
           <StrengthDetailTable exercises={exercises} />
         </div>
       )}
