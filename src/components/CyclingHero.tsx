@@ -155,7 +155,7 @@ export default function CyclingHero({
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </button>
             {open && (
-              <div className="mt-[10px] border-l-2 border-fog pl-[16px] pr-[16px]">
+              <div className="mt-[10px] -mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]">
                 <CyclingDetailTable
                   segments={segments}
                   actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
