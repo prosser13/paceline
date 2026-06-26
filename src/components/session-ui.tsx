@@ -391,3 +391,60 @@ export function MetricBlock({
     </div>
   );
 }
+
+// ── Shared expanded-detail primitives (run + ride + dashboard) ───
+
+// The wrapper for an expanded session detail — left-border indent with
+// breathing room on both sides.
+export const DETAIL_WRAP = 'border-l-2 border-fog pl-[16px] pr-[16px]';
+
+// Clean detail row — name (+ sub) on the left, value (+ sub) on the right.
+// Shared by run / ride / strength / yoga details so they match.
+export function DetailRow({ label, sub, value, valueSub }: {
+  label: string; sub?: string | null; value?: string | null; valueSub?: string | null;
+}) {
+  return (
+    <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] font-medium text-ink leading-snug">{label}</div>
+        {sub && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{sub}</div>}
+      </div>
+      {(value || valueSub) && (
+        <div className="shrink-0 text-right leading-snug pt-[1px]">
+          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{value}</div>}
+          {valueSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{valueSub}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Plan / actual / Δ comparison table for a COMPLETED session — shared by the
+// run and ride details so they read identically. `tone`: pos = better than
+// plan (green), neg = worse (ember), flat = neutral.
+export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: 'pos' | 'neg' | 'flat'; }
+
+const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;
+
+export function CompareTable({ rows }: { rows: CompareRow[] }) {
+  const toneCls = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'neg' ? 'text-ember' : 'text-stone');
+  return (
+    <div className={`${DETAIL_WRAP} py-[10px]`}>
+      <div className="border border-fog rounded-[11px] overflow-hidden">
+        <div className="grid bg-bone" style={COMPARE_COLS}>
+          {['Metric', 'Plan', 'Actual', 'Δ'].map((h, i) => (
+            <span key={h} className={`font-mono text-[9px] tracking-[.06em] uppercase text-stone px-[10px] py-[7px] ${i ? 'text-right' : ''}`}>{h}</span>
+          ))}
+        </div>
+        {rows.map((r, i) => (
+          <div key={i} className="grid border-t border-fog text-[12px]" style={COMPARE_COLS}>
+            <span className="text-stone px-[10px] py-[7px]">{r.metric}</span>
+            <span className="text-right px-[10px] py-[7px] tabular-nums">{r.plan}</span>
+            <span className="text-right px-[10px] py-[7px] font-semibold text-ink tabular-nums">{r.actual}</span>
+            <span className={`text-right px-[10px] py-[7px] tabular-nums font-medium ${toneCls(r.tone)}`}>{r.delta ?? '—'}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -8,7 +8,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, type CompareRow,
 } from '@/components/session-ui';
 import { PlannedDetail } from '../_dashboard/SessionRows';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
@@ -73,6 +73,30 @@ const PHASE_HEX: Record<string, string> = {
 };
 
 const RACE_COLOR: Record<string, string> = { A: '#8c2b2b', B: '#b5790f', C: '#14617e' };
+
+// Pace helpers for the completed-run comparison table.
+function paceToSec(p: string | null | undefined): number | null {
+  if (!p) return null;
+  const m = p.split(':').map(Number);
+  return m.length === 2 && !m.some(isNaN) ? m[0] * 60 + m[1] : null;
+}
+function secToPace(sec: number): string {
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+// The overall planned pace window across a run's segments (fastest..slowest).
+function plannedPaceBounds(steps: NormStep[]): { fast: number; slow: number } | null {
+  let fast = Infinity, slow = -Infinity;
+  const visit = (s: { paceMin?: string; paceMax?: string }) => {
+    const a = paceToSec(s.paceMin); const b = paceToSec(s.paceMax) ?? a;
+    if (a != null) { fast = Math.min(fast, a); slow = Math.max(slow, b ?? a); }
+  };
+  for (const st of steps) {
+    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit);
+    else visit(st as { paceMin?: string; paceMax?: string });
+  }
+  return Number.isFinite(fast) && slow >= fast ? { fast, slow } : null;
+}
 
 function parseDurationMins(str: string | null | undefined): number | null {
   if (!str) return null;
@@ -363,10 +387,54 @@ export default function PlanThread({
       tssDelta != null && tssPct != null && durDelta != null && durPct != null
         ? { tssDelta, tssPct, durDelta, durPct } : null;
 
+    // Completed run → Plan / Actual / Δ comparison table (distance, pace, HR).
+    let compareRows: CompareRow[] | null = null;
+    if (isDone && completed) {
+      const planKm = session.distance_km != null ? Number(session.distance_km) : null;
+      const actKm  = completed.distanceKm ?? null;
+      const bounds = plannedPaceBounds(detailSteps);
+      const planPace = bounds
+        ? (bounds.fast === bounds.slow ? secToPace(bounds.fast) : `${secToPace(bounds.fast)}–${secToPace(bounds.slow)}`)
+        : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
+      const planMid  = bounds ? (bounds.fast + bounds.slow) / 2 : (plannedMins && planKm ? (plannedMins * 60) / planKm : null);
+      const actMins  = completed.durationMins ?? parseDurationMins(completed.durationStr);
+      const actPaceSec = actMins != null && actKm ? (actMins * 60) / actKm : null;
+      const paceDelta  = actPaceSec != null && planMid != null ? Math.round(actPaceSec - planMid) : null;
+      // On plan = inside the planned window (neutral); else faster (pos) / slower (neg).
+      const paceTone: 'pos' | 'neg' | 'flat' = paceDelta == null ? 'flat'
+        : bounds && actPaceSec != null
+          ? (actPaceSec >= bounds.fast && actPaceSec <= bounds.slow ? 'flat' : actPaceSec < bounds.fast ? 'pos' : 'neg')
+          : (paceDelta <= 0 ? 'pos' : 'neg');
+      const distDelta  = planKm != null && actKm != null ? actKm - planKm : null;
+      compareRows = [
+        {
+          metric: 'Distance',
+          plan: planKm != null ? `${planKm} km` : '—',
+          actual: actKm != null ? `${actKm % 1 === 0 ? actKm : actKm.toFixed(1)} km` : '—',
+          delta: distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)}` : null,
+          tone: distDelta == null ? 'flat' : distDelta >= 0 ? 'pos' : 'neg',
+        },
+        {
+          metric: 'Pace',
+          plan: planPace,
+          actual: actPaceSec != null ? secToPace(actPaceSec) : '—',
+          delta: paceDelta != null ? `${paceDelta >= 0 ? '+' : '−'}${Math.abs(paceDelta)}` : null,
+          tone: paceTone,
+        },
+        {
+          metric: 'Avg HR',
+          plan: '—',
+          actual: completed.avgHr != null ? `${completed.avgHr}` : '—',
+          delta: null,
+          tone: 'flat',
+        },
+      ];
+    }
+
     return withUnlink(
       <div key={session.id}>
         <div
-          className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
+          className={`border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
           style={{ borderLeftColor: INTENSITY[intensity]?.hex ?? '#17191e' }}
           onClick={() => toggleExpanded(session.id)}
           role="button"
@@ -374,61 +442,68 @@ export default function PlanThread({
           aria-expanded={isExpanded}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(session.id); } }}
         >
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-[7px] flex-wrap leading-tight">
-              {isNext && !isToday && (
-                <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">
-                  Next up
-                </span>
-              )}
-              {isRace && (
-                <span className="font-mono text-[11px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0">Race</span>
-              )}
-              {isDone && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-              <RunGlyph size={15} className="text-stone shrink-0" />
-              <span className="text-[16.5px] font-semibold text-ink">{session.name}</span>
-              {session.priority && <RaceBadge priority={session.priority} />}
-              <span className="font-mono text-[14px] text-stone leading-none"
-                style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-                ▾
+          {/* Title row — name spans the full width next to the glyph, so long
+              names wrap here instead of squeezing the metrics. */}
+          <div className="flex items-start gap-[7px] leading-tight">
+            {isNext && !isToday && (
+              <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">
+                Next up
               </span>
-            </div>
-            {session.description && (
-              <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>
             )}
-            {session.race_slug && (
-              <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
-                className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
-                Race Guide →
-              </Link>
+            {isRace && (
+              <span className="font-mono text-[11px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0 mt-[1px]">Race</span>
             )}
+            {isDone && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
+            <RunGlyph size={15} className="text-stone shrink-0 mt-[3px]" />
+            <span className="text-[16.5px] font-semibold text-ink flex-1 min-w-0">{session.name}</span>
+            {session.priority && <span className="mt-[1px]"><RaceBadge priority={session.priority} /></span>}
+            <span className="font-mono text-[14px] text-stone leading-none shrink-0 mt-[2px]"
+              style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+              ▾
+            </span>
           </div>
 
-          {/* Completed: the vs-plan summary takes the graph's slot, freeing the
-              heading. Upcoming: the planned profile graph. */}
-          {isDone && delta ? (
-            <DeltaBlock delta={delta} />
-          ) : (
-            <ProfileChart
-              bars={buildProfileBars(
-                { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
-                thresholdPace, zones, segActuals,
+          {/* Info row — description on the left; the vs-plan / graph and the
+              metrics sit on the right, pushed below the title. */}
+          <div className="flex items-start justify-between gap-[14px] mt-[7px]">
+            <div className="flex-1 min-w-0">
+              {session.description && (
+                <div className="text-[14px] leading-snug text-stone">{session.description}</div>
               )}
-              size="xs"
-              color={INTENSITY[intensity]?.hex ?? '#17191e'}
-              opacity={segActuals ? 0.9 : 0.6}
-            />
-          )}
+              {session.race_slug && (
+                <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
+                  className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
+                  Race Guide →
+                </Link>
+              )}
+            </div>
 
-          <MetricBlock
-            duration={displayDuration}
-            distanceKm={isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null)}
-            tss={displayTss}
-            estimated={!isDone}
-          />
+            {/* Completed: the vs-plan summary takes the graph's slot. Upcoming:
+                the planned profile graph. */}
+            {isDone && delta ? (
+              <DeltaBlock delta={delta} />
+            ) : (
+              <ProfileChart
+                bars={buildProfileBars(
+                  { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
+                  thresholdPace, zones, segActuals,
+                )}
+                size="xs"
+                color={INTENSITY[intensity]?.hex ?? '#17191e'}
+                opacity={segActuals ? 0.9 : 0.6}
+              />
+            )}
+
+            <MetricBlock
+              duration={displayDuration}
+              distanceKm={isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null)}
+              tss={displayTss}
+              estimated={!isDone}
+            />
+          </div>
         </div>
 
-        {isExpanded && <PlannedDetail steps={detailSteps} />}
+        {isExpanded && (compareRows ? <CompareTable rows={compareRows} /> : <PlannedDetail steps={detailSteps} />)}
       </div>
     );
   }

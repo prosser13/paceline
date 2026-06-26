@@ -10,7 +10,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, syntheticStructure, sumSegmentSeconds, fmtHMMSS, fmtMMSS, humanHMM,
+  INTENSITY, syntheticStructure, sumSegmentSeconds, fmtHMMSS, fmtMMSS, humanHMM, DetailRow, DETAIL_WRAP,
 } from '@/components/session-ui';
 import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
@@ -25,31 +25,6 @@ function paceRange(s: { paceMin?: string; paceMax?: string }): string | null {
   if (!s.paceMin) return null;
   return s.paceMax && s.paceMax !== s.paceMin ? `${s.paceMin}–${s.paceMax}/km` : `${s.paceMin}/km`;
 }
-
-// Shared clean detail row — name (+ sub) on the left, value (+ sub) on the
-// right. Used by run / strength / yoga / cycling session details so they match.
-export function DetailRow({ label, sub, value, valueSub }: {
-  label: string; sub?: string | null; value?: string | null; valueSub?: string | null;
-}) {
-  return (
-    <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
-      <div className="flex-1 min-w-0">
-        <div className="text-[14px] font-medium text-ink leading-snug">{label}</div>
-        {sub && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{sub}</div>}
-      </div>
-      {(value || valueSub) && (
-        <div className="shrink-0 text-right leading-snug pt-[1px]">
-          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{value}</div>}
-          {valueSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{valueSub}</div>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// The shared wrapper for an expanded session detail — left-border indent with
-// breathing room on both sides.
-export const DETAIL_WRAP = 'border-l-2 border-fog pl-[16px] pr-[16px]';
 
 // Clean planned-segment list — fits narrow screens (the old 5-column grid
 // overflowed) and shows the full pace window.
