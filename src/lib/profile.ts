@@ -3,8 +3,18 @@ import { normalizeStructure, segmentPerformance, PERF_COLOR, paceToSeconds, seco
 export interface ProfileBar {
   effort: number;   // 0–100
   minutes: number;  // minimum 1
-  color?: string;   // per-bar override (e.g. pacing-performance colour)
+  color?: string;   // per-bar override (zone colour, or pacing-performance colour)
 }
+
+// Per-zone colours — a blue → green → red effort gradient. Z1 blue, Z3 green,
+// Z5 red, with Z2 teal and Z4 amber between them.
+const ZONE_COLOR: Record<string, string> = {
+  Z1: '#14617e', // blue (marine)
+  Z2: '#2b8c7e', // teal
+  Z3: '#4f7a52', // green (fern)
+  Z4: '#dfa01c', // amber
+  Z5: '#c75b33', // red (ember)
+};
 
 // Converts "m:ss" pace string to total seconds (0 when blank/invalid). Thin
 // wrapper over plan-structure's paceToSeconds — one parsing implementation.
@@ -41,11 +51,11 @@ function parseDurationMins(duration: string | null | undefined): number {
 function mergeConsecutive(bars: ProfileBar[]): ProfileBar[] {
   return bars.reduce<ProfileBar[]>((acc, bar) => {
     const last = acc[acc.length - 1];
-    if (last && last.effort === bar.effort) {
+    if (last && last.effort === bar.effort && last.color === bar.color) {
       last.minutes += bar.minutes;
       return acc;
     }
-    acc.push({ effort: bar.effort, minutes: bar.minutes });
+    acc.push({ effort: bar.effort, minutes: bar.minutes, ...(bar.color ? { color: bar.color } : {}) });
     return acc;
   }, []);
 }
@@ -104,10 +114,13 @@ export function buildProfileBars(
   if (zones && structure?.length) {
     const segToBar = (seg: NormSegment): ProfileBar => {
       const perf = segmentPerformance(seg);
+      // Completed segments keep the pacing-performance colour; planned segments
+      // are coloured by their zone (Z1 blue … Z5 red).
+      const zoneColor = seg.zoneKey ? ZONE_COLOR[seg.zoneKey] : undefined;
       return {
         effort:  seg.midSeconds ? paceToEffort(secondsToPace(seg.midSeconds), thresholdPace) : 40,
         minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
-        ...(perf ? { color: PERF_COLOR[perf] } : {}),
+        ...(perf ? { color: PERF_COLOR[perf] } : zoneColor ? { color: zoneColor } : {}),
       };
     };
     const bars: ProfileBar[] = [];
