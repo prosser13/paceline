@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, type CompareRow } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -154,6 +154,26 @@ export default function CyclingRow({
   const dispDistance = isDone ? completed?.distanceKm ?? null : null;
   const dispTss      = isDone ? actualTss : plannedTss;
 
+  // Completed ride → Plan / Actual / Δ table (duration, avg power, avg HR),
+  // mirroring the run comparison table so both read identically.
+  let rideCompareRows: CompareRow[] = [];
+  if (isDone && completed) {
+    let pmin = Infinity, pmax = -Infinity;
+    for (const s of segments) {
+      if (s.powerMin != null) pmin = Math.min(pmin, s.powerMin);
+      if (s.powerMax != null) pmax = Math.max(pmax, s.powerMax);
+    }
+    const planPower    = Number.isFinite(pmin) ? fmtPower(pmin, Number.isFinite(pmax) ? pmax : pmin) : '—';
+    const planMidPower = Number.isFinite(pmin) ? (Number.isFinite(pmax) ? (pmin + pmax) / 2 : pmin) : null;
+    const avgPower     = completed.avgPower ?? null;
+    const powerDelta   = avgPower != null && planMidPower != null ? Math.round(avgPower - planMidPower) : null;
+    rideCompareRows = [
+      { metric: 'Duration', plan: plannedMins != null ? fmtClock(plannedMins * 60) : '—', actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: durDelta != null ? signedMin(durDelta) : null, tone: 'flat' },
+      { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: powerDelta != null ? `${powerDelta >= 0 ? '+' : '−'}${Math.abs(powerDelta)} W` : null, tone: 'flat' },
+      { metric: 'Avg HR', plan: '—', actual: completed.avgHr != null ? `${completed.avgHr}` : '—', delta: null, tone: 'flat' },
+    ];
+  }
+
   return (
     <div>
       <div
@@ -186,7 +206,7 @@ export default function CyclingRow({
               </span>
             )}
           </div>
-          {session.description && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{session.description}</div>}
+          {session.description && <div className="text-[14px] leading-snug mt-[3px] text-stone">{session.description}</div>}
         </div>
         {isDone && <CyclingDelta tssDelta={tssDelta} durDelta={durDelta} plannedTss={plannedTss} plannedMins={plannedMins} />}
         <div className="shrink-0 text-right w-[100px]">
@@ -200,14 +220,21 @@ export default function CyclingRow({
         </div>
       </div>
 
-      {open && hasDetail && (
-        <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
-          <CyclingDetailTable
-            segments={segments}
-            actual={isDone ? { avgPower: completed!.avgPower ?? null, avgHr: completed!.avgHr ?? null, durationMins: completed!.durationMins ?? null } : null}
-          />
+      {open && hasDetail && (isDone ? (
+        <CompareTable rows={rideCompareRows} />
+      ) : (
+        <div className={DETAIL_WRAP}>
+          {segments.map((seg, i) => (
+            <DetailRow
+              key={i}
+              label={seg.label}
+              sub={fmtPower(seg.powerMin, seg.powerMax)}
+              value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
+              valueSub={seg.zoneKey ?? null}
+            />
+          ))}
         </div>
-      )}
+      ))}
     </div>
   );
 }
