@@ -318,7 +318,7 @@ export default function PlanThread({
           today={isFocus}
           next={isNext && !isToday}
           done={isDone}
-          note={session.rationale ?? null}
+          note={null}
           exercises={(session.structure as StrengthEx[] | null) ?? []}
         />
       );
@@ -412,7 +412,8 @@ export default function PlanThread({
         : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
       const actMins  = completed.durationMins ?? parseDurationMins(completed.durationStr);
       const actPaceSec = actMins != null && actKm ? (actMins * 60) / actKm : null;
-      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow) : null;
+      // Pace gap shown as +0:04 (slower) / −0:04 (faster).
+      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace) : null;
       const distDelta  = planKm != null && actKm != null ? actKm - planKm : null;
 
       const hrBounds = plannedHrBounds(detailSteps);
