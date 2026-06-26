@@ -394,10 +394,12 @@ export interface CompareRow { metric: string; plan: string; actual: string; delt
 // Compare an actual value against a planned [lo, hi] window: in range → a tick;
 // otherwise the signed gap to the nearer bound. Used for pace / HR / power so
 // every ranged metric reads the same way.
-export function rangeCompare(actual: number, lo: number, hi: number): { delta: string; tone: 'pos' | 'neg' } {
+export function rangeCompare(
+  actual: number, lo: number, hi: number, fmt: (n: number) => string = (n) => `${Math.round(n)}`,
+): { delta: string; tone: 'pos' | 'neg' } {
   if (actual >= lo && actual <= hi) return { delta: '✓', tone: 'pos' };
-  if (actual < lo) return { delta: `−${Math.round(lo - actual)}`, tone: 'neg' };
-  return { delta: `+${Math.round(actual - hi)}`, tone: 'neg' };
+  if (actual < lo) return { delta: `−${fmt(lo - actual)}`, tone: 'neg' };   // faster pace / lower HR
+  return { delta: `+${fmt(actual - hi)}`, tone: 'neg' };                    // slower pace / higher HR
 }
 
 const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;

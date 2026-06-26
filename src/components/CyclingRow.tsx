@@ -226,18 +226,31 @@ export default function CyclingRow({
 
       {open && hasDetail && (
         <>
-          {/* Completed: whole-ride summary first, then each segment's target. */}
+          {/* Completed: whole-ride summary first, then each segment. A single
+              segment shows the actual power/HR (the ride has no per-segment
+              splits); otherwise the planned target. */}
           {isDone && <CompareTable rows={rideCompareRows} />}
           <div className={`${DETAIL_WRAP} ${isDone ? 'pt-0' : ''}`}>
-            {segments.map((seg, i) => (
-              <DetailRow
-                key={i}
-                label={seg.label}
-                sub={fmtPower(seg.powerMin, seg.powerMax)}
-                value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
-                valueSub={seg.zoneKey ?? null}
-              />
-            ))}
+            {segments.map((seg, i) => {
+              const showActual = isDone && segments.length === 1;
+              return showActual ? (
+                <DetailRow
+                  key={i}
+                  label={seg.label}
+                  sub={`Plan ${fmtPower(seg.powerMin, seg.powerMax)}${seg.durationMins ? ` · ${fmtRideClock(seg.durationMins)}` : ''}`}
+                  value={completed?.avgPower != null ? `${completed.avgPower} W` : '—'}
+                  valueSub={completed?.avgHr != null ? `${completed.avgHr} bpm` : null}
+                />
+              ) : (
+                <DetailRow
+                  key={i}
+                  label={seg.label}
+                  sub={fmtPower(seg.powerMin, seg.powerMax)}
+                  value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
+                  valueSub={seg.zoneKey ?? null}
+                />
+              );
+            })}
           </div>
         </>
       )}
