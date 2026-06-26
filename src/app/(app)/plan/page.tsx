@@ -324,7 +324,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   const weeksSection = (
     <>
       {phaseBar}
-      <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[6px]">Weeks</div>
       <PlanThread
         weeks={viewWeeks}
         byWeek={byWeek}
