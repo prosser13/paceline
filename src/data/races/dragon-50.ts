@@ -134,6 +134,7 @@ export const DRAGON_50: RaceGuide = {
     { label: 'Sunglasses' },
     { label: 'Garmin heart-rate strap' },
     { label: 'Garmin Fenix watch', detail: 'GPS route loaded, fully charged' },
+    { label: 'Nipple plasters', detail: 'On before the start' },
   ],
   kitCarry: [
     { label: 'Salomon ADV Skin 12', detail: 'The pack itself' },
@@ -151,6 +152,7 @@ export const DRAGON_50: RaceGuide = {
     { label: 'Soft-shell water flask', detail: 'For carb drink / if hot' },
     { label: 'Spare Danish Endurance socks' },
     { label: 'Sun cream' },
+    { label: 'Nipple plasters', detail: 'Spare pair' },
   ],
   kitDropBag: [
     { label: 'SIS Beta Fuel chews ×4', detail: 'Back-half resupply, CP4 → finish' },
@@ -162,6 +164,7 @@ export const DRAGON_50: RaceGuide = {
     { label: 'Wet wipes', detail: 'A quick freshen-up at halfway' },
     { label: 'Cap / sunglasses', detail: 'If it’s bright on the exposed coast' },
     { label: 'A treat', detail: 'Something you’ll actually fancy at 43.5 km' },
+    { label: 'Nipple plasters', detail: 'Fresh pair for the back half' },
   ],
   nightBefore: [
     'Charge watch',

@@ -118,6 +118,7 @@ export const MALAGA_MARATHON: RaceGuide = {
     { label: 'Sunglasses' },
     { label: 'Garmin heart-rate strap' },
     { label: 'Garmin Fenix watch', detail: 'Race-pace screen set, fully charged' },
+    { label: 'Nipple plasters', detail: 'On before the start' },
   ],
   kitCarry: [
     { label: 'SIS Beta Fuel chews ×2', detail: '46 g carbs each — first half' },
