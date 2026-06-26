@@ -8,7 +8,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, type CompareRow,
+  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, type CompareRow,
 } from '@/components/session-ui';
 import { PlannedDetail } from '../_dashboard/SessionRows';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
@@ -503,7 +503,16 @@ export default function PlanThread({
           </div>
         </div>
 
-        {isExpanded && (compareRows ? <CompareTable rows={compareRows} /> : <PlannedDetail steps={detailSteps} />)}
+        {isExpanded && (compareRows ? (
+          // Completed: whole-run summary, then the per-segment breakdown
+          // (each interval's planned target vs the actual result).
+          <>
+            <CompareTable rows={compareRows} />
+            <WorkoutDetail steps={detailSteps} />
+          </>
+        ) : (
+          <PlannedDetail steps={detailSteps} />
+        ))}
       </div>
     );
   }

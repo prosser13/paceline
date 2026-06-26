@@ -220,21 +220,23 @@ export default function CyclingRow({
         </div>
       </div>
 
-      {open && hasDetail && (isDone ? (
-        <CompareTable rows={rideCompareRows} />
-      ) : (
-        <div className={DETAIL_WRAP}>
-          {segments.map((seg, i) => (
-            <DetailRow
-              key={i}
-              label={seg.label}
-              sub={fmtPower(seg.powerMin, seg.powerMax)}
-              value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
-              valueSub={seg.zoneKey ?? null}
-            />
-          ))}
-        </div>
-      ))}
+      {open && hasDetail && (
+        <>
+          {/* Completed: whole-ride summary first, then each segment's target. */}
+          {isDone && <CompareTable rows={rideCompareRows} />}
+          <div className={`${DETAIL_WRAP} ${isDone ? 'pt-0' : ''}`}>
+            {segments.map((seg, i) => (
+              <DetailRow
+                key={i}
+                label={seg.label}
+                sub={fmtPower(seg.powerMin, seg.powerMax)}
+                value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
+                valueSub={seg.zoneKey ?? null}
+              />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
