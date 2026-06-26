@@ -8,7 +8,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, type CompareRow,
+  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, type CompareRow,
 } from '@/components/session-ui';
 import { PlannedDetail } from '../_dashboard/SessionRows';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
@@ -96,6 +96,20 @@ function plannedPaceBounds(steps: NormStep[]): { fast: number; slow: number } | 
     else visit(st as { paceMin?: string; paceMax?: string });
   }
   return Number.isFinite(fast) && slow >= fast ? { fast, slow } : null;
+}
+
+// The overall planned HR window across a run's segments (from the HR zones).
+function plannedHrBounds(steps: NormStep[]): { lo: number; hi: number } | null {
+  let lo = Infinity, hi = -Infinity;
+  const visit = (s: { hrMin?: number | null; hrMax?: number | null }) => {
+    if (s.hrMin != null) lo = Math.min(lo, s.hrMin);
+    if (s.hrMax != null) hi = Math.max(hi, s.hrMax);
+  };
+  for (const st of steps) {
+    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit);
+    else visit(st as { hrMin?: number | null; hrMax?: number | null });
+  }
+  return Number.isFinite(lo) && hi >= lo ? { lo, hi } : null;
 }
 
 function parseDurationMins(str: string | null | undefined): number | null {
@@ -396,16 +410,15 @@ export default function PlanThread({
       const planPace = bounds
         ? (bounds.fast === bounds.slow ? secToPace(bounds.fast) : `${secToPace(bounds.fast)}–${secToPace(bounds.slow)}`)
         : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
-      const planMid  = bounds ? (bounds.fast + bounds.slow) / 2 : (plannedMins && planKm ? (plannedMins * 60) / planKm : null);
       const actMins  = completed.durationMins ?? parseDurationMins(completed.durationStr);
       const actPaceSec = actMins != null && actKm ? (actMins * 60) / actKm : null;
-      const paceDelta  = actPaceSec != null && planMid != null ? Math.round(actPaceSec - planMid) : null;
-      // On plan = inside the planned window (neutral); else faster (pos) / slower (neg).
-      const paceTone: 'pos' | 'neg' | 'flat' = paceDelta == null ? 'flat'
-        : bounds && actPaceSec != null
-          ? (actPaceSec >= bounds.fast && actPaceSec <= bounds.slow ? 'flat' : actPaceSec < bounds.fast ? 'pos' : 'neg')
-          : (paceDelta <= 0 ? 'pos' : 'neg');
+      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow) : null;
       const distDelta  = planKm != null && actKm != null ? actKm - planKm : null;
+
+      const hrBounds = plannedHrBounds(detailSteps);
+      const planHr   = hrBounds ? (hrBounds.lo === hrBounds.hi ? `${hrBounds.lo}` : `${hrBounds.lo}–${hrBounds.hi}`) : '—';
+      const hr = hrBounds && completed.avgHr != null ? rangeCompare(completed.avgHr, hrBounds.lo, hrBounds.hi) : null;
+
       compareRows = [
         {
           metric: 'Distance',
@@ -418,15 +431,15 @@ export default function PlanThread({
           metric: 'Pace',
           plan: planPace,
           actual: actPaceSec != null ? secToPace(actPaceSec) : '—',
-          delta: paceDelta != null ? `${paceDelta >= 0 ? '+' : '−'}${Math.abs(paceDelta)}` : null,
-          tone: paceTone,
+          delta: pace?.delta ?? null,
+          tone: pace?.tone ?? 'flat',
         },
         {
           metric: 'Avg HR',
-          plan: '—',
+          plan: planHr,
           actual: completed.avgHr != null ? `${completed.avgHr}` : '—',
-          delta: null,
-          tone: 'flat',
+          delta: hr?.delta ?? null,
+          tone: hr?.tone ?? 'flat',
         },
       ];
     }
@@ -455,11 +468,11 @@ export default function PlanThread({
             )}
             {isDone && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
             <RunGlyph size={15} className="text-stone shrink-0 mt-[3px]" />
-            <span className="text-[16.5px] font-semibold text-ink flex-1 min-w-0">{session.name}</span>
-            {session.priority && <span className="mt-[1px]"><RaceBadge priority={session.priority} /></span>}
-            <span className="font-mono text-[14px] text-stone leading-none shrink-0 mt-[2px]"
-              style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-              ▾
+            <span className="text-[16.5px] font-semibold text-ink flex-1 min-w-0">
+              {session.name}
+              {session.priority && <> <RaceBadge priority={session.priority} /></>}
+              <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
+                style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </span>
           </div>
 
