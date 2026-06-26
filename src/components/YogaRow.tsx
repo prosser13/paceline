@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { humanHMM } from './session-ui';
 import { YogaGlyph } from './glyphs';
-import { EMBER } from '@/lib/colors';
+import { COFFEE } from '@/lib/colors';
 
 // Yoga reuses the strength prescription shape (name + reps), but renders a
 // pose-oriented table: no sets/load column, reps shown as a hold (secs) or a
@@ -51,7 +51,7 @@ export default function YogaRow({
     <div>
       <div
         className={`flex items-center gap-[14px] border-l-[3px] transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
-        style={{ borderLeftColor: EMBER }}
+        style={{ borderLeftColor: COFFEE }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
@@ -70,7 +70,7 @@ export default function YogaRow({
               <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">Next up</span>
             )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-            <span style={{ color: EMBER }} className="shrink-0"><YogaGlyph size={emphasis ? 18 : 15} /></span>
+            <span style={{ color: COFFEE }} className="shrink-0"><YogaGlyph size={emphasis ? 18 : 15} /></span>
             <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink`}>Yoga</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
