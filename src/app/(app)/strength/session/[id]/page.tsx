@@ -34,7 +34,7 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[640px]">
+      <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[640px]">
         <ActiveSessionClient
           sessionId={sess.id}
           intent={sess.intent}
