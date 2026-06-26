@@ -23,7 +23,7 @@ const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
 function HeroTitle({ session }: { session: PlanSession }) {
   return (
     <div className="min-w-0">
-      <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+      <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
         <RunGlyph size={24} className="shrink-0 text-ink" />{session.name}
       </h3>
       {session.description && (
@@ -118,7 +118,7 @@ export default function SessionHero({
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-      <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
+      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         <div className="flex items-center gap-[12px] font-mono text-[13px]">
           {isDone && (
@@ -132,7 +132,7 @@ export default function SessionHero({
         </div>
       </div>
 
-      <div className="p-[22px_26px]">
+      <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
       {isDone ? (
         <>
           <div className="flex items-start justify-between gap-6">
