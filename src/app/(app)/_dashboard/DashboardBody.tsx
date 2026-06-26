@@ -77,13 +77,15 @@ export default async function DashboardBody() {
           />
         </div>
 
-        {/* Week strip — sits with the context row below today on mobile */}
-        <div className="order-3 md:order-2">
+        {/* Week strip — below today on mobile; on desktop it drops to sit just
+            above "recently completed". */}
+        <div className="order-3 md:order-3">
           <WeekStrip days={d.windowDays} weekLabel={d.weekLabel} todayDone={!!d.todayCompleted} />
         </div>
 
-        {/* Redesigned agenda (Option A) — the spine, leading on mobile */}
-        <div className="order-1 md:order-3">
+        {/* Redesigned agenda (Option A) — the spine, leading on mobile; on
+            desktop it follows the context row. */}
+        <div className="order-1 md:order-2">
           <AgendaA d={d} />
         </div>
 

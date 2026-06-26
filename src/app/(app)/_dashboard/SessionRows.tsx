@@ -107,9 +107,9 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
         role="button"
         aria-expanded={open}
       >
-        {/* Title row — name + description on the left; duration + distance +
-            TSS stacked on the right, all on the same line */}
-        <div className="flex items-start justify-between gap-[12px]">
+        {/* Title row — name + description on the left; on desktop the graph sits
+            inline; duration + distance + TSS stacked on the right. */}
+        <div className="flex items-start justify-between gap-[12px] md:gap-[18px]">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-[7px]">
               <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
@@ -121,15 +121,21 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
               <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{description}</div>
             )}
           </div>
+          {/* Graph inline on desktop only */}
+          {bars.length > 0 && (
+            <div className="hidden md:flex items-center shrink-0 self-center">
+              <ProfileChart bars={bars} size="lg" color={hex} opacity={0.95} />
+            </div>
+          )}
           <div className="shrink-0 text-right">
             <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
             {distKm && <div className="font-mono text-[12px] text-stone mt-[5px]">{distKm}</div>}
             {tss && <div className="font-mono text-[12px] text-stone mt-[2px]">{tss}</div>}
           </div>
         </div>
-        {/* Session graph — centred underneath, segments coloured by zone (Z1 blue … Z5 red) */}
+        {/* Session graph — centred underneath on mobile, segments coloured by zone (Z1 blue … Z5 red) */}
         {bars.length > 0 && (
-          <div className="mt-[11px] flex justify-center">
+          <div className="md:hidden mt-[11px] flex justify-center">
             <ProfileChart bars={bars} size="lg" color={hex} opacity={0.95} />
           </div>
         )}
