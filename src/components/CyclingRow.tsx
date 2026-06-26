@@ -49,13 +49,11 @@ function CyclingDelta({ tssDelta, durDelta, plannedTss, plannedMins }: {
   const tssPct = tssDelta != null && plannedTss ? tssDelta / plannedTss : null;
   const durPct = durDelta != null && plannedMins ? durDelta / plannedMins : null;
   return (
-    <div className="shrink-0 w-[72px] text-right leading-tight">
-      <div className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">vs plan</div>
-      <div className="font-mono text-[13px] mt-[2px] flex items-center justify-end gap-[4px] whitespace-nowrap">
-        {tssDelta != null && <span className={deltaClass(tssPct)}>{tssDelta >= 0 ? '+' : '−'}{Math.abs(tssDelta)}</span>}
-        {tssDelta != null && durDelta != null && <span className="text-fog">·</span>}
-        {durDelta != null && <span className={deltaClass(durPct)}>{signedMin(durDelta)}</span>}
-      </div>
+    <div className="font-mono text-[12.5px] flex items-center gap-[6px] whitespace-nowrap leading-none">
+      <span className="text-[10px] uppercase tracking-[.08em] text-stone">vs plan</span>
+      {tssDelta != null && <span className={deltaClass(tssPct)}>{tssDelta >= 0 ? '+' : '−'}{Math.abs(tssDelta)}</span>}
+      {tssDelta != null && durDelta != null && <span className="text-fog">·</span>}
+      {durDelta != null && <span className={deltaClass(durPct)}>{signedMin(durDelta)}</span>}
     </div>
   );
 }
@@ -120,9 +118,9 @@ export function CyclingDetailTable({ segments, actual = null }: {
 // Used on the plan page (with a day column) and, via the compact variant, on the
 // dashboard.
 export default function CyclingRow({
-  short, date, session, powerZones, bikeHrZones, today, done, completed = null, compact = false, centeredGlyph = false, emphasis = false, next = false,
+  session, powerZones, bikeHrZones, today, done, completed = null, emphasis = false, next = false,
 }: {
-  short?: string;
+  short?: string;          // accepted for back-compat; the row no longer uses a day column
   date?: string;
   next?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -177,46 +175,49 @@ export default function CyclingRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] border-l-marine transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
+        className={`border-l-[3px] border-l-marine transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
         tabIndex={hasDetail ? 0 : undefined}
         aria-expanded={hasDetail ? open : undefined}
         onKeyDown={hasDetail ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } } : undefined}
       >
-        {!compact && (
-          <div className="w-[46px] shrink-0">
-            <div className="font-display font-semibold text-[16px] leading-none text-ink">{short}</div>
-            <div className="font-mono text-[12.5px] text-stone mt-[4px]">{date}</div>
-          </div>
-        )}
-        {centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={emphasis ? 20 : 16} /></span>}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-[7px] leading-tight">
-            {next && (
-              <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">Next up</span>
-            )}
-            {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-            {!centeredGlyph && <span className="text-marine shrink-0"><BikeGlyph size={15} /></span>}
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{session.name}</span>
-            {hasDetail && (
-              <span className="font-mono text-[14px] text-stone leading-none"
-                style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-                ▾
-              </span>
-            )}
-          </div>
-          {session.description && <div className="text-[14px] leading-snug mt-[3px] text-stone">{session.description}</div>}
+        {/* Title row — full-width name next to the glyph. */}
+        <div className="flex items-start gap-[7px] leading-tight">
+          {next && (
+            <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">Next up</span>
+          )}
+          {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
+          <span className="text-marine shrink-0 mt-[3px]"><BikeGlyph size={emphasis ? 18 : 15} /></span>
+          <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>{session.name}</span>
+          {hasDetail && (
+            <span className="font-mono text-[14px] text-stone leading-none shrink-0 mt-[2px]"
+              style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
+              ▾
+            </span>
+          )}
         </div>
-        {isDone && <CyclingDelta tssDelta={tssDelta} durDelta={durDelta} plannedTss={plannedTss} plannedMins={plannedMins} />}
-        <div className="shrink-0 text-right w-[100px]">
-          <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{dispDuration ?? '—'}</div>
-          {dispDistance != null && (
-            <div className="font-mono text-[13px] text-ink mt-[3px]">{dispDistance % 1 === 0 ? dispDistance : dispDistance.toFixed(1)} km</div>
-          )}
-          {dispTss != null && (
-            <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
-          )}
+
+        {/* Info row — description (with vs-plan beneath, level with the TSS) on
+            the left; metrics on the right. */}
+        <div className="flex items-stretch justify-between gap-[14px] mt-[7px]">
+          <div className="flex-1 min-w-0 flex flex-col">
+            {session.description && <div className="text-[14px] leading-snug text-stone">{session.description}</div>}
+            {isDone && (
+              <div className="mt-auto pt-[8px]">
+                <CyclingDelta tssDelta={tssDelta} durDelta={durDelta} plannedTss={plannedTss} plannedMins={plannedMins} />
+              </div>
+            )}
+          </div>
+          <div className="shrink-0 text-right">
+            <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{dispDuration ?? '—'}</div>
+            {dispDistance != null && (
+              <div className="font-mono text-[13px] text-ink mt-[3px]">{dispDistance % 1 === 0 ? dispDistance : dispDistance.toFixed(1)} km</div>
+            )}
+            {dispTss != null && (
+              <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
+            )}
+          </div>
         </div>
       </div>
 
