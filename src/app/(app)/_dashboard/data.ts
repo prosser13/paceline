@@ -9,7 +9,7 @@ import {
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
-  getCompletedForSession, listCompletedDistancesBetween,
+  getCompletedForSession, listCompletedDistancesBetween, getMostRecentCompletedSession,
 } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
@@ -59,6 +59,25 @@ export interface WindowDay {
   hasYoga: boolean;
 }
 
+// The dashboard's "Recently completed" card — the latest finished planned
+// session before today, with plan-vs-actual numbers (all raw; the component
+// formats and computes deltas).
+export interface RecentlyCompleted {
+  dateLabel: string;          // "Tue 24 Jun"
+  name: string;
+  isRide: boolean;
+  stravaId: string | null;
+  actualDistanceKm: number | null;
+  actualMins: number | null;
+  actualPaceSec: number | null;   // seconds per km
+  avgHr: number | null;
+  actualTss: number | null;
+  planDistanceKm: number | null;
+  planMins: number | null;
+  planPaceSec: number | null;
+  planTss: number | null;
+}
+
 export interface DashboardData {
   firstName: string;
   greeting: string;
@@ -105,6 +124,20 @@ export interface DashboardData {
 
   offPlanToday: OffPlanActivity[];   // extras done today (shown under the Today node)
   offPlanRecent: OffPlanActivity[];  // extras in the last 7 days (excl. today)
+
+  recentlyCompleted: RecentlyCompleted | null;
+}
+
+// "H:MM" → minutes; "M:SS" pace → seconds.
+function hmmToMins(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const [h, m] = s.split(':').map(Number);
+  return Number.isFinite(h) ? h * 60 + (m || 0) : null;
+}
+function paceToSec(s: string | null | undefined): number | null {
+  if (!s) return null;
+  const [m, sec] = s.split(':').map(Number);
+  return Number.isFinite(m) ? m * 60 + (sec || 0) : null;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -166,6 +199,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     raceRow,
     wellness,
     offPlanRaw,
+    recentCompletedRaw,
   ] = await Promise.all([
     getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -179,6 +213,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getNextRace(todayStr),
     getWellnessCached(),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
+    getMostRecentCompletedSession(todayStr),
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
@@ -362,6 +397,35 @@ export async function loadDashboardData(): Promise<DashboardData> {
     };
   }
 
+  // Recently completed — the latest finished planned session before today.
+  let recentlyCompleted: RecentlyCompleted | null = null;
+  if (recentCompletedRaw) {
+    const { cw, ps } = recentCompletedRaw;
+    const aMins    = cw.actual_duration_mins != null ? Number(cw.actual_duration_mins) : null;
+    const aPaceSec = cw.actual_avg_pace_min_km != null ? Math.round(Number(cw.actual_avg_pace_min_km) * 60) : null;
+    const aDist    = cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null;
+    const pMins    = hmmToMins(ps.estimated_duration);
+    const pDist    = ps.distance_km != null ? Number(ps.distance_km) : null;
+    const pPaceSec = paceToSec(ps.target_pace) ?? (pMins != null && pDist ? Math.round((pMins * 60) / pDist) : null);
+    // Actual run TSS from pace vs threshold (same model as todayCompleted).
+    let aTss: number | null = null;
+    if (aMins != null && aPaceSec != null && aPaceSec > 0) {
+      const IF = (threshMinKm * 60) / aPaceSec;
+      aTss = Math.round((aMins / 60) * IF * IF * 100);
+    }
+    recentlyCompleted = {
+      dateLabel: new Date(cw.completed_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
+      name: ps.name ?? 'Session',
+      isRide: ps.activity_type === 'cycling',
+      stravaId: (cw.strava_activity_id as string | null) ?? null,
+      actualDistanceKm: aDist, actualMins: aMins, actualPaceSec: aPaceSec,
+      avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+      actualTss: aTss,
+      planDistanceKm: pDist, planMins: pMins, planPaceSec: pPaceSec,
+      planTss: ps.estimated_tss != null ? Number(ps.estimated_tss) : null,
+    };
+  }
+
   let weekPlannedKm: number | null = null;
   let weekDoneKm = 0;
   let weekDays: WeekDay[] = [];
@@ -440,5 +504,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     fitnessForm, fitnessHistory,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
+    recentlyCompleted,
   };
 }

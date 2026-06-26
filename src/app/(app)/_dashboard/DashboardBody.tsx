@@ -3,6 +3,7 @@ import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import DashboardExtras from './DashboardExtras';
+import RecentlyCompletedHero from './RecentlyCompletedHero';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
 // The data-dependent dashboard body. Split out of page.tsx so it can sit behind
@@ -73,8 +74,16 @@ export default async function DashboardBody() {
           <AgendaA d={d} />
         </div>
 
+        {/* Recently completed — yesterday's run (or latest finished session) */}
+        {d.recentlyCompleted && (
+          <div className="order-4 md:order-4">
+            <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px]">Recently completed</div>
+            <RecentlyCompletedHero r={d.recentlyCompleted} />
+          </div>
+        )}
+
         {/* Lower panels */}
-        <div className="order-4 md:order-4 mt-2"><DashboardExtras d={d} /></div>
+        <div className="order-5 md:order-5 mt-2"><DashboardExtras d={d} /></div>
       </div>
 
       {/* Empty state */}

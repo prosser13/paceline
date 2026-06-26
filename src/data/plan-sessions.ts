@@ -150,6 +150,26 @@ export async function listCompletedBetween(from: string, to: string) {
   return data ?? [];
 }
 
+// The most recent completed *run/ride* (not strength/core/yoga) strictly
+// before `beforeDate`, paired with the planned session it belongs to. Powers
+// the dashboard's "Recently completed" card (typically yesterday's run).
+export async function getMostRecentCompletedSession(beforeDate: string) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, strava_activity_id, plan_sessions!inner(name, session_type, activity_type, distance_km, estimated_duration, estimated_tss, target_pace)')
+    .lt('completed_date', beforeDate)
+    .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
+    .order('completed_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!data) return null;
+
+  const ps = Array.isArray(data.plan_sessions) ? data.plan_sessions[0] : data.plan_sessions;
+  if (!ps) return null;
+
+  return { cw: data, ps };
+}
+
 // The completion for one planned session, or null.
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
