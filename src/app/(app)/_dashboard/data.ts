@@ -404,14 +404,23 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const aMins    = cw.actual_duration_mins != null ? Number(cw.actual_duration_mins) : null;
     const aPaceSec = cw.actual_avg_pace_min_km != null ? Math.round(Number(cw.actual_avg_pace_min_km) * 60) : null;
     const aDist    = cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null;
+    const aHr      = cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null;
     const pMins    = hmmToMins(ps.estimated_duration);
     const pDist    = ps.distance_km != null ? Number(ps.distance_km) : null;
     const pPaceSec = paceToSec(ps.target_pace) ?? (pMins != null && pDist ? Math.round((pMins * 60) / pDist) : null);
-    // Actual run TSS from pace vs threshold (same model as todayCompleted).
+    // Actual TSS: pace vs threshold for runs; if there's no pace/power (e.g. an
+    // indoor ride) fall back to HR vs threshold HR (top of Z4) so rides still
+    // get a TSS.
     let aTss: number | null = null;
     if (aMins != null && aPaceSec != null && aPaceSec > 0) {
       const IF = (threshMinKm * 60) / aPaceSec;
       aTss = Math.round((aMins / 60) * IF * IF * 100);
+    } else if (aMins != null && aHr != null) {
+      const lthr = ps.activity_type === 'cycling' ? bikeHrZones['Z4']?.max : hrZones['Z4']?.max;
+      if (lthr && lthr > 0) {
+        const IF = aHr / lthr;
+        aTss = Math.round((aMins / 60) * IF * IF * 100);
+      }
     }
     recentlyCompleted = {
       dateLabel: new Date(cw.completed_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
@@ -419,7 +428,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       isRide: ps.activity_type === 'cycling',
       stravaId: (cw.strava_activity_id as string | null) ?? null,
       actualDistanceKm: aDist, actualMins: aMins, actualPaceSec: aPaceSec,
-      avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+      avgHr: aHr,
       actualTss: aTss,
       planDistanceKm: pDist, planMins: pMins, planPaceSec: pPaceSec,
       planTss: ps.estimated_tss != null ? Number(ps.estimated_tss) : null,
