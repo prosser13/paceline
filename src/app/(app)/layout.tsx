@@ -1,6 +1,8 @@
 import { getCurrentUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
+import MobileNav from '@/components/MobileNav';
+import PacelineMark from '@/components/PacelineMark';
 import { listNavPlans } from '@/data/plans';
 
 // Persistent app shell for the authenticated routes. Because this is a layout
@@ -31,9 +33,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-full overflow-hidden bg-bone">
       <Sidebar plans={navPlans} hasArchive={hasArchive} />
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Mobile top bar — the sidebar is hidden below md, so branding lives here */}
+        <header className="md:hidden flex items-center h-[54px] px-4 bg-paper border-b border-fog shrink-0">
+          <span className="flex items-center gap-2 font-display font-semibold text-[18px] text-ink">
+            <PacelineMark className="h-[14px] w-auto text-ink" />
+            paceline
+          </span>
+        </header>
+        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0">
+          {children}
+        </main>
+      </div>
+      {/* Mobile-only "pace line" bottom navigation */}
+      <MobileNav />
     </div>
   );
 }

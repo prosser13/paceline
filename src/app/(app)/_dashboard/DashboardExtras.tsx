@@ -57,7 +57,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
       {d.last7.sessions > 0 && (
         <div>
           <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">Last 7 days</p>
-          <div className="grid grid-cols-4 gap-[10px]">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-[10px]">
             {[
               { k: 'Distance',      v: `${d.last7.totalKm.toFixed(1)}`, unit: 'km' },
               { k: 'Sessions',      v: `${d.last7.sessions}`,           unit: 'runs' },
