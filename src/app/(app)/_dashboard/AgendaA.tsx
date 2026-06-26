@@ -25,13 +25,6 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function AgendaA({ d }: { d: DashboardData }) {
-  // Group the upcoming (+2..+7) rows into one block per day.
-  const groups: { iso: string; sessions: PlanSession[] }[] = [];
-  for (const s of d.upcomingWithRest) {
-    const last = groups[groups.length - 1];
-    if (last && last.iso === s.scheduled_date) last.sessions.push(s);
-    else groups.push({ iso: s.scheduled_date, sessions: [s] });
-  }
   const todayDone = !!d.todayCompleted;
   const strengthBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
@@ -98,29 +91,6 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         </div>
       </section>
 
-      {/* Everything beyond tomorrow — collapsed behind one card accordion */}
-      {groups.length > 0 && (
-        <details className="group border border-fog rounded-[15px] bg-paper overflow-hidden mt-[18px] mb-[18px]">
-          <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center justify-between gap-[10px] px-[15px] py-[11px] text-[14.5px] font-semibold text-ink group-open:border-b group-open:border-fog">
-            <span>Later this week<span className="ml-[7px] font-normal text-stone text-[12.5px]">{groups.length} {groups.length === 1 ? 'day' : 'days'}</span></span>
-            <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
-          </summary>
-          <div className="px-[14px] pb-[10px]">
-            {groups.map(g => {
-              const f = formatSpineDay(g.iso);
-              const isRest = g.sessions.every(s => s.status === 'rest');
-              const count = g.sessions.filter(s => s.status !== 'rest').length;
-              return (
-                <section key={g.iso} id={`spine-${g.iso}`} style={{ scrollMarginTop: '14px' }}>
-                  <SectionLabel>{f.weekday} · {f.date}{count > 1 ? ` · ${count} sessions` : ''}</SectionLabel>
-                  <SessionRows sessions={isRest ? [] : g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
-                    powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} restLabel="Rest day" />
-                </section>
-              );
-            })}
-          </div>
-        </details>
-      )}
     </div>
   );
 }

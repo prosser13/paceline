@@ -74,6 +74,15 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
     session.distance_km != null ? `${Number(session.distance_km)} km` : null,
     session.estimated_tss != null ? `~${session.estimated_tss} TSS` : null,
   ].filter(Boolean).join(' · ');
+  // Description from the structure — "6km Z2 • 12km Z2 • 19km Z2".
+  const segDesc = steps
+    .map(step =>
+      'kind' in step && step.kind === 'repeat'
+        ? `${step.count}×${Math.round(step.steps[0]?.distanceKm ?? 0)}km${step.steps[0]?.zoneKey ? ` ${step.steps[0].zoneKey}` : ''}`
+        : `${Math.round(step.distanceKm)}km${step.zoneKey ? ` ${step.zoneKey}` : ''}`)
+    .filter(s => !s.startsWith('0km') && !s.startsWith('0×'))
+    .join(' • ');
+  const description = segDesc || session.description || null;
 
   return (
     <div>
@@ -94,16 +103,17 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
           </div>
           <div className={`shrink-0 font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
         </div>
-        {session.description && (
-          <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{session.description}</div>
+        {description && (
+          <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{description}</div>
         )}
-        {/* Session graph — underneath the title, like the Today hero */}
+        {/* Session graph — underneath the title, like the Today hero; segments
+            coloured by zone (Z1 blue … Z5 red) */}
         {bars.length > 0 && (
           <div className="mt-[11px]">
-            <ProfileChart bars={bars} size="lg" color={hex} opacity={0.6} />
+            <ProfileChart bars={bars} size="lg" color={hex} opacity={0.95} />
           </div>
         )}
-        {distTss && <div className="font-mono text-[12px] text-stone mt-[8px]">{distTss}</div>}
+        {distTss && <div className="font-mono text-[12px] text-stone mt-[8px] text-right">{distTss}</div>}
       </div>
       {open && <PlannedDetail steps={steps} />}
     </div>
