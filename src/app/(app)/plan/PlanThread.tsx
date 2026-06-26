@@ -162,15 +162,15 @@ function RestCard() {
 
 interface DeltaData { tssDelta: number; tssPct: number; durDelta: number; durPct: number; }
 
+// Compact left-aligned "vs plan" line — sits at the bottom of the description
+// column, level with the TSS metric.
 function DeltaBlock({ delta }: { delta: DeltaData }) {
   return (
-    <div className="shrink-0 w-[72px] text-right leading-tight">
-      <div className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">vs plan</div>
-      <div className="font-mono text-[13px] mt-[2px] flex items-center justify-end gap-[4px] whitespace-nowrap">
-        <span className={deviationClass(delta.tssPct)}>{formatTssDelta(delta.tssDelta)}</span>
-        <span className="text-fog">·</span>
-        <span className={deviationClass(delta.durPct)}>{formatDurationDelta(delta.durDelta)}</span>
-      </div>
+    <div className="font-mono text-[12.5px] flex items-center gap-[6px] whitespace-nowrap leading-none">
+      <span className="text-[10px] uppercase tracking-[.08em] text-stone">vs plan</span>
+      <span className={deviationClass(delta.tssPct)}>{formatTssDelta(delta.tssDelta)}</span>
+      <span className="text-fog">·</span>
+      <span className={deviationClass(delta.durPct)}>{formatDurationDelta(delta.durDelta)}</span>
     </div>
   );
 }
@@ -463,10 +463,10 @@ export default function PlanThread({
             </span>
           </div>
 
-          {/* Info row — description on the left; the vs-plan / graph and the
-              metrics sit on the right, pushed below the title. */}
-          <div className="flex items-start justify-between gap-[14px] mt-[7px]">
-            <div className="flex-1 min-w-0">
+          {/* Info row — description (with the vs-plan line / graph beneath it,
+              level with the TSS) on the left; metrics on the right. */}
+          <div className="flex items-stretch justify-between gap-[14px] mt-[7px]">
+            <div className="flex-1 min-w-0 flex flex-col">
               {session.description && (
                 <div className="text-[14px] leading-snug text-stone">{session.description}</div>
               )}
@@ -476,23 +476,23 @@ export default function PlanThread({
                   Race Guide →
                 </Link>
               )}
-            </div>
-
-            {/* Completed: the vs-plan summary takes the graph's slot. Upcoming:
-                the planned profile graph. */}
-            {isDone && delta ? (
-              <DeltaBlock delta={delta} />
-            ) : (
-              <ProfileChart
-                bars={buildProfileBars(
-                  { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
-                  thresholdPace, zones, segActuals,
+              {/* Completed: vs-plan, bottom-left. Upcoming: the planned profile. */}
+              <div className="mt-auto pt-[8px]">
+                {isDone && delta ? (
+                  <DeltaBlock delta={delta} />
+                ) : (
+                  <ProfileChart
+                    bars={buildProfileBars(
+                      { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
+                      thresholdPace, zones, segActuals,
+                    )}
+                    size="xs"
+                    color={INTENSITY[intensity]?.hex ?? '#17191e'}
+                    opacity={segActuals ? 0.9 : 0.6}
+                  />
                 )}
-                size="xs"
-                color={INTENSITY[intensity]?.hex ?? '#17191e'}
-                opacity={segActuals ? 0.9 : 0.6}
-              />
-            )}
+              </div>
+            </div>
 
             <MetricBlock
               duration={displayDuration}
