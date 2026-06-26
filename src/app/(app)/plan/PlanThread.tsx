@@ -419,7 +419,7 @@ export default function PlanThread({
 
       const hrBounds = plannedHrBounds(detailSteps);
       const planHr   = hrBounds ? (hrBounds.lo === hrBounds.hi ? `${hrBounds.lo}` : `${hrBounds.lo}–${hrBounds.hi}`) : '—';
-      const hr = hrBounds && completed.avgHr != null ? rangeCompare(completed.avgHr, hrBounds.lo, hrBounds.hi) : null;
+      const hr = hrBounds && completed.avgHr != null ? rangeCompare(completed.avgHr, hrBounds.lo, hrBounds.hi, undefined, isRace ? 'fast' : 'neg') : null;
 
       compareRows = [
         {
