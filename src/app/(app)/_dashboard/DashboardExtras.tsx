@@ -15,7 +15,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
     <>
       <div className="mb-6 mt-2">
         <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">At a glance</p>
-        <div className="grid grid-cols-2 gap-[14px]">
+        <div className="grid grid-cols-1 gap-[14px]">
           <CountdownRing
             headerLabel={d.weekLabel}
             purpose={d.weekPurpose}
@@ -32,7 +32,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
             daysToRace={d.daysToRace}
             raceName={d.raceName}
           />
-          <div className="col-span-2">
+          <div>
             <FitnessChart
               history={d.fitnessHistory}
               form={d.fitnessForm?.form ?? null}
