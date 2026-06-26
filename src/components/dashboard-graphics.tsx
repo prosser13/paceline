@@ -200,31 +200,28 @@ export function CountdownRing({
   weekPlannedKm: number | null;
   weekDoneKm: number;
 }) {
-  const C = 2 * Math.PI * 34;
-  const dash = (Math.max(0, Math.min(100, ringPct)) / 100) * C;
   const donePct = weekPlannedKm ? Math.min(100, (weekDoneKm / weekPlannedKm) * 100) : 0;
   const toGo = weekPlannedKm != null ? Math.max(0, Math.round(weekPlannedKm - weekDoneKm)) : null;
+  const planPct = Math.max(0, Math.min(100, 100 - ringPct)); // elapsed through the plan
 
   return (
     <div className={cardClass}>
       <CardHeader accent={OXBLOOD}>{headerLabel}</CardHeader>
       <div className="flex flex-col flex-1 px-[18px] py-[15px]">
-        {purpose && <p className="text-[14px] text-ink m-0 mb-[14px] leading-snug">{purpose}</p>}
-        <div className="flex items-center gap-[18px] mt-auto">
-          <svg viewBox="0 0 80 80" width="78" height="78" aria-hidden="true">
-            <circle cx="40" cy="40" r="34" fill="none" stroke={FOG} strokeWidth="7" />
-            <circle
-              cx="40" cy="40" r="34" fill="none" stroke={OXBLOOD} strokeWidth="7" strokeLinecap="round"
-              strokeDasharray={`${dash} ${C}`} transform="rotate(-90 40 40)"
-            />
-            <text x="40" y="38" textAnchor="middle" style={{ font: "600 22px var(--font-display, sans-serif)", fill: INK }}>
-              {daysToRace ?? '—'}
-            </text>
-            <text x="40" y="51" textAnchor="middle" style={{ font: '500 8px monospace', letterSpacing: '.1em', fill: '#5f5a50' }}>
-              DAYS
-            </text>
-          </svg>
-          <div className="flex-1">
+        {purpose && <p className="text-[14px] text-ink m-0 mb-[16px] leading-snug">{purpose}</p>}
+        <div className="mt-auto flex flex-col gap-[16px]">
+          {/* Race countdown — a line, not a ring */}
+          <div>
+            <div className="flex items-baseline gap-[7px] mb-[7px]">
+              <span className="font-display font-semibold text-[20px] leading-none text-ink">{daysToRace ?? '—'}</span>
+              <span className="font-mono text-[10px] uppercase tracking-[.12em] text-stone">days to race</span>
+            </div>
+            <div className="h-[8px] rounded-[5px] overflow-hidden" style={{ background: FOG }}>
+              <div className="h-full" style={{ width: `${planPct}%`, background: OXBLOOD }} />
+            </div>
+          </div>
+          {/* This week volume */}
+          <div>
             <div className="font-mono text-[10px] uppercase tracking-[.12em] text-stone">This week</div>
             <div className="font-display font-semibold text-[20px] text-ink mt-[3px] mb-[8px]">
               {weekPlannedKm ?? '—'} km

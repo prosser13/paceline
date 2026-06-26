@@ -96,8 +96,8 @@ export default function RecentlyCompletedHero({ r }: { r: RecentlyCompleted }) {
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Header — fern (completed) */}
       <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: FERN, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{r.dateLabel} · Done</span>
-        <span className="flex items-center gap-[7px] font-mono text-[13px]">
+        <span className="font-display font-semibold text-[14px] uppercase tracking-[.05em] leading-none">{r.dateLabel} · Done</span>
+        <span className="flex items-center gap-[7px] font-mono text-[11px]">
           ✓ Completed
           {r.stravaId && (
             <a href={`https://www.strava.com/activities/${r.stravaId}`} target="_blank" rel="noopener noreferrer" aria-label="View on Strava">
@@ -114,10 +114,11 @@ export default function RecentlyCompletedHero({ r }: { r: RecentlyCompleted }) {
           <Glyph size={24} className="shrink-0 text-ink" />{r.name}
         </h3>
 
-        <div className="grid grid-cols-3 gap-[9px]">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-[9px]">
           <Stat v={r.actualDistanceKm != null ? r.actualDistanceKm.toFixed(1) : '—'} u="km" />
           <Stat v={r.actualMins != null ? fmtMin(r.actualMins) : '—'} u="time" />
           <Stat v={r.avgHr != null ? r.avgHr : '—'} u="avg hr" />
+          <Stat v={r.actualTss != null ? r.actualTss : '—'} u="tss" />
         </div>
 
         {rows.length > 0 && (
@@ -128,11 +129,22 @@ export default function RecentlyCompletedHero({ r }: { r: RecentlyCompleted }) {
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </button>
             {open && (
-              <div className="mt-[9px] border border-fog rounded-[12px] bg-bone px-[14px] py-[6px]">
+              <div className="mt-[10px] border-l-2 border-fog pl-[14px]">
                 {rows}
               </div>
             )}
           </div>
+        )}
+
+        {r.stravaId && (
+          <a
+            href={`https://www.strava.com/activities/${r.stravaId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-[6px] mt-[16px] text-marine text-[13px] font-medium hover:text-marine-dark"
+          >
+            ▶ View on Strava
+          </a>
         )}
       </div>
     </div>

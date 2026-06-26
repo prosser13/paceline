@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { PhaseTimeline, FormMeter } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
@@ -18,12 +19,24 @@ export default async function DashboardBody() {
   return (
     <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[1040px]">
 
-      {/* Date + greeting */}
-      <div className="flex items-baseline justify-between gap-3 mb-4">
-        <h2 className="font-display font-semibold text-[22px]">{d.todayFull}</h2>
-        {d.firstName && (
-          <span className="font-mono text-[13px] sm:text-[14px] text-stone text-right shrink-0">{d.greeting}, {d.firstName}</span>
-        )}
+      {/* Date + greeting + settings */}
+      <div className="flex items-start justify-between gap-3 mb-4">
+        <div className="min-w-0">
+          <h2 className="font-display font-semibold text-[22px] leading-tight">{d.todayFull}</h2>
+          {d.firstName && (
+            <div className="font-mono text-[13px] text-stone mt-[2px]">{d.greeting}, {d.firstName}</div>
+          )}
+        </div>
+        <Link
+          href="/settings"
+          aria-label="Settings"
+          className="shrink-0 w-[44px] h-[44px] rounded-[12px] border border-fog bg-paper flex items-center justify-center text-stone hover:bg-fog/40 active:scale-95 transition-[background-color,transform]"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </Link>
       </div>
 
       {/*
