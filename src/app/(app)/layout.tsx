@@ -1,11 +1,18 @@
 import { getCurrentUser } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import Sidebar from './Sidebar';
+import Sidebar from '@/components/Sidebar';
 import { listNavPlans } from '@/data/plans';
 
-export default async function AppShell({ children }: { children: React.ReactNode }) {
-  // Shares the request-cached lookup with page.tsx / the dashboard loader, so
-  // this resolves without an extra auth round-trip.
+// Persistent app shell for the authenticated routes. Because this is a layout
+// (not wrapped inside each page), the sidebar stays mounted across navigations —
+// Next.js doesn't re-run a layout on client-side navigation, so only `children`
+// swaps. That lets the page content stream in (see loading.tsx) while the
+// sidebar never reloads. Auth lives here so every child route is gated once.
+export const dynamic = 'force-dynamic';
+
+export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // Shares the request-cached lookup with the pages below, so this resolves
+  // without an extra auth round-trip.
   const user = await getCurrentUser();
   if (!user) redirect('/auth/login');
 

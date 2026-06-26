@@ -1,6 +1,4 @@
 export const dynamic = 'force-dynamic';
-
-import AppShell from '@/components/AppShell';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
 import { listRacePlans } from '@/data/plans';
 import {
@@ -71,7 +69,7 @@ export default async function SettingsPage() {
   }));
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[720px]">
         <h1 className="font-display font-semibold text-[24px] mb-6">Settings</h1>
 
@@ -181,6 +179,6 @@ export default async function SettingsPage() {
           </div>
         </section>
       </div>
-    </AppShell>
+    </>
   );
 }

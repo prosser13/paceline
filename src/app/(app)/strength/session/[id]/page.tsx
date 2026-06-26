@@ -1,6 +1,4 @@
 export const dynamic = 'force-dynamic';
-
-import AppShell from '@/components/AppShell';
 import { notFound } from 'next/navigation';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { getStrengthSessionByShortId, listSessionExercises } from '@/data/strength-sessions';
@@ -35,7 +33,7 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
   });
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[640px]">
         <ActiveSessionClient
           sessionId={sess.id}
@@ -44,6 +42,6 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
           items={items}
         />
       </div>
-    </AppShell>
+    </>
   );
 }

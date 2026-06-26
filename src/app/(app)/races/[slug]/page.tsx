@@ -4,8 +4,6 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-
-import AppShell from '@/components/AppShell';
 import { WeeklyBars, FitnessChart, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
@@ -160,7 +158,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     : null;
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
         {/* breadcrumb */}
         <Link href="/races" className="font-mono text-[12px] text-stone hover:text-ink active:opacity-70 transition-colors">
@@ -299,7 +297,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           </>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }
 

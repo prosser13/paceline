@@ -1,6 +1,4 @@
 export const dynamic = 'force-dynamic';
-
-import AppShell from '@/components/AppShell';
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
@@ -373,7 +371,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   );
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
 
       {selectedPlan ? (
@@ -396,6 +394,6 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
       )}
 
       </div>
-    </AppShell>
+    </>
   );
 }

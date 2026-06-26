@@ -1,6 +1,5 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import AppShell from '@/components/AppShell';
 import DashboardBody from './_dashboard/DashboardBody';
 import DashboardSkeleton from './_dashboard/DashboardSkeleton';
 import { getCurrentUser } from '@/lib/supabase-server';
@@ -12,15 +11,15 @@ export default async function DashboardPage() {
   // immediately, not load (and discard) a full dashboard's worth of queries.
   if (!await getCurrentUser()) redirect('/auth/login');
 
-  // AppShell (sidebar + header) streams at the shell's TTFB; the data-heavy
-  // body is behind Suspense, so the skeleton paints immediately and the body
-  // streams in once its queries resolve — rather than blocking first paint on
-  // all ~15 dashboard queries.
+  // The shell (sidebar) is the persistent (app) layout; the data-heavy body is
+  // behind Suspense, so the skeleton paints immediately and the body streams in
+  // once its queries resolve — rather than blocking first paint on all ~15
+  // dashboard queries.
   return (
-    <AppShell>
+    <>
       <Suspense fallback={<DashboardSkeleton />}>
         <DashboardBody />
       </Suspense>
-    </AppShell>
+    </>
   );
 }
