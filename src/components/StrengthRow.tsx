@@ -14,52 +14,34 @@ export interface StrengthEx {
   target?: string | null;
 }
 
-// Column grid for the exercise table — mirrors the run segment table (WorkoutDetail).
-export const STRENGTH_COLS = '1fr 46px 66px 78px';
-
 export const repsStr = (ex: StrengthEx) => (ex.reps_type === 'secs' ? `${ex.reps}s` : `${ex.reps}`);
-export const loadStr = (ex: StrengthEx) => (ex.weight != null && Number(ex.weight) > 0 ? `${ex.weight} kg` : '—');
 
-// Neutral tinted pill, matching the run's zone-chip styling.
-export function MuscleChip({ label }: { label: string }) {
-  return (
-    <span
-      className="font-mono text-[11px] px-[5px] py-[1px] rounded-[4px] whitespace-nowrap shrink-0"
-      style={{ background: '#8a857a22', color: '#8a857a' }}
-    >
-      {label}
-    </span>
-  );
-}
-
-// The exercise table body (header + one row per exercise) shared by the strength
-// row, the dashboard StrengthHero, and the dashboard compact row. Each caller
-// supplies its own wrapper (padding/border differs); this owns the grid only.
+// Clean exercise list — one hairline-separated row per exercise: name (+ muscle
+// group) on the left, prescribed sets × reps (· weight) on the right. Mirrors
+// the run's WorkoutDetail rows. Shared by the dashboard StrengthHero, the
+// tomorrow/future SessionRows, and the plan StrengthRow; each caller supplies
+// its own padding wrapper.
 export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) {
   return (
-    <>
-      <div
-        className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
-        style={{ gridTemplateColumns: STRENGTH_COLS }}
-      >
-        {['Exercise', 'Sets', 'Reps', 'Load'].map((h, i) => (
-          <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
-            {h}
-          </span>
-        ))}
-      </div>
-      {exercises.map((ex, i) => (
-        <div key={i} className="py-[6px] grid items-center gap-x-[10px]" style={{ gridTemplateColumns: STRENGTH_COLS }}>
-          <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-            <span className="truncate">{ex.name}</span>
-            {ex.target && <MuscleChip label={ex.target} />}
-          </span>
-          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{ex.sets}</span>
-          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{repsStr(ex)}</span>
-          <span className="font-mono text-[14px] text-ink text-right tabular-nums">{loadStr(ex)}</span>
-        </div>
-      ))}
-    </>
+    <div className="flex flex-col">
+      {exercises.map((ex, i) => {
+        const weighted = ex.weight != null && Number(ex.weight) > 0;
+        return (
+          <div key={i} className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
+            <div className="flex-1 min-w-0">
+              <div className="text-[14.5px] font-medium text-ink leading-snug">{ex.name}</div>
+              {ex.target && (
+                <div className="font-mono text-[11.5px] tracking-[.04em] text-stone mt-[2px]">{ex.target}</div>
+              )}
+            </div>
+            <div className="shrink-0 text-right whitespace-nowrap leading-snug pt-[1px]">
+              <span className="font-display font-semibold text-[14.5px] text-ink tabular-nums">{ex.sets} × {repsStr(ex)}</span>
+              {weighted && <span className="font-mono text-[12.5px] text-stone tabular-nums"> · {ex.weight} kg</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

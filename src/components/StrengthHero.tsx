@@ -22,6 +22,11 @@ export default function StrengthHero({
   const [pending, start] = useTransition();
   const router = useRouter();
 
+  // Short title: drop the muscle-group tail after an em/en-dash or middot
+  // ("Upper body — chest, back, shoulders, arms" → "Upper body"). The groups
+  // still show per-exercise in the detail rows.
+  const shortFocus = focus ? focus.split(/\s*[—–·]\s*/)[0].trim() : null;
+
   function go() {
     start(async () => {
       const r = await startPlannedSession(planSessionId);
@@ -49,7 +54,7 @@ export default function StrengthHero({
         <div className="flex justify-between items-start gap-4 sm:gap-6">
           <div className="min-w-0">
             <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-              <Dumbbell size={24} className="shrink-0 text-ink" />{focus ?? 'Strength'}
+              <Dumbbell size={24} className="shrink-0 text-ink" />{shortFocus ?? 'Strength'}
             </h3>
             {note && <div className="text-[15px] text-stone">{note}</div>}
           </div>
