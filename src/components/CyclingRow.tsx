@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, type CompareRow } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, rangeColor, type CompareRow } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -233,13 +233,19 @@ export default function CyclingRow({
           <div className={`${DETAIL_WRAP} ${isDone ? 'pt-0' : ''}`}>
             {segments.map((seg, i) => {
               const showActual = isDone && segments.length === 1;
+              const pwColor = showActual && completed?.avgPower != null && seg.powerMin != null && seg.powerMax != null
+                ? rangeColor(completed.avgPower, seg.powerMin, seg.powerMax) : undefined;
+              const hrColor = showActual && completed?.avgHr != null && seg.hrMin != null && seg.hrMax != null
+                ? rangeColor(completed.avgHr, seg.hrMin, seg.hrMax) : undefined;
               return showActual ? (
                 <DetailRow
                   key={i}
                   label={seg.label}
                   sub={`Plan ${fmtPower(seg.powerMin, seg.powerMax)}${seg.durationMins ? ` · ${fmtRideClock(seg.durationMins)}` : ''}`}
                   value={completed?.avgPower != null ? `${completed.avgPower} W` : '—'}
+                  valueColor={pwColor}
                   valueSub={completed?.avgHr != null ? `${completed.avgHr} bpm` : null}
+                  valueSubColor={hrColor}
                 />
               ) : (
                 <DetailRow

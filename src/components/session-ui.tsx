@@ -169,14 +169,24 @@ export function perfColor(perf: SegmentPerf, isRace: boolean): string {
   return perf === 'ahead' && !isRace ? PERF_COLOR.behind : PERF_COLOR[perf];
 }
 
+// Colour any actual value against a planned [lo, hi] window with the same rules
+// as perfColor: in window → green; below → marine in a race / ember otherwise;
+// above → ember. Used for pace, HR and power alike.
+export function rangeColor(actual: number, lo: number, hi: number, isRace = false): string {
+  const a = Math.min(lo, hi), b = Math.max(lo, hi);
+  if (actual >= a && actual <= b) return PERF_COLOR.on;
+  if (actual < a) return isRace ? PERF_COLOR.ahead : PERF_COLOR.behind;
+  return PERF_COLOR.behind;
+}
+
 // Shared per-segment row in the clean detail style: name (+ zone) and the
 // planned target on the left, the actual result (when run) or the distance
 // (planned) on the right. A coloured dot flags how the actual compared.
 function SegmentRow({
-  label, seg, completed, rightMain, rightMainColor, rightSub,
+  label, seg, completed, rightMain, rightMainColor, rightSub, rightSubColor,
 }: {
   label: string; seg: NormSegment; completed: boolean;
-  rightMain: string; rightMainColor?: string; rightSub?: string | null;
+  rightMain: string; rightMainColor?: string; rightSub?: string | null; rightSubColor?: string;
 }) {
   const dot  = rightMainColor;
   const pace = plannedPaceStr(seg);
@@ -196,7 +206,7 @@ function SegmentRow({
       </div>
       <div className="shrink-0 text-right leading-snug pt-[1px]">
         <div className="font-mono text-[14px] font-semibold tabular-nums whitespace-nowrap" style={rightMainColor ? { color: rightMainColor } : undefined}>{rightMain}</div>
-        {rightSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{rightSub}</div>}
+        {rightSub && <div className="font-mono text-[11px] text-stone mt-[1px]" style={rightSubColor ? { color: rightSubColor } : undefined}>{rightSub}</div>}
       </div>
     </div>
   );
@@ -213,6 +223,8 @@ export function PhaseLine({ seg, isRace = false }: { seg: NormSegment; isRace?: 
   }
   const perf = segmentPerformance(seg);
   const main = perf === 'missed' ? 'missed' : seg.actualPaceSec != null ? `${fmtMMSS(seg.actualPaceSec)}/km` : '—';
+  const hrColor = seg.actualHr != null && seg.hrMin != null && seg.hrMax != null
+    ? rangeColor(seg.actualHr, seg.hrMin, seg.hrMax, isRace) : undefined;
   return (
     <SegmentRow
       label={seg.label}
@@ -221,6 +233,7 @@ export function PhaseLine({ seg, isRace = false }: { seg: NormSegment; isRace?: 
       rightMain={main}
       rightMainColor={perf ? perfColor(perf, isRace) : undefined}
       rightSub={seg.actualHr != null ? `${seg.actualHr} bpm` : null}
+      rightSubColor={hrColor}
     />
   );
 }
@@ -373,8 +386,9 @@ export const DETAIL_WRAP = 'border-l-2 border-fog pl-[16px] pr-[16px]';
 
 // Clean detail row — name (+ sub) on the left, value (+ sub) on the right.
 // Shared by run / ride / strength / yoga details so they match.
-export function DetailRow({ label, sub, value, valueSub }: {
+export function DetailRow({ label, sub, value, valueSub, valueColor, valueSubColor }: {
   label: string; sub?: string | null; value?: string | null; valueSub?: string | null;
+  valueColor?: string; valueSubColor?: string;
 }) {
   return (
     <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
@@ -384,8 +398,8 @@ export function DetailRow({ label, sub, value, valueSub }: {
       </div>
       {(value || valueSub) && (
         <div className="shrink-0 text-right leading-snug pt-[1px]">
-          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{value}</div>}
-          {valueSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{valueSub}</div>}
+          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap" style={valueColor ? { color: valueColor } : undefined}>{value}</div>}
+          {valueSub && <div className="font-mono text-[11px] text-stone mt-[1px]" style={valueSubColor ? { color: valueSubColor } : undefined}>{valueSub}</div>}
         </div>
       )}
     </div>
