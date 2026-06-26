@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import PacelineMark from './PacelineMark';
 
@@ -18,14 +18,18 @@ export default function Sidebar({
 
   // Optimistic navigation target: the moment a link is clicked we highlight it,
   // before the new route commits, so the sidebar responds instantly even while
-  // the destination page is still loading. Cleared once the route lands.
-  const [target, setTarget] = useState<string | null>(null);
-  useEffect(() => { setTarget(null); }, [pathname, planParam]);
+  // the destination page is still loading. We remember the route we were *on*
+  // when clicked; the target stays live only until the path or ?plan actually
+  // changes, so it self-clears once navigation lands — no effect needed.
+  const [pending, setPending] = useState<{ href: string; path: string; plan: string | null } | null>(null);
+  const target = pending && pending.path === pathname && pending.plan === planParam ? pending.href : null;
 
   // Only optimistic-highlight a plain left click — let modifier/middle clicks
   // (open-in-new-tab etc.) behave normally without sticking a highlight.
   const go = (href: string) => (e: MouseEvent) => {
-    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) setTarget(href);
+    if (e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+      setPending({ href, path: pathname, plan: planParam });
+    }
   };
 
   const active = (href: string) => (target !== null ? target === href : pathname === href);
@@ -50,7 +54,7 @@ export default function Sidebar({
     }`;
 
   return (
-    <aside className="w-[180px] bg-paper border-r border-fog flex flex-col gap-1.5 p-[18px_14px] shrink-0 h-full">
+    <aside className="w-[180px] bg-paper border-r border-fog hidden md:flex flex-col gap-1.5 p-[18px_14px] shrink-0 h-full">
       {/* Brand */}
       <div className="flex items-center gap-2 font-display font-semibold text-[19px] px-2 pb-4 text-ink">
         <PacelineMark className="h-[15px] w-auto text-ink" />

@@ -11,7 +11,6 @@ import CyclingHero from '@/components/CyclingHero';
 import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
 import { type YogaPose } from '@/components/YogaRow';
-import WeekStrip from './WeekStrip';
 import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
 
 function Node({ anchorId, dot, ring, label, labelColor, children }: {
@@ -75,9 +74,6 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   };
 
   return (
-    <>
-      <WeekStrip days={d.windowDays} weekLabel={d.weekLabel} todayDone={todayDone} />
-
       <div className="relative">
         <div className="absolute left-[18px] top-[6px] bottom-[10px] w-[2px] bg-fog" />
 
@@ -130,6 +126,5 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           );
         })}
       </div>
-    </>
   );
 }
