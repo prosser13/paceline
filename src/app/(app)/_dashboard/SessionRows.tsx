@@ -8,9 +8,9 @@ import { useState } from 'react';
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
-import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
+import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM,
+  INTENSITY, syntheticStructure, sumSegmentSeconds, fmtHMMSS, fmtMMSS, humanHMM,
 } from '@/components/session-ui';
 import { type StrengthEx, StrengthDetailTable } from '@/components/StrengthRow';
 import CyclingRow from '@/components/CyclingRow';
@@ -19,6 +19,43 @@ import { RunGlyph, Dumbbell } from '@/components/glyphs';
 import { GOLD } from '@/lib/colors';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PlanSession } from './data';
+
+// Clean planned-segment list — one hairline row per segment: name (+ pace) on
+// the left, distance (+ zone) on the right. Mirrors the strength detail and the
+// mobile prototype, and fits narrow screens (the old 5-column grid overflowed).
+function PlannedDetail({ steps }: { steps: NormStep[] }) {
+  if (!steps.length) return null;
+  const Row = ({ label, sub, value, zone }: { label: string; sub: string | null; value: string | null; zone: string | null }) => (
+    <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] font-medium text-ink leading-snug">{label}</div>
+        {sub && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{sub}</div>}
+      </div>
+      {(value || zone) && (
+        <div className="shrink-0 text-right whitespace-nowrap leading-snug pt-[1px]">
+          {value && <div className="font-display font-semibold text-[14px] text-ink tabular-nums">{value}</div>}
+          {zone && <div className="font-mono text-[11px] text-stone mt-[1px]">{zone}</div>}
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <div className="border-l-2 border-fog pl-[14px] mt-[2px]">
+      {steps.map((step, i) => {
+        if ('kind' in step && step.kind === 'repeat') {
+          const sub = step.steps[0];
+          const totalKm = step.steps.reduce((s, x) => s + (x.distanceKm || 0), 0) * step.count;
+          const subLabel = step.steps.map(s => s.label).join(' + ');
+          return <Row key={i} label={`${step.count} × ${subLabel}`} sub={sub?.paceMin ? `${sub.paceMin}/km` : null}
+            value={totalKm ? `${totalKm.toFixed(1)} km` : null} zone={sub?.zoneKey ?? null} />;
+        }
+        const seg = step;
+        const value = seg.distanceKm ? `${seg.distanceKm} km` : (seg.midSeconds ? fmtMMSS(seg.midSeconds) : null);
+        return <Row key={i} label={seg.label} sub={seg.paceMin ? `${seg.paceMin}/km` : null} value={value} zone={seg.zoneKey ?? null} />;
+      })}
+    </div>
+  );
+}
 
 function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
   session: PlanSession; thresholdPace: string; zones: ZoneMap; hrZones: HrZoneMap; emphasis?: boolean;
@@ -32,34 +69,43 @@ function RunRow({ session, thresholdPace, zones, hrZones, emphasis = false }: {
   );
   const plannedSec = sumSegmentSeconds(steps);
   const duration   = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
+  const bars = buildProfileBars(session, thresholdPace, zones);
+  const distTss = [
+    session.distance_km != null ? `${Number(session.distance_km)} km` : null,
+    session.estimated_tss != null ? `~${session.estimated_tss} TSS` : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] cursor-pointer select-none hover:bg-fog/15 transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'}`}
+        className={`cursor-pointer select-none hover:bg-fog/15 transition-colors ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'}`}
         style={{ borderLeft: `3px solid ${hex}` }}
         onClick={() => setOpen(o => !o)}
+        role="button"
+        aria-expanded={open}
       >
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-[7px] leading-tight">
+        {/* Title row — name gets the full width (no graph stealing space) */}
+        <div className="flex items-start justify-between gap-[12px]">
+          <div className="flex items-center gap-[7px] min-w-0 flex-1">
             <span style={{ color: hex }} className="shrink-0"><RunGlyph size={emphasis ? 18 : 15} /></span>
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink truncate`}>{session.name}</span>
-            <span className="font-mono text-[13px] text-stone leading-none"
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink leading-tight`}>{session.name}</span>
+            <span className="font-mono text-[13px] text-stone leading-none shrink-0"
               style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
           </div>
-          {session.description && (
-            <div className="text-[14.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
-          )}
+          <div className={`shrink-0 font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
         </div>
-        <ProfileChart bars={buildProfileBars(session, thresholdPace, zones)} size="xs" color={hex} opacity={0.6} />
-        <MetricBlock
-          duration={duration}
-          distanceKm={session.distance_km != null ? Number(session.distance_km) : null}
-          tss={session.estimated_tss ?? null}
-          estimated
-        />
+        {session.description && (
+          <div className="text-[13.5px] leading-snug mt-[3px] text-stone">{session.description}</div>
+        )}
+        {/* Session graph — underneath the title, like the Today hero */}
+        {bars.length > 0 && (
+          <div className="mt-[11px]">
+            <ProfileChart bars={bars} size="lg" color={hex} opacity={0.6} />
+          </div>
+        )}
+        {distTss && <div className="font-mono text-[12px] text-stone mt-[8px]">{distTss}</div>}
       </div>
-      {open && <WorkoutDetail steps={steps} />}
+      {open && <PlannedDetail steps={steps} />}
     </div>
   );
 }

@@ -81,6 +81,11 @@ export default function RecentlyCompletedHero({ r }: { r: RecentlyCompleted }) {
         good={d != null ? d <= 0 : null} />,
     );
   }
+  if (r.avgHr != null) {
+    rows.push(
+      <CmpRow key="hr" label="Avg HR" plan="—" actual={`${r.avgHr}`} delta={null} good={null} />,
+    );
+  }
   if (r.actualTss != null) {
     const d = r.planTss != null ? r.actualTss - r.planTss : null;
     rows.push(
@@ -123,9 +128,9 @@ export default function RecentlyCompletedHero({ r }: { r: RecentlyCompleted }) {
 
         {rows.length > 0 && (
           <div className="mt-[18px]">
-            <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center gap-[8px] cursor-pointer select-none">
-              <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">How it went vs plan</span>
-              <span className="font-mono text-[13px] text-stone leading-none"
+            <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center justify-between w-full min-h-[40px] cursor-pointer select-none">
+              <span className="text-[14px] font-semibold text-stone">How it went vs plan</span>
+              <span className="font-mono text-[15px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </button>
             {open && (
