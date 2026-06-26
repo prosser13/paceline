@@ -20,7 +20,7 @@ export default function CollapsibleSession({
         onClick={() => setOpen(o => !o)}
         className="flex items-center gap-[8px] cursor-pointer select-none"
       >
-        <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">The session</span>
+        <span className="font-mono text-[13px] tracking-[.12em] uppercase text-stone">Session detail</span>
         <span
           className="font-mono text-[13px] text-stone leading-none"
           style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}

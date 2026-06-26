@@ -1,5 +1,9 @@
-// Option A — the week strip + agenda-spine body of the dashboard
-// (src/app/page.tsx). Server component.
+// The agenda body of the dashboard (src/app/page.tsx). Server component.
+//
+// A flat stack of day cards under clean section labels (Today / Tomorrow /
+// future days) — no decorative timeline spine, so each card gets the full
+// content width on mobile. Anchor IDs (`spine-<iso>`) are kept so the week
+// strip's tap-to-scroll still lands on the right day.
 
 import { Fragment } from 'react';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
@@ -11,16 +15,10 @@ import CyclingHero from '@/components/CyclingHero';
 import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
 import { type YogaPose } from '@/components/YogaRow';
-import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
 
-function Node({ anchorId, dot, ring, label, labelColor, children }: {
-  anchorId: string; dot?: string; ring?: string; label: string; labelColor: string; children: React.ReactNode;
-}) {
+function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div id={anchorId} className="relative pl-[44px] pb-[20px]" style={{ scrollMarginTop: '14px' }}>
-      <div className="absolute left-[11px] top-[3px] w-[15px] h-[15px] rounded-full"
-        style={dot ? { background: dot, outline: '3px solid #fbf8f2' } : { background: '#fbf8f2', border: `2px solid ${ring}`, outlineColor: '#fbf8f2' }} />
-      {label && <div className="font-mono text-[11px] uppercase tracking-[.12em] mb-[9px]" style={{ color: labelColor }}>{label}</div>}
+    <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px] first:mt-0">
       {children}
     </div>
   );
@@ -74,57 +72,51 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   };
 
   return (
-      <div className="relative">
-        <div className="absolute left-[18px] top-[6px] bottom-[10px] w-[2px] bg-fog" />
-
-        <Node anchorId={`spine-${d.windowDays[0].iso}`}
-          dot={todayDone ? FERN : OXBLOOD}
-          label={todayDone ? 'Done today' : 'Now · today'}
-          labelColor={todayDone ? FERN : OXBLOOD}>
-          {d.todaySessions.length === 0
-            ? restBox
-            : d.todaySessions.map(s => <Fragment key={s.id}>{renderTodayBlock(s)}</Fragment>)}
-          {d.offPlanToday.length > 0 && (
-            <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-              <div className="divide-y divide-fog/50">
-                {d.offPlanToday.map(a => <OffPlanRow key={a.id} activity={a} />)}
-              </div>
+    <div>
+      {/* Today */}
+      <section id={`spine-${d.windowDays[0].iso}`} style={{ scrollMarginTop: '14px' }}>
+        <SectionLabel>{todayDone ? 'Done today' : 'Today'}</SectionLabel>
+        {d.todaySessions.length === 0
+          ? restBox
+          : d.todaySessions.map(s => <Fragment key={s.id}>{renderTodayBlock(s)}</Fragment>)}
+        {d.offPlanToday.length > 0 && (
+          <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
+            <div className="divide-y divide-fog/50">
+              {d.offPlanToday.map(a => <OffPlanRow key={a.id} activity={a} />)}
             </div>
-          )}
-        </Node>
-
-        <Node anchorId={`spine-${d.windowDays[1].iso}`} ring={MARINE} label="" labelColor={MARINE}>
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-            <div className="px-[18px] py-[8px]" style={{ background: MARINE }}>
-              <span className="font-mono text-[11px] tracking-[.14em] uppercase" style={{ color: BONE }}>
-                Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}
-              </span>
-            </div>
-            <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
-              zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}
-              restLabel="Rest day — recover" emphasis />
           </div>
-        </Node>
+        )}
+      </section>
 
-        {groups.map(g => {
-          const f = formatSpineDay(g.iso);
-          const isRest = g.sessions.every(s => s.status === 'rest');
-          const count = g.sessions.filter(s => s.status !== 'rest').length;
-          return (
-            <Node key={g.iso} anchorId={`spine-${g.iso}`} ring="#cfc8b8"
-              label={`${f.weekday} · ${f.date}${count > 1 ? ` · ${count} sessions` : ''}`}
-              labelColor="#5f5a50">
-              {isRest ? (
-                <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
-              ) : (
-                <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-                  <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
-                    powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
-                </div>
-              )}
-            </Node>
-          );
-        })}
-      </div>
+      {/* Tomorrow */}
+      <section id={`spine-${d.windowDays[1].iso}`} style={{ scrollMarginTop: '14px' }}>
+        <SectionLabel>Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}</SectionLabel>
+        <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
+          <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
+            zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}
+            restLabel="Rest day — recover" emphasis />
+        </div>
+      </section>
+
+      {/* Later this week */}
+      {groups.map(g => {
+        const f = formatSpineDay(g.iso);
+        const isRest = g.sessions.every(s => s.status === 'rest');
+        const count = g.sessions.filter(s => s.status !== 'rest').length;
+        return (
+          <section key={g.iso} id={`spine-${g.iso}`} style={{ scrollMarginTop: '14px' }}>
+            <SectionLabel>{f.weekday} · {f.date}{count > 1 ? ` · ${count} sessions` : ''}</SectionLabel>
+            {isRest ? (
+              <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
+            ) : (
+              <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
+                <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
+                  powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+              </div>
+            )}
+          </section>
+        );
+      })}
+    </div>
   );
 }
