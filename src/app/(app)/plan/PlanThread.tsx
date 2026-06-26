@@ -73,8 +73,6 @@ const PHASE_HEX: Record<string, string> = {
 
 const RACE_COLOR: Record<string, string> = { A: '#8c2b2b', B: '#b5790f', C: '#14617e' };
 
-const REST_SHEETS = 'repeating-linear-gradient(135deg,#fbf8f2,#fbf8f2 9px,#f4efe4 9px,#f4efe4 18px)';
-
 function parseDurationMins(str: string | null | undefined): number | null {
   if (!str) return null;
   const parts = str.split(':').map(Number);
@@ -121,18 +119,18 @@ function fmtDateRange(from: string, to: string) {
 
 // ── Sub-components ─────────────────────────────────────────────
 
+// A standalone dashed card — the rest day never sits bare on the page.
 function RestCard() {
   return (
-    <div className="flex items-center gap-[10px] px-[14px] py-[10px] text-stone"
-      style={{ background: REST_SHEETS, outline: '1px dashed #c9c2b2', outlineOffset: '-1px' }}>
-      <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <div className="flex items-center gap-[10px] px-[16px] py-[14px] mb-[9px] text-stone bg-paper border border-dashed border-fog rounded-[16px]">
+      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 18 v-4 h18 v4" />
         <path d="M3 14 v-4" />
         <path d="M6 14 q3 -3 6 0" />
         <path d="M3 18 h18" />
         <path d="M3 18 v2 M21 18 v2" />
       </svg>
-      <span className="font-mono text-[12px] tracking-[.08em] uppercase">Rest day</span>
+      <span className="text-[14px]">Rest day — recover</span>
     </div>
   );
 }
@@ -147,36 +145,6 @@ function DeltaBlock({ delta }: { delta: DeltaData }) {
         <span className={deviationClass(delta.tssPct)}>{formatTssDelta(delta.tssDelta)}</span>
         <span className="text-fog">·</span>
         <span className={deviationClass(delta.durPct)}>{formatDurationDelta(delta.durDelta)}</span>
-      </div>
-    </div>
-  );
-}
-
-function WeekBand({ weekNumber, phase, range, isCurrent, totalKm, tss, tssEstimated }: {
-  weekNumber: number; phase: string; range: string; isCurrent: boolean;
-  totalKm: number; tss: number; tssEstimated: boolean;
-}) {
-  const hex = PHASE_HEX[phase] ?? '#8a857a';
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-[10px] px-[14px] py-[9px]"
-      style={{ background: isCurrent ? hex : `${hex}14`, border: `1px solid ${hex}${isCurrent ? '' : '40'}` }}>
-      <div className="flex items-center gap-[10px] min-w-0 flex-wrap">
-        <span className="font-display font-semibold text-[14.5px]"
-          style={{ color: isCurrent ? '#f4efe4' : '#17191e' }}>
-          Week {weekNumber} · {phase}
-        </span>
-        <span className="font-mono text-[12.5px]"
-          style={{ color: isCurrent ? 'rgba(244,239,228,.8)' : '#8a857a' }}>
-          {range}
-        </span>
-        {isCurrent && (
-          <span className="font-mono text-[10px] tracking-[.12em] uppercase rounded-[4px] px-[5px] py-[1px]"
-            style={{ background: 'rgba(244,239,228,.2)', color: '#f4efe4' }}>Now</span>
-        )}
-      </div>
-      <div className="shrink-0 text-right font-mono text-[12.5px]"
-        style={{ color: isCurrent ? 'rgba(244,239,228,.85)' : '#8a857a' }}>
-        {totalKm > 0 ? `${totalKm.toFixed(0)} km · ` : ''}{tssEstimated ? '~' : ''}{tss} TSS
       </div>
     </div>
   );
@@ -397,7 +365,8 @@ export default function PlanThread({
     return withUnlink(
       <div key={session.id}>
         <div
-          className={`flex items-center gap-[14px] border-l-[3px] border-l-fern px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
+          className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
+          style={{ borderLeftColor: INTENSITY[intensity]?.hex ?? '#17191e' }}
           onClick={() => toggleExpanded(session.id)}
           role="button"
           tabIndex={0}
@@ -500,30 +469,35 @@ export default function PlanThread({
         .map(s => ({ id: s.id, name: s.name || (s.activity_type === 'cycling' ? 'Ride' : 'Run') }));
     };
 
-    return (
-      <div key={dateStr} className={`flex gap-[14px] ${dim ? 'opacity-55' : ''}`}>
-        <div className="w-[52px] shrink-0 pt-[8px] text-right">
-          <div className={`font-display font-semibold text-[15px] leading-none ${isToday ? 'text-oxblood' : isTomorrow ? 'text-marine' : 'text-ink'}`}>
-            {weekday}
+    // Each workout sits in its own card (rest = a dashed card); the day is just a
+    // marker heading above them — matches the dashboard's session cards.
+    const sessionNode = (s: PlanSession) =>
+      resolveStatus(s, todayStr, completedMap) === 'rest'
+        ? <RestCard key={s.id} />
+        : (
+          <div key={s.id} className="border border-fog rounded-[16px] bg-paper overflow-hidden mb-[9px]">
+            {renderSessionRow(s)}
           </div>
-          <div className="font-mono text-[12px] text-stone mt-[3px]">{dateLabel}</div>
-        </div>
-        <div className={`flex-1 min-w-0 rounded-[12px] border bg-paper overflow-hidden ${isToday ? 'border-oxblood' : isTomorrow ? 'border-marine' : 'border-fog'}`}>
+        );
+
+    return (
+      <div key={dateStr} className={dim ? 'opacity-55' : ''}>
+        <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] text-[13.5px] font-semibold ${isToday ? 'text-oxblood' : isTomorrow ? 'text-marine' : 'text-ink'}`}>
+          <span>{weekday}</span>
+          <span className="font-normal text-stone text-[12.5px]">{dateLabel}</span>
           {isToday && (
-            <div className="px-[14px] py-[4px] bg-oxblood text-bone font-mono text-[10px] tracking-[.14em] uppercase">
-              Today
-            </div>
+            <span className="ml-auto font-mono text-[9.5px] tracking-[.05em] uppercase text-bone bg-oxblood rounded-[5px] px-[7px] py-[3px]">Today</span>
           )}
           {isTomorrow && (
-            <div className="px-[14px] py-[4px] bg-marine text-bone font-mono text-[10px] tracking-[.14em] uppercase">
-              Tomorrow
-            </div>
+            <span className="ml-auto font-mono text-[9.5px] tracking-[.05em] uppercase text-bone bg-marine rounded-[5px] px-[7px] py-[3px]">Tomorrow</span>
           )}
-          <div className="divide-y divide-fog/50">
-            {sessions.map(s => renderSessionRow(s))}
-            {offPlan.map(a => <OffPlanRow key={a.id} activity={a} linkTargets={linkTargetsFor(a)} mergeTargets={mergeTargetsFor(a)} />)}
-          </div>
         </div>
+        {sessions.map(s => sessionNode(s))}
+        {offPlan.map(a => (
+          <div key={a.id} className="border border-fog rounded-[16px] bg-paper overflow-hidden mb-[9px]">
+            <OffPlanRow activity={a} linkTargets={linkTargetsFor(a)} mergeTargets={mergeTargetsFor(a)} />
+          </div>
+        ))}
       </div>
     );
   }
@@ -550,23 +524,27 @@ export default function PlanThread({
     const offPlanDates = Object.keys(offPlanByDate).filter(dt => dt >= week.date_from && dt <= week.date_to);
     const dates = Array.from(new Set([...Object.keys(byDate), ...offPlanDates])).sort();
 
+    const hex = PHASE_HEX[week.phase] ?? '#8a857a';
     return (
-      <div key={week.week_number} className="mb-5">
-        <div className="mb-[10px]">
-          <WeekBand
-            weekNumber={week.week_number}
-            phase={week.phase}
-            range={fmtDateRange(week.date_from, week.date_to)}
-            isCurrent={isCurrent}
-            totalKm={weekKm}
-            tss={weekTss}
-            tssEstimated={weekTssEstimated}
-          />
-        </div>
-        <div className="flex flex-col gap-[10px] pl-[2px]">
+      <details key={week.week_number} className="group border-t border-fog" open={isCurrent}>
+        <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[11px] py-[12px] px-[2px]">
+          <span className="w-[4px] self-stretch rounded-[2px] min-h-[34px] shrink-0" style={{ background: hex }} aria-hidden="true" />
+          <span className="flex-1 min-w-0 flex flex-col">
+            <span className="text-[15.5px] font-semibold text-ink leading-tight">Week {week.week_number} · {week.phase}</span>
+            <span className="font-mono text-[11.5px] text-stone mt-[1px]">
+              {fmtDateRange(week.date_from, week.date_to)}{weekKm > 0 ? ` · ${weekKm.toFixed(0)} km` : ''} · {weekTssEstimated ? '~' : ''}{weekTss} TSS
+            </span>
+          </span>
+          {isCurrent && (
+            <span className="font-mono text-[9.5px] tracking-[.09em] uppercase text-oxblood font-semibold shrink-0">Now</span>
+          )}
+          <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </summary>
+        <div className="pb-[10px]">
+          {week.purpose && <p className="text-[12.5px] italic text-stone mt-[4px] mb-[2px] px-[2px]">{week.purpose}</p>}
           {dates.map(date => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast))}
         </div>
-      </div>
+      </details>
     );
   }
 

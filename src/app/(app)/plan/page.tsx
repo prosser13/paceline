@@ -8,6 +8,8 @@ import { activityKind } from '@/lib/activity-types';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import PlanThread from './PlanThread';
 import RaceBlock from './RaceBlock';
+import PlanSwitcher, { type PlanOption } from './PlanSwitcher';
+import PhaseBar from '@/components/PhaseBar';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 
@@ -55,15 +57,8 @@ interface PlanRow {
   status: 'archived' | 'active' | 'future';
 }
 
-const PHASE_COLOR: Record<string, { bar: string; label: string }> = {
-  Base:  { bar: 'bg-marine',  label: 'text-marine'     },
-  Build: { bar: 'bg-amber',   label: 'text-amber-dark'  },
-  Peak:  { bar: 'bg-ember',   label: 'text-ember'      },
-  Taper: { bar: 'bg-fern',    label: 'text-fern'       },
-};
-
-function shortDate(dateStr: string): string {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+function fmtLong(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function isoLocal(d: Date): string {
@@ -307,45 +302,29 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   );
 
   const phaseBar = phaseSegments.length > 0 && (
-    <div className="mb-7">
-      <div className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px] mb-[10px]">
-        {phaseSegments.map((seg, i) => (
-          <span key={i} className="flex items-center gap-[5px]">
-            <i className={`inline-block w-[8px] h-[8px] rounded-[2px] ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`} />
-            <span className={`font-mono text-[12px] tracking-[.1em] uppercase ${PHASE_COLOR[seg.phase]?.label ?? 'text-stone'}`}>
-              {seg.phase}
-            </span>
-          </span>
-        ))}
-        {planStart && planEnd && (
-          <span className="font-mono text-[12px] text-stone ml-auto">
-            {shortDate(planStart)} – {shortDate(planEnd)}
-          </span>
-        )}
-      </div>
-      <div className="relative h-[6px] rounded-full bg-fog overflow-hidden">
-        <div className="absolute inset-0 flex">
-          {phaseSegments.map((seg, i) => (
-            <div
-              key={i}
-              className={`h-full opacity-80 ${PHASE_COLOR[seg.phase]?.bar ?? 'bg-stone'}`}
-              style={{ width: `${seg.pct}%` }}
-            />
-          ))}
-        </div>
-        {todayPct != null && (
-          <div
-            className="absolute top-[-2px] bottom-[-2px] w-[2px] bg-oxblood rounded-full"
-            style={{ left: `${todayPct}%` }}
-          />
-        )}
-      </div>
+    <div className="border border-fog rounded-[16px] bg-paper px-[15px] py-[14px] mb-5">
+      <PhaseBar segments={phaseSegments} todayPct={todayPct} />
     </div>
   );
+
+  // Plans for the header dropdown — the live plan (→ /plan) then upcoming plans.
+  const archivedCount = withStatus.filter(p => p.status === 'archived').length;
+  const futureDot = ['#14617e', '#8f6512', '#4f7a52'];
+  const planOptions: PlanOption[] = [
+    ...(activePlan ? [{
+      name: activePlan.name, slug: activePlan.slug, dot: '#8c2b2b', active: true,
+      sub: activePlan.end_date ? `Active plan · ends ${fmtLong(activePlan.end_date)}` : 'Active plan',
+    }] : []),
+    ...futurePlans.map((p, i) => ({
+      name: p.name, slug: p.slug, dot: futureDot[i % futureDot.length], active: false,
+      sub: p.start_date ? `Starts ${fmtLong(p.start_date)}` : 'Upcoming',
+    })),
+  ];
 
   const weeksSection = (
     <>
       {phaseBar}
+      <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[6px]">Weeks</div>
       <PlanThread
         weeks={viewWeeks}
         byWeek={byWeek}
@@ -371,29 +350,30 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   );
 
   return (
-    <>
-      <div className="px-[26px] py-[22px] max-w-[1040px]">
+    <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[1040px]">
 
-      {selectedPlan ? (
-        // A specific plan was requested via ?plan=slug
+      {planOptions.length > 0 && (
+        <PlanSwitcher
+          currentName={viewPlan?.name ?? 'Select a plan'}
+          currentSlug={selectedPlan ? selectedPlan.slug : null}
+          options={planOptions}
+          archiveCount={archivedCount}
+        />
+      )}
+
+      {viewPlan ? (
         <>
-          {planBlock(selectedPlan)}
+          {planBlock(viewPlan)}
           <div className="mt-6">
             {viewWeeks.length > 0 ? weeksSection : notBuilt}
           </div>
         </>
       ) : (
-        // Default view: active plan + its weeks, then future-plan teasers
-        <>
-          {activePlan && <div className="mb-6">{planBlock(activePlan)}</div>}
-          {viewWeeks.length > 0 ? weeksSection : (!activePlan && notBuilt)}
-          {futurePlans.map(p => (
-            <div key={p.id} className="mt-8">{planBlock(p)}</div>
-          ))}
-        </>
+        <div className="mt-6 border border-fog rounded-[14px] bg-paper px-[22px] py-[44px] text-center">
+          <p className="text-stone text-[15px]">No active plan right now — pick one from the menu above.</p>
+        </div>
       )}
 
-      </div>
-    </>
+    </div>
   );
 }
