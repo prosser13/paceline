@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, type CompareRow } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, type CompareRow } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -156,19 +156,22 @@ export default function CyclingRow({
   // mirroring the run comparison table so both read identically.
   let rideCompareRows: CompareRow[] = [];
   if (isDone && completed) {
-    let pmin = Infinity, pmax = -Infinity;
+    let pmin = Infinity, pmax = -Infinity, hmin = Infinity, hmax = -Infinity;
     for (const s of segments) {
       if (s.powerMin != null) pmin = Math.min(pmin, s.powerMin);
       if (s.powerMax != null) pmax = Math.max(pmax, s.powerMax);
+      if (s.hrMin != null) hmin = Math.min(hmin, s.hrMin);
+      if (s.hrMax != null) hmax = Math.max(hmax, s.hrMax);
     }
-    const planPower    = Number.isFinite(pmin) ? fmtPower(pmin, Number.isFinite(pmax) ? pmax : pmin) : '—';
-    const planMidPower = Number.isFinite(pmin) ? (Number.isFinite(pmax) ? (pmin + pmax) / 2 : pmin) : null;
-    const avgPower     = completed.avgPower ?? null;
-    const powerDelta   = avgPower != null && planMidPower != null ? Math.round(avgPower - planMidPower) : null;
+    const planPower = Number.isFinite(pmin) ? fmtPower(pmin, Number.isFinite(pmax) ? pmax : pmin) : '—';
+    const avgPower  = completed.avgPower ?? null;
+    const pw = Number.isFinite(pmin) && Number.isFinite(pmax) && avgPower != null ? rangeCompare(avgPower, pmin, pmax) : null;
+    const planHr = Number.isFinite(hmin) ? (hmin === hmax ? `${hmin}` : `${hmin}–${hmax}`) : '—';
+    const hr = Number.isFinite(hmin) && Number.isFinite(hmax) && completed.avgHr != null ? rangeCompare(completed.avgHr, hmin, hmax) : null;
     rideCompareRows = [
       { metric: 'Duration', plan: plannedMins != null ? fmtClock(plannedMins * 60) : '—', actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: durDelta != null ? signedMin(durDelta) : null, tone: 'flat' },
-      { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: powerDelta != null ? `${powerDelta >= 0 ? '+' : '−'}${Math.abs(powerDelta)} W` : null, tone: 'flat' },
-      { metric: 'Avg HR', plan: '—', actual: completed.avgHr != null ? `${completed.avgHr}` : '—', delta: null, tone: 'flat' },
+      { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: pw?.delta ?? null, tone: pw?.tone ?? 'flat' },
+      { metric: 'Avg HR', plan: planHr, actual: completed.avgHr != null ? `${completed.avgHr}` : '—', delta: hr?.delta ?? null, tone: hr?.tone ?? 'flat' },
     ];
   }
 
@@ -189,13 +192,13 @@ export default function CyclingRow({
           )}
           {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
           <span className="text-marine shrink-0 mt-[3px]"><BikeGlyph size={emphasis ? 18 : 15} /></span>
-          <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>{session.name}</span>
-          {hasDetail && (
-            <span className="font-mono text-[14px] text-stone leading-none shrink-0 mt-[2px]"
-              style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
-              ▾
-            </span>
-          )}
+          <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>
+            {session.name}
+            {hasDetail && (
+              <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
+                style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
+            )}
+          </span>
         </div>
 
         {/* Info row — description (with vs-plan beneath, level with the TSS) on

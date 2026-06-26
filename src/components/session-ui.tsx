@@ -391,6 +391,15 @@ export function DetailRow({ label, sub, value, valueSub }: {
 // plan (green), neg = worse (ember), flat = neutral.
 export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: 'pos' | 'neg' | 'flat'; }
 
+// Compare an actual value against a planned [lo, hi] window: in range → a tick;
+// otherwise the signed gap to the nearer bound. Used for pace / HR / power so
+// every ranged metric reads the same way.
+export function rangeCompare(actual: number, lo: number, hi: number): { delta: string; tone: 'pos' | 'neg' } {
+  if (actual >= lo && actual <= hi) return { delta: '✓', tone: 'pos' };
+  if (actual < lo) return { delta: `−${Math.round(lo - actual)}`, tone: 'neg' };
+  return { delta: `+${Math.round(actual - hi)}`, tone: 'neg' };
+}
+
 const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;
 
 export function CompareTable({ rows }: { rows: CompareRow[] }) {

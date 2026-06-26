@@ -94,7 +94,7 @@ export default function StrengthRow({
       </div>
 
       {open && hasDetail && (
-        <div className="border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]">
+        <div className="border-l-2 border-fog pl-[16px] pr-[16px] py-[10px]">
           <StrengthDetailTable exercises={exercises} />
 
           {note && <div className="text-[13.5px] text-stone leading-snug mt-[8px]">{note}</div>}
