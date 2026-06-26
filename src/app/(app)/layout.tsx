@@ -41,7 +41,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             paceline
           </span>
         </header>
-        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0">
+        {/* overflow-anchor:none — when an accordion expands, keep the user's
+            scroll position and push content down instead of letting the browser
+            anchor to a lower element (which yanked the view upward). */}
+        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0 [overflow-anchor:none]">
           {children}
         </main>
       </div>

@@ -29,14 +29,12 @@ export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) 
         return (
           <div key={i} className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
             <div className="flex-1 min-w-0">
-              <div className="text-[14.5px] font-medium text-ink leading-snug">{ex.name}</div>
-              {ex.target && (
-                <div className="font-mono text-[11.5px] tracking-[.04em] text-stone mt-[2px]">{ex.target}</div>
-              )}
+              <div className="text-[14px] font-medium text-ink leading-snug">{ex.name}</div>
+              {ex.target && <div className="font-mono text-[11.5px] text-stone mt-[1px]">{ex.target}</div>}
             </div>
-            <div className="shrink-0 text-right whitespace-nowrap leading-snug pt-[1px]">
-              <span className="font-display font-semibold text-[14.5px] text-ink tabular-nums">{ex.sets} × {repsStr(ex)}</span>
-              {weighted && <span className="font-mono text-[12.5px] text-stone tabular-nums"> · {ex.weight} kg</span>}
+            <div className="shrink-0 text-right leading-snug pt-[1px]">
+              <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{ex.sets} × {repsStr(ex)}</div>
+              {weighted && <div className="font-mono text-[11px] text-stone mt-[1px]">{ex.weight} kg</div>}
             </div>
           </div>
         );
