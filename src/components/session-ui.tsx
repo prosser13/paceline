@@ -2,7 +2,7 @@
 // segments and metrics. Pure components (no hooks) so they can be used by both
 // the plan page (client) and the dashboard (server) — keeping styling in sync.
 
-import { segmentPerformance, segmentHrPerformance, PERF_COLOR } from '@/lib/plan-structure';
+import { segmentPerformance, PERF_COLOR } from '@/lib/plan-structure';
 import type { NormSegment, NormStep, SegmentPerf } from '@/lib/plan-structure';
 import RepeatBlock from './RepeatBlock';
 
@@ -151,106 +151,71 @@ export function wholeRunActuals(
 
 // ── Segment table ────────────────────────────────────────────
 
-export const DETAIL_COLS = '1fr 54px 100px 92px 92px';
+// Planned pace target — "4:35" or "4:15–4:35".
+function plannedPaceStr(seg: NormSegment): string | null {
+  if (!seg.paceMin) return null;
+  return seg.paceMin === seg.paceMax ? seg.paceMin : `${seg.paceMin}–${seg.paceMax}`;
+}
 
-function Chip({ color, label }: { color: string; label: string }) {
+function ZoneTag({ seg }: { seg: NormSegment }) {
+  if (seg.zoneKeys && seg.zoneKeys.length > 1) return <MultiZoneChip zones={seg.zoneKeys} />;
+  return seg.zoneKey ? <ZoneChip zone={seg.zoneKey} /> : null;
+}
+
+// Shared per-segment row in the clean detail style: name (+ zone) and the
+// planned target on the left, the actual result (when run) or the distance
+// (planned) on the right. A coloured dot flags how the actual compared.
+function SegmentRow({
+  label, seg, completed, rightMain, rightMainColor, rightSub,
+}: {
+  label: string; seg: NormSegment; completed: boolean;
+  rightMain: string; rightMainColor?: string; rightSub?: string | null;
+}) {
+  const perf = completed ? segmentPerformance(seg) : null;
+  const dot  = perf ? PERF_COLOR[perf] : undefined;
+  const pace = plannedPaceStr(seg);
+  const planParts = [pace ? `${pace}/km` : null, completed && seg.distanceKm ? `${seg.distanceKm} km` : null].filter(Boolean);
   return (
-    <span
-      className="font-mono text-[11px] px-[5px] py-[1px] rounded-[4px] whitespace-nowrap"
-      style={{ background: `${color}22`, color }}
-    >
-      {label}
-    </span>
+    <div className="flex items-start gap-[12px] py-[9px] border-t border-fog/60 first:border-t-0">
+      <div className="flex-1 min-w-0">
+        <div className="text-[14px] font-medium text-ink leading-snug flex items-center gap-[7px] flex-wrap">
+          {dot && <i className="inline-block w-[7px] h-[7px] rounded-full shrink-0" style={{ background: dot }} aria-hidden="true" />}
+          <span className="min-w-0">{label}</span>
+          <ZoneTag seg={seg} />
+        </div>
+        {planParts.length > 0 && (
+          <div className="font-mono text-[11.5px] text-stone mt-[1px]">{completed ? 'Plan ' : ''}{planParts.join(' · ')}</div>
+        )}
+        {seg.note && <div className="text-[12.5px] text-stone leading-snug mt-[2px]">{seg.note}</div>}
+      </div>
+      <div className="shrink-0 text-right leading-snug pt-[1px]">
+        <div className="font-mono text-[14px] font-semibold tabular-nums whitespace-nowrap" style={rightMainColor ? { color: rightMainColor } : undefined}>{rightMain}</div>
+        {rightSub && <div className="font-mono text-[11px] text-stone mt-[1px]">{rightSub}</div>}
+      </div>
+    </div>
   );
 }
 
-// Colour for the actual time vs the planned (zone-mid) estimate.
-function timeColorFor(seg: NormSegment): string | undefined {
-  if (seg.actualPaceSec == null || seg.midSeconds == null || !seg.distanceKm) return undefined;
-  const plannedSec = seg.midSeconds * seg.distanceKm;
-  const delta = seg.actualPaceSec * seg.distanceKm - plannedSec;
-  if (Math.abs(delta) < Math.max(5, plannedSec * 0.04)) return PERF_COLOR.on;
-  return delta > 0 ? PERF_COLOR.behind : PERF_COLOR.ahead;
-}
-
-// One metric: the actual value on top (colour-coded by performance), the
-// planned target on the line below so the magnitude of the gap is visible.
-function StatCell({ main, color, muted, sub }: { main: string; color?: string; muted?: boolean; sub?: string | null }) {
-  return (
-    <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
-      <span className={`block ${muted ? 'text-stone' : color ? '' : 'text-ink'}`} style={color ? { color } : undefined}>{main}</span>
-      {sub && <span className="block text-[11.5px] text-stone mt-[1px]">{sub}</span>}
-    </span>
-  );
-}
-
-function MetricCell({ main, muted, chip }: { main: string; muted?: boolean; chip?: { color: string; label: string } | null }) {
-  return (
-    <span className="font-mono text-[13.5px] text-right tabular-nums leading-tight">
-      <span className={`block ${muted ? 'text-stone' : 'text-ink'}`}>{main}</span>
-      {chip && <span className="block mt-[2px]"><Chip color={chip.color} label={chip.label} /></span>}
-    </span>
-  );
-}
-
-function SegLabel({ seg, suffix }: { seg: NormSegment; suffix?: string }) {
-  const perf = segmentPerformance(seg);
-  const perfColor = perf ? PERF_COLOR[perf] : undefined;
-  return (
-    <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-      {perfColor && (
-        <i className="inline-block w-[8px] h-[8px] rounded-full shrink-0" style={{ background: perfColor }} aria-hidden="true" />
-      )}
-      <span className="truncate">{seg.label}{suffix}</span>
-      {seg.zoneKeys && seg.zoneKeys.length > 1
-        ? <MultiZoneChip zones={seg.zoneKeys} />
-        : seg.zoneKey && <ZoneChip zone={seg.zoneKey} />}
-    </span>
-  );
-}
-
-// One segment row — actual value on top (colour-coded), planned target below.
-// Planned-only (muted, no second line) when the session hasn't been run.
+// One segment row — planned target on the left, actual result (when run) on
+// the right; planned distance when not yet run.
 export function PhaseLine({ seg }: { seg: NormSegment }) {
   const completed = seg.actualPaceSec !== undefined;
-  const perf   = segmentPerformance(seg);
-  const hrPerf = segmentHrPerformance(seg);
-  const missed = perf === 'missed';
-
-  const plannedPace = seg.paceMin
-    ? (seg.paceMin === seg.paceMax ? seg.paceMin : `${seg.paceMin}–${seg.paceMax}`)
-    : '—';
-  const plannedHr   = seg.hrMin != null && seg.hrMax != null ? `${seg.hrMin}–${seg.hrMax}` : '—';
-  const plannedTime = seg.midSeconds && seg.distanceKm ? `~${fmtMMSS(seg.midSeconds * seg.distanceKm)}` : '—';
-
-  let paceMain: string, paceColor: string | undefined;
-  if (!completed) paceMain = plannedPace;
-  else if (missed) { paceMain = 'missed'; paceColor = PERF_COLOR.missed; }
-  else { paceMain = seg.actualPaceSec != null ? fmtMMSS(seg.actualPaceSec) : '—'; paceColor = perf ? PERF_COLOR[perf] : undefined; }
-
-  let hrMain: string, hrColor: string | undefined;
-  if (!completed) hrMain = plannedHr;
-  else if (seg.actualHr == null) { hrMain = '—'; hrColor = PERF_COLOR.missed; }
-  else { hrMain = `${seg.actualHr}`; hrColor = hrPerf ? PERF_COLOR[hrPerf] : undefined; }
-
-  let timeMain: string, timeColor: string | undefined;
-  if (!completed) timeMain = plannedTime;
-  else if (missed || seg.actualPaceSec == null) { timeMain = '—'; timeColor = PERF_COLOR.missed; }
-  else { timeMain = fmtMMSS(seg.actualPaceSec * seg.distanceKm); timeColor = timeColorFor(seg); }
-
+  if (!completed) {
+    const right = seg.distanceKm ? `${seg.distanceKm} km`
+      : (seg.midSeconds && seg.distanceKm ? `~${fmtMMSS(seg.midSeconds * seg.distanceKm)}` : '—');
+    return <SegmentRow label={seg.label} seg={seg} completed={false} rightMain={right} />;
+  }
+  const perf = segmentPerformance(seg);
+  const main = perf === 'missed' ? 'missed' : seg.actualPaceSec != null ? `${fmtMMSS(seg.actualPaceSec)}/km` : '—';
   return (
-    <div className="py-[6px]">
-      <div className="grid items-start gap-x-[10px]" style={{ gridTemplateColumns: DETAIL_COLS }}>
-        <SegLabel seg={seg} />
-        <span className="font-mono text-[14px] text-ink text-right tabular-nums">{seg.distanceKm ? `${seg.distanceKm} km` : '—'}</span>
-        <StatCell main={paceMain} color={paceColor} muted={!completed} sub={completed ? plannedPace : null} />
-        <StatCell main={hrMain}   color={hrColor}   muted={!completed} sub={completed ? plannedHr : null} />
-        <StatCell main={timeMain} color={timeColor} muted={!completed} sub={completed ? plannedTime : null} />
-      </div>
-      {seg.note && (
-        <div className="text-[13.5px] text-stone leading-snug mt-[3px] pr-[2px]">{seg.note}</div>
-      )}
-    </div>
+    <SegmentRow
+      label={seg.label}
+      seg={seg}
+      completed
+      rightMain={main}
+      rightMainColor={perf === 'missed' ? PERF_COLOR.missed : perf ? PERF_COLOR[perf] : undefined}
+      rightSub={seg.actualHr != null ? `${seg.actualHr} bpm` : null}
+    />
   );
 }
 
@@ -269,27 +234,29 @@ function summarize(perfs: SegmentPerf[], count: number, kind: 'pace' | 'hr'): { 
   return { color: PERF_COLOR.behind, label: `${on}/${count} in range` };
 }
 
-// Collapsed repeat summary — one row per sub-type: averaged actual + count verdict.
+// Collapsed repeat summary — one row per sub-type: averaged actual + a count
+// verdict ("4/5 in range"), in the same clean style as a single segment.
 export function AggregateLine({ sub, reps, count }: { sub: NormSegment; reps: NormSegment[]; count: number }) {
+  const label = `${count} × ${sub.label}`;
+  const completed = sub.actualPaceSec !== undefined;
+  if (!completed) {
+    const totalKm = sub.distanceKm ? sub.distanceKm * count : null;
+    const right = totalKm != null ? `${totalKm % 1 === 0 ? totalKm : totalKm.toFixed(1)} km` : '—';
+    return <SegmentRow label={label} seg={sub} completed={false} rightMain={right} />;
+  }
   const pacePerfs = reps.map(segmentPerformance).filter((p): p is SegmentPerf => p != null);
-  const hrPerfs   = reps.map(segmentHrPerformance).filter((p): p is SegmentPerf => p != null);
-  const paceSum = pacePerfs.length ? summarize(pacePerfs, count, 'pace') : null;
-  const hrSum   = hrPerfs.length ? summarize(hrPerfs, count, 'hr') : null;
-
-  const paceMain = sub.actualPaceSec != null ? `${fmtMMSS(sub.actualPaceSec)} avg` : '—';
-  const hrMain   = sub.actualHr != null ? `${sub.actualHr} avg` : '—';
-  const timeMain = sub.actualPaceSec != null && sub.distanceKm ? fmtMMSS(sub.actualPaceSec * sub.distanceKm) : '—';
-
+  const paceSum   = pacePerfs.length ? summarize(pacePerfs, count, 'pace') : null;
+  const perf      = segmentPerformance(sub);
+  const main      = sub.actualPaceSec != null ? `${fmtMMSS(sub.actualPaceSec)}/km avg` : '—';
   return (
-    <div className="py-[6px]">
-      <div className="grid items-start gap-x-[10px]" style={{ gridTemplateColumns: DETAIL_COLS }}>
-        <SegLabel seg={sub} suffix={` ×${count}`} />
-        <span className="font-mono text-[14px] text-ink text-right tabular-nums">{sub.distanceKm ? `${sub.distanceKm} km` : '—'}</span>
-        <MetricCell main={paceMain} chip={paceSum} />
-        <MetricCell main={hrMain} chip={hrSum} />
-        <MetricCell main={timeMain} />
-      </div>
-    </div>
+    <SegmentRow
+      label={label}
+      seg={sub}
+      completed
+      rightMain={main}
+      rightMainColor={perf ? PERF_COLOR[perf] : undefined}
+      rightSub={paceSum?.label ?? (sub.actualHr != null ? `${sub.actualHr} bpm` : null)}
+    />
   );
 }
 
@@ -302,7 +269,7 @@ export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; v
   // the hero body padding so its left rail sits at the card edge, matching the
   // tomorrow run/strength/yoga row details.
   const wrap = variant === 'row'
-    ? 'border-t border-fog/60 pl-[60px] pr-[18px] py-[12px]'
+    ? `${DETAIL_WRAP} py-[2px]`
     : '-mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]';
 
   return (
