@@ -6,7 +6,13 @@ import {
   createStrengthSession, insertSessionExercises, updateStrengthExercise,
   markStrengthSessionComplete, deleteStrengthSession,
 } from '@/data/strength-sessions';
+import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { revalidatePath } from 'next/cache';
+
+// Look up an exercise's library id by name — some planned sessions store the
+// prescription without exercise_id (manually authored), which used to make the
+// "Do this session" insert fail (exercise_id is NOT NULL). 0 = not in library.
+const EXERCISE_ID_BY_NAME = new Map(STRENGTH_EXERCISES.map(e => [e.name.toLowerCase(), e.id]));
 
 export interface SaveSessionExercise {
   exerciseId: number;
@@ -56,14 +62,20 @@ export async function startPlannedSession(
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const presc = (ps.structure as any[] | null) ?? [];
-  const exercises: SaveSessionExercise[] = presc.map(e => ({
-    exerciseId: Number(e.exercise_id),
-    exerciseName: String(e.name),
-    repsType: e.reps_type ?? 'reps',
-    sets: Number(e.sets) || 3,
-    repsValue: e.reps != null ? Number(e.reps) : null,
-    weightKg: e.weight != null ? Number(e.weight) : null,
-  }));
+  const exercises: SaveSessionExercise[] = presc.map(e => {
+    const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
+    const exerciseId = Number.isFinite(fromStruct)
+      ? fromStruct
+      : (EXERCISE_ID_BY_NAME.get(String(e.name ?? '').toLowerCase()) ?? 0);
+    return {
+      exerciseId,
+      exerciseName: String(e.name),
+      repsType: e.reps_type ?? 'reps',
+      sets: Number(e.sets) || 3,
+      repsValue: e.reps != null ? Number(e.reps) : null,
+      weightKg: e.weight != null ? Number(e.weight) : null,
+    };
+  });
 
   const parts = String(ps.estimated_duration ?? '0:40').split(':').map(Number);
   const mins = (parts[0] || 0) * 60 + (parts[1] || 0);
