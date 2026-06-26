@@ -3,6 +3,7 @@
 // values are computed in the page and passed in.
 
 import React from 'react';
+import PhaseBar, { type PhaseSeg } from './PhaseBar';
 
 const BONE = '#f4efe4';
 const OXBLOOD = '#8c2b2b';
@@ -12,16 +13,6 @@ const EMBER = '#c75b33';
 const FOG = '#d9d3c6';
 const AMBER = '#dfa01c';
 const INK = '#17191e';
-
-const PHASE_HEX: Record<string, string> = {
-  Base: MARINE, Build: AMBER, Peak: EMBER, Taper: FERN,
-};
-
-// Label colours — Build uses amber-dark so it stays legible on the cream card
-// (the AMBER fill is too light for text).
-const PHASE_LABEL_HEX: Record<string, string> = {
-  Base: MARINE, Build: '#7a5a08', Peak: EMBER, Taper: FERN,
-};
 
 export function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
@@ -36,7 +27,7 @@ export const cardClass = 'flex flex-col border border-fog rounded-[14px] overflo
 
 /* ── Phase timeline (top-left) ─────────────────────────────── */
 
-export interface PhaseSeg { phase: string; pct: number }
+export type { PhaseSeg };
 
 export function PhaseTimeline({
   headerLabel, purpose, segments, todayPct, daysToRace, raceName, raceDateStr,
@@ -72,28 +63,7 @@ export function PhaseTimeline({
 
         {segments.length > 0 && (
           <div className="mt-[16px]">
-            <div className="relative flex h-[10px] rounded-[5px] overflow-hidden">
-              {segments.map((s, i) => (
-                <div key={i} style={{ width: `${s.pct}%`, background: PHASE_HEX[s.phase] ?? '#888780' }} />
-              ))}
-              {todayPct != null && (
-                <div
-                  className="absolute top-[-3px] w-[16px] h-[16px] rounded-full bg-paper"
-                  style={{ left: `${todayPct}%`, transform: 'translateX(-50%)', border: `3px solid ${INK}` }}
-                />
-              )}
-            </div>
-            <div className="flex justify-between mt-[7px]">
-              {segments.map((s, i) => (
-                <span
-                  key={i}
-                  className="font-mono text-[10px] font-semibold uppercase tracking-[.1em] whitespace-nowrap"
-                  style={{ color: PHASE_LABEL_HEX[s.phase] ?? '#5f5a50' }}
-                >
-                  {s.phase}
-                </span>
-              ))}
-            </div>
+            <PhaseBar segments={segments} todayPct={todayPct} />
           </div>
         )}
       </div>
