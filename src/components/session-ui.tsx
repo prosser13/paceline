@@ -162,6 +162,13 @@ function ZoneTag({ seg }: { seg: NormSegment }) {
   return seg.zoneKey ? <ZoneChip zone={seg.zoneKey} /> : null;
 }
 
+// Per-segment colour. For a planned workout being faster (ahead) is just as
+// off-plan as being slower, so both read ember; only a race rewards going
+// faster (marine). `on` = green, `missed` = grey throughout.
+export function perfColor(perf: SegmentPerf, isRace: boolean): string {
+  return perf === 'ahead' && !isRace ? PERF_COLOR.behind : PERF_COLOR[perf];
+}
+
 // Shared per-segment row in the clean detail style: name (+ zone) and the
 // planned target on the left, the actual result (when run) or the distance
 // (planned) on the right. A coloured dot flags how the actual compared.
@@ -171,8 +178,7 @@ function SegmentRow({
   label: string; seg: NormSegment; completed: boolean;
   rightMain: string; rightMainColor?: string; rightSub?: string | null;
 }) {
-  const perf = completed ? segmentPerformance(seg) : null;
-  const dot  = perf ? PERF_COLOR[perf] : undefined;
+  const dot  = rightMainColor;
   const pace = plannedPaceStr(seg);
   const planParts = [pace ? `${pace}/km` : null, completed && seg.distanceKm ? `${seg.distanceKm} km` : null].filter(Boolean);
   return (
@@ -198,7 +204,7 @@ function SegmentRow({
 
 // One segment row — planned target on the left, actual result (when run) on
 // the right; planned distance when not yet run.
-export function PhaseLine({ seg }: { seg: NormSegment }) {
+export function PhaseLine({ seg, isRace = false }: { seg: NormSegment; isRace?: boolean }) {
   const completed = seg.actualPaceSec !== undefined;
   if (!completed) {
     const right = seg.distanceKm ? `${seg.distanceKm} km`
@@ -213,7 +219,7 @@ export function PhaseLine({ seg }: { seg: NormSegment }) {
       seg={seg}
       completed
       rightMain={main}
-      rightMainColor={perf === 'missed' ? PERF_COLOR.missed : perf ? PERF_COLOR[perf] : undefined}
+      rightMainColor={perf ? perfColor(perf, isRace) : undefined}
       rightSub={seg.actualHr != null ? `${seg.actualHr} bpm` : null}
     />
   );
@@ -236,7 +242,7 @@ function summarize(perfs: SegmentPerf[], count: number, kind: 'pace' | 'hr'): { 
 
 // Collapsed repeat summary — one row per sub-type: averaged actual + a count
 // verdict ("4/5 in range"), in the same clean style as a single segment.
-export function AggregateLine({ sub, reps, count }: { sub: NormSegment; reps: NormSegment[]; count: number }) {
+export function AggregateLine({ sub, reps, count, isRace = false }: { sub: NormSegment; reps: NormSegment[]; count: number; isRace?: boolean }) {
   const label = `${count} × ${sub.label}`;
   const completed = sub.actualPaceSec !== undefined;
   if (!completed) {
@@ -254,14 +260,14 @@ export function AggregateLine({ sub, reps, count }: { sub: NormSegment; reps: No
       seg={sub}
       completed
       rightMain={main}
-      rightMainColor={perf ? PERF_COLOR[perf] : undefined}
+      rightMainColor={perf ? perfColor(perf, isRace) : undefined}
       rightSub={paceSum?.label ?? (sub.actualHr != null ? `${sub.actualHr} bpm` : null)}
     />
   );
 }
 
 // `variant`: 'row' aligns under a plan row's day column; 'card' is a standalone box.
-export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; variant?: 'row' | 'card' }) {
+export function WorkoutDetail({ steps, variant = 'row', isRace = false }: { steps: NormStep[]; variant?: 'row' | 'card'; isRace?: boolean }) {
   if (!steps.length) return null;
   // Clean, header-less segment list on the card's paper background — a left
   // border indents it like the mobile prototype's "Session detail" rows.
@@ -276,8 +282,8 @@ export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; v
     <div className={wrap}>
       {steps.map((step, i) =>
         step.kind === 'repeat'
-          ? <RepeatBlock key={i} step={step} />
-          : <PhaseLine key={i} seg={step} />,
+          ? <RepeatBlock key={i} step={step} isRace={isRace} />
+          : <PhaseLine key={i} seg={step} isRace={isRace} />,
       )}
     </div>
   );
@@ -389,23 +395,26 @@ export function DetailRow({ label, sub, value, valueSub }: {
 // Plan / actual / Δ comparison table for a COMPLETED session — shared by the
 // run and ride details so they read identically. `tone`: pos = better than
 // plan (green), neg = worse (ember), flat = neutral.
-export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: 'pos' | 'neg' | 'flat'; }
+export type CompareTone = 'pos' | 'neg' | 'flat' | 'fast';
+export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: CompareTone; }
 
 // Compare an actual value against a planned [lo, hi] window: in range → a tick;
 // otherwise the signed gap to the nearer bound. Used for pace / HR / power so
-// every ranged metric reads the same way.
+// every ranged metric reads the same way. `belowTone` lets a race colour a
+// faster-than-window result marine ('fast') instead of ember.
 export function rangeCompare(
   actual: number, lo: number, hi: number, fmt: (n: number) => string = (n) => `${Math.round(n)}`,
-): { delta: string; tone: 'pos' | 'neg' } {
+  belowTone: 'neg' | 'fast' = 'neg',
+): { delta: string; tone: CompareTone } {
   if (actual >= lo && actual <= hi) return { delta: '✓', tone: 'pos' };
-  if (actual < lo) return { delta: `−${fmt(lo - actual)}`, tone: 'neg' };   // faster pace / lower HR
-  return { delta: `+${fmt(actual - hi)}`, tone: 'neg' };                    // slower pace / higher HR
+  if (actual < lo) return { delta: `−${fmt(lo - actual)}`, tone: belowTone };  // faster pace / lower HR
+  return { delta: `+${fmt(actual - hi)}`, tone: 'neg' };                       // slower pace / higher HR
 }
 
 const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;
 
 export function CompareTable({ rows }: { rows: CompareRow[] }) {
-  const toneCls = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'neg' ? 'text-ember' : 'text-stone');
+  const toneCls = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
   return (
     <div className={`${DETAIL_WRAP} py-[10px]`}>
       <div className="border border-fog rounded-[11px] overflow-hidden">

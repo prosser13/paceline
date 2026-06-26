@@ -7,7 +7,7 @@ import { PhaseLine, AggregateLine } from '@/components/session-ui';
 // A repeat block. When the session is completed it collapses to one averaged
 // row per sub-type (with a count verdict) and expands to the individual reps
 // (Stride 1, Stride 2, …). Not-yet-run repeats just list the planned sub-steps.
-export default function RepeatBlock({ step }: { step: NormRepeat }) {
+export default function RepeatBlock({ step, isRace = false }: { step: NormRepeat; isRace?: boolean }) {
   const [open, setOpen] = useState(false);
 
   if (!step.perRep) {
@@ -16,7 +16,7 @@ export default function RepeatBlock({ step }: { step: NormRepeat }) {
         <div className="font-mono text-[12px] text-stone uppercase tracking-[.08em] mb-[2px]">
           {step.count}× repeat
         </div>
-        {step.steps.map((s, j) => <PhaseLine key={j} seg={s} />)}
+        {step.steps.map((s, j) => <PhaseLine key={j} seg={s} isRace={isRace} />)}
       </div>
     );
   }
@@ -42,8 +42,8 @@ export default function RepeatBlock({ step }: { step: NormRepeat }) {
 
       {open
         ? Array.from({ length: step.count }, (_, r) =>
-            perRep.map((reps, j) => <PhaseLine key={`${r}-${j}`} seg={reps[r]} />))
-        : step.steps.map((s, j) => <AggregateLine key={j} sub={s} reps={perRep[j]} count={step.count} />)}
+            perRep.map((reps, j) => <PhaseLine key={`${r}-${j}`} seg={reps[r]} isRace={isRace} />))
+        : step.steps.map((s, j) => <AggregateLine key={j} sub={s} reps={perRep[j]} count={step.count} isRace={isRace} />)}
     </div>
   );
 }
