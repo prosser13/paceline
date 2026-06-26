@@ -32,7 +32,7 @@ export default function StrengthHero({
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Header bar — gold when planned, fern when completed */}
-      <div className="flex items-center justify-between px-[26px] py-[12px]" style={{ background: done ? FERN : GOLD, color: BONE }}>
+      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: done ? FERN : GOLD, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         {done && (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
@@ -44,17 +44,17 @@ export default function StrengthHero({
         )}
       </div>
 
-      <div className="p-[22px_26px]">
+      <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
         {/* Title + metric */}
-        <div className="flex justify-between items-start gap-6">
+        <div className="flex justify-between items-start gap-4 sm:gap-6">
           <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+            <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
               <Dumbbell size={24} className="shrink-0 text-ink" />{focus ?? 'Strength'}
             </h3>
             {note && <div className="text-[15px] text-stone">{note}</div>}
           </div>
           <div className="shrink-0 text-right">
-            <div className="font-display font-semibold text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
+            <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
             <div className="font-mono text-[14px] text-stone mt-[3px]">{exercises.length} exercises</div>
           </div>
         </div>
