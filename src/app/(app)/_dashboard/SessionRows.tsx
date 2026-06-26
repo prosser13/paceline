@@ -53,7 +53,7 @@ export const DETAIL_WRAP = 'border-l-2 border-fog pl-[16px] pr-[16px]';
 
 // Clean planned-segment list — fits narrow screens (the old 5-column grid
 // overflowed) and shows the full pace window.
-function PlannedDetail({ steps }: { steps: NormStep[] }) {
+export function PlannedDetail({ steps }: { steps: NormStep[] }) {
   if (!steps.length) return null;
   return (
     <div className={DETAIL_WRAP}>

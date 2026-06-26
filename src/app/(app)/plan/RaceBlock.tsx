@@ -67,20 +67,24 @@ export default function RaceBlock({
         <div>
           <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">A-Race</span>
           <h2 className="font-display font-semibold text-[28px] text-bone leading-tight mt-[2px]">{name}</h2>
-          {raceDate && (
-            <p className="font-mono text-[14px] text-bone/60 mt-[5px]">
-              {new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', {
-                weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-              })}
-            </p>
-          )}
-          {hasGuide && (
-            <Link
-              href={`/races/${slug}`}
-              className="inline-block font-mono text-[12px] tracking-[.08em] uppercase text-bone border border-bone/30 rounded-[6px] px-[10px] py-[5px] mt-[12px] hover:bg-bone/10 active:opacity-70 transition-colors"
-            >
-              Race guide →
-            </Link>
+          {(raceDate || hasGuide) && (
+            <div className="flex items-center gap-[10px] flex-wrap mt-[6px]">
+              {raceDate && (
+                <span className="font-mono text-[13px] text-bone/60 whitespace-nowrap">
+                  {new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric',
+                  })}
+                </span>
+              )}
+              {hasGuide && (
+                <Link
+                  href={`/races/${slug}`}
+                  className="font-mono text-[11px] tracking-[.08em] uppercase text-bone border border-bone/30 rounded-[5px] px-[8px] py-[3px] hover:bg-bone/10 active:opacity-70 transition-colors"
+                >
+                  Race guide →
+                </Link>
+              )}
+            </div>
           )}
         </div>
         {days != null && (
@@ -96,9 +100,9 @@ export default function RaceBlock({
           { label: 'Target time', value: targetTime ?? '—' },
           { label: 'Target pace', value: targetPace ? `${targetPace}/km` : '—' },
         ].map(({ label, value }) => (
-          <div key={label} className="px-[18px] py-[14px]">
-            <div className="font-mono text-[12px] tracking-[.1em] uppercase text-stone">{label}</div>
-            <div className="font-display font-semibold text-[20px] mt-[4px]">{value}</div>
+          <div key={label} className="px-[14px] py-[14px]">
+            <div className="font-mono text-[11px] tracking-[.08em] uppercase text-stone">{label}</div>
+            <div className="font-display font-semibold text-[17px] mt-[4px] whitespace-nowrap">{value}</div>
           </div>
         ))}
       </div>

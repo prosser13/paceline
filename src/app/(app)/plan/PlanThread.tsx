@@ -8,8 +8,9 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
+  INTENSITY, MetricBlock, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals,
 } from '@/components/session-ui';
+import { PlannedDetail } from '../_dashboard/SessionRows';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import YogaRow, { type YogaPose } from '@/components/YogaRow';
 import CyclingRow from '@/components/CyclingRow';
@@ -403,17 +404,21 @@ export default function PlanThread({
             )}
           </div>
 
-          <ProfileChart
-            bars={buildProfileBars(
-              { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
-              thresholdPace, zones, segActuals,
-            )}
-            size="xs"
-            color={INTENSITY[intensity]?.hex ?? '#17191e'}
-            opacity={segActuals ? 0.9 : 0.6}
-          />
-
-          {isDone && delta && <DeltaBlock delta={delta} />}
+          {/* Completed: the vs-plan summary takes the graph's slot, freeing the
+              heading. Upcoming: the planned profile graph. */}
+          {isDone && delta ? (
+            <DeltaBlock delta={delta} />
+          ) : (
+            <ProfileChart
+              bars={buildProfileBars(
+                { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
+                thresholdPace, zones, segActuals,
+              )}
+              size="xs"
+              color={INTENSITY[intensity]?.hex ?? '#17191e'}
+              opacity={segActuals ? 0.9 : 0.6}
+            />
+          )}
 
           <MetricBlock
             duration={displayDuration}
@@ -423,7 +428,7 @@ export default function PlanThread({
           />
         </div>
 
-        {isExpanded && <WorkoutDetail steps={detailSteps} />}
+        {isExpanded && <PlannedDetail steps={detailSteps} />}
       </div>
     );
   }
@@ -471,14 +476,17 @@ export default function PlanThread({
 
     // Each workout sits in its own card (rest = a dashed card); the day is just a
     // marker heading above them — matches the dashboard's session cards.
-    const sessionNode = (s: PlanSession) =>
-      resolveStatus(s, todayStr, completedMap) === 'rest'
-        ? <RestCard key={s.id} />
-        : (
-          <div key={s.id} className="border border-fog rounded-[16px] bg-paper overflow-hidden mb-[9px]">
-            {renderSessionRow(s)}
-          </div>
-        );
+    const sessionNode = (s: PlanSession) => {
+      const st = resolveStatus(s, todayStr, completedMap);
+      if (st === 'rest') return <RestCard key={s.id} />;
+      // Completed sessions get a green right rail so they read as "done" at a glance.
+      const doneRail = st === 'done' ? 'border-r-[3px] border-r-fern' : '';
+      return (
+        <div key={s.id} className={`border border-fog ${doneRail} rounded-[16px] bg-paper overflow-hidden mb-[9px]`}>
+          {renderSessionRow(s)}
+        </div>
+      );
+    };
 
     return (
       <div key={dateStr} className={dim ? 'opacity-55' : ''}>
@@ -550,18 +558,18 @@ export default function PlanThread({
 
   return (
     <div>
-      {pastWeeks.length > 0 && (
-        <div className="flex items-center justify-center mb-3">
+      <div className="flex items-center justify-between gap-3 mb-[2px]">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone">Weeks</span>
+        {pastWeeks.length > 0 && (
           <button
+            type="button"
             onClick={() => setShowPast(s => !s)}
-            className="font-mono text-[12px] tracking-[.08em] uppercase text-marine border border-fog rounded-full px-4 py-[7px] bg-paper hover:bg-fog/30"
+            className="font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark active:opacity-70"
           >
-            {showPast
-              ? '▲ Hide earlier weeks'
-              : `▼ Load ${pastWeeks.length} earlier week${pastWeeks.length !== 1 ? 's' : ''}`}
+            {showPast ? 'Hide earlier ▼' : 'Earlier weeks ▲'}
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {showPast && pastWeeks.map(w => renderWeekSection(w, true))}
       {currentAndFuture.map(w => renderWeekSection(w, false))}
