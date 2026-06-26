@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
 import { FERN, MARINE, GOLD, EMBER } from '@/lib/colors';
-import { linkActivityToSession, promoteActivityToSession, mergeActivityIntoSession } from '@/app/plan/match-actions';
+import { linkActivityToSession, promoteActivityToSession, mergeActivityIntoSession } from '@/app/(app)/plan/match-actions';
 import type { OffPlanActivity } from '@/data/activities';
 
 export interface LinkTarget { id: string; name: string; }

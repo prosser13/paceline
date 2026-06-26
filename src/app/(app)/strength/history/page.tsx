@@ -1,6 +1,4 @@
 export const dynamic = 'force-dynamic';
-
-import AppShell from '@/components/AppShell';
 import Link from 'next/link';
 import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
 import { listStrengthHistory } from '@/data/strength-sessions';
@@ -15,7 +13,7 @@ export default async function StrengthHistoryPage() {
   }>;
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[760px]">
         <div className="flex items-center justify-between mb-6">
           <h1 className="font-display font-semibold text-[24px]">Strength history</h1>
@@ -48,6 +46,6 @@ export default async function StrengthHistoryPage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

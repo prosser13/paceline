@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import { listRaceGuides } from '@/data/races';
 import { getPlanBySlug } from '@/data/plans';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
@@ -27,7 +26,7 @@ export default async function RacesPage() {
   });
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
         <h1 className="font-display font-semibold text-[26px] text-ink">Races</h1>
         <p className="text-[14px] text-stone mt-[4px] mb-[22px]">
@@ -71,7 +70,7 @@ export default async function RacesPage() {
           })}
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }
 

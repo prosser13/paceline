@@ -6,7 +6,7 @@ import { type StrengthEx, StrengthDetailTable } from './StrengthRow';
 import { humanHMM } from './session-ui';
 import { Dumbbell } from './glyphs';
 import { GOLD, FERN, BONE } from '@/lib/colors';
-import { startPlannedSession } from '@/app/strength/actions';
+import { startPlannedSession } from '@/app/(app)/strength/actions';
 
 // Dashboard hero for a strength session — mirrors the run SessionHero: coloured
 // header (label), session name + descriptor in the body, a "The session"

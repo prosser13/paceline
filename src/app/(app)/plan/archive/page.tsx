@@ -1,7 +1,6 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import AppShell from '@/components/AppShell';
 import { listPlansByEndDate } from '@/data/plans';
 
 interface PlanRow {
@@ -31,7 +30,7 @@ export default async function PlanArchivePage() {
     .filter(p => p.end_date && p.end_date < todayStr);
 
   return (
-    <AppShell>
+    <>
       <div className="px-[26px] py-[22px] max-w-[1040px]">
         <h1 className="font-display font-semibold text-[26px] mb-[4px]">Archive</h1>
         <p className="font-mono text-[13px] text-stone mb-7">Completed plans</p>
@@ -65,6 +64,6 @@ export default async function PlanArchivePage() {
           </div>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }
