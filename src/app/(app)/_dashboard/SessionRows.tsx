@@ -68,7 +68,10 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
   const [open, setOpen] = useState(false);
   const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
   const hasDetail = exercises.length > 0;
-  const title = session.session_type === 'CORE' ? 'Core' : 'Strength';
+  // Title from the focus (drop the muscle-group tail): "Upper body — chest…" →
+  // "Upper body", "Legs & core · moderate" → "Legs & core". Falls back to the type.
+  const shortFocus = session.description ? session.description.split(/\s*[—–·]\s*/)[0].trim() : null;
+  const title = shortFocus ?? (session.session_type === 'CORE' ? 'Core' : 'Strength');
 
   return (
     <div>
@@ -86,9 +89,6 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             )}
           </div>
-          {session.description && (
-            <div className="text-[14.5px] leading-tight mt-[2px] truncate text-stone">{session.description}</div>
-          )}
         </div>
         <div className="shrink-0 text-right">
           <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[18px]'} leading-none text-ink`}>{humanHMM(session.estimated_duration ?? null) ?? '—'}</div>
@@ -97,7 +97,7 @@ function StrengthRowCompact({ session, emphasis = false }: { session: PlanSessio
       </div>
 
       {open && hasDetail && (
-        <div className="border-t border-fog/60 bg-bone/40 pl-[44px] pr-[18px] py-[12px]">
+        <div className="border-t border-fog/60 pl-[44px] pr-[18px] py-[12px]">
           <StrengthDetailTable exercises={exercises} />
         </div>
       )}

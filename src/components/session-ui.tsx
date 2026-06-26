@@ -296,26 +296,14 @@ export function AggregateLine({ sub, reps, count }: { sub: NormSegment; reps: No
 // `variant`: 'row' aligns under a plan row's day column; 'card' is a standalone box.
 export function WorkoutDetail({ steps, variant = 'row' }: { steps: NormStep[]; variant?: 'row' | 'card' }) {
   if (!steps.length) return null;
+  // Clean, header-less segment list on the card's paper background — a left
+  // border indents it like the mobile prototype's "Session detail" rows.
   const wrap = variant === 'row'
-    ? 'border-t border-fog/60 bg-bone/40 pl-[60px] pr-[18px] py-[12px]'
-    : 'border border-fog rounded-[12px] bg-bone px-[16px] py-[10px]';
+    ? 'border-t border-fog/60 pl-[60px] pr-[18px] py-[12px]'
+    : 'border-l-2 border-fog pl-[14px]';
 
   return (
     <div className={wrap}>
-      <div
-        className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
-        style={{ gridTemplateColumns: DETAIL_COLS }}
-      >
-        {['Segment', 'Dist', 'Pace', 'HR', 'Time'].map((h, i) => (
-          <span
-            key={h}
-            className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}
-          >
-            {h}
-          </span>
-        ))}
-      </div>
-
       {steps.map((step, i) =>
         step.kind === 'repeat'
           ? <RepeatBlock key={i} step={step} />

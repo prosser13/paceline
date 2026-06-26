@@ -66,7 +66,7 @@ export default function StrengthHero({
         <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
           <Dumbbell size={24} className="shrink-0 text-ink" />{shortFocus ?? 'Strength'}
         </h3>
-        {note && <div className="text-[15px] text-stone leading-snug">{note}</div>}
+        {note && <div className="text-[13px] text-stone leading-snug">{note}</div>}
 
         {/* Stat boxes — duration / exercises / sets */}
         <div className="grid grid-cols-3 gap-[9px] mt-[16px]">
@@ -84,7 +84,7 @@ export default function StrengthHero({
           </button>
 
           {open && (
-            <div className="mt-[9px] border border-fog rounded-[12px] bg-bone px-[16px] py-[10px]">
+            <div className="mt-[10px] border-l-2 border-fog pl-[14px]">
               <StrengthDetailTable exercises={exercises} />
             </div>
           )}

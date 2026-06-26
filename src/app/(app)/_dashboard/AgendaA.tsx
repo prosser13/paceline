@@ -98,25 +98,35 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         </div>
       </section>
 
-      {/* Later this week */}
-      {groups.map(g => {
-        const f = formatSpineDay(g.iso);
-        const isRest = g.sessions.every(s => s.status === 'rest');
-        const count = g.sessions.filter(s => s.status !== 'rest').length;
-        return (
-          <section key={g.iso} id={`spine-${g.iso}`} style={{ scrollMarginTop: '14px' }}>
-            <SectionLabel>{f.weekday} · {f.date}{count > 1 ? ` · ${count} sessions` : ''}</SectionLabel>
-            {isRest ? (
-              <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
-            ) : (
-              <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
-                <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
-                  powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
-              </div>
-            )}
-          </section>
-        );
-      })}
+      {/* Everything beyond tomorrow — collapsed behind one accordion */}
+      {groups.length > 0 && (
+        <details className="group">
+          <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[44px] flex items-center gap-[7px] font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mt-[18px]">
+            <span>Later this week · {groups.length} {groups.length === 1 ? 'day' : 'days'}</span>
+            <svg className="w-[16px] h-[16px] text-stone transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </summary>
+          <div className="mt-[8px]">
+            {groups.map(g => {
+              const f = formatSpineDay(g.iso);
+              const isRest = g.sessions.every(s => s.status === 'rest');
+              const count = g.sessions.filter(s => s.status !== 'rest').length;
+              return (
+                <section key={g.iso} id={`spine-${g.iso}`} style={{ scrollMarginTop: '14px' }}>
+                  <SectionLabel>{f.weekday} · {f.date}{count > 1 ? ` · ${count} sessions` : ''}</SectionLabel>
+                  {isRest ? (
+                    <SessionRows sessions={[]} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones} restLabel="Rest day" />
+                  ) : (
+                    <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
+                      <SessionRows sessions={g.sessions} thresholdPace={d.thresholdPace} zones={d.zones} hrZones={d.hrZones}
+                        powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
