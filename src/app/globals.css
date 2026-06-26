@@ -28,6 +28,9 @@
   --color-ember:      #c75b33;
   --color-ember-soft: #f4e1d7;
 
+  --color-coffee:      #6f4e37;   /* yoga */
+  --color-coffee-soft: #ece3da;
+
   /* ── Type (Poppins everywhere, injected by next/font) ─── */
   --font-sans:    var(--font-poppins), "Poppins", ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-poppins), "Poppins", ui-sans-serif, sans-serif;

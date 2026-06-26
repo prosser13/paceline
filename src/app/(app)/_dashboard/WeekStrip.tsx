@@ -6,7 +6,7 @@
 
 import type { WindowDay } from './data';
 import { RunGlyph, Dumbbell, BikeGlyph, YogaGlyph } from '@/components/glyphs';
-import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER, EMBER } from '@/lib/colors';
+import { OXBLOOD, MARINE, FERN, GOLD, FOG, AMBER, COFFEE } from '@/lib/colors';
 
 function BedMini({ color }: { color: string }) {
   return (
@@ -69,7 +69,7 @@ export default function WeekStrip({ days, weekLabel, todayDone }: {
                       </span>
                     )}
                     {day.hasYoga && (
-                      <span className="inline-flex" style={{ color: EMBER }}>
+                      <span className="inline-flex" style={{ color: COFFEE }}>
                         <YogaGlyph size={13} strokeWidth={2.2} className="" />
                       </span>
                     )}

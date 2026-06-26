@@ -8,6 +8,7 @@ export const OXBLOOD = '#8c2b2b';
 export const MARINE  = '#14617e';
 export const FERN    = '#4f7a52';
 export const EMBER   = '#c75b33';
+export const COFFEE  = '#6f4e37';   // yoga — distinct from the warm run/ember tones
 export const GOLD    = '#8f6512';
 export const AMBER   = '#dfa01c';
 export const FOG     = '#d9d3c6';
