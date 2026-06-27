@@ -16,7 +16,7 @@ export default function YogaHero({
   label: string; focus: string | null; duration: string | null;
   note: string | null; poses: YogaPose[]; done?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
