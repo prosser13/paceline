@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, buildRideCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -133,39 +133,23 @@ export default function CyclingRow({
   const dispDistance = isDone ? completed?.distanceKm ?? null : null;
   const dispTss      = isDone ? actualTss : plannedTss;
 
-  // Completed ride → Plan / Actual / Δ table (duration, avg power, avg HR),
-  // mirroring the run comparison table so both read identically. ovDur / ovTss
-  // feed the compact "vs plan" line so it matches the table.
+  // Completed ride → Plan / Actual / Δ table (Distance/Power/HR/Duration/TSS) via
+  // the shared builder, so the plan rows read identically to the run rows and the
+  // dashboard ride hero. ovDur / ovTss feed the compact "vs plan" line.
   let rideCompareRows: CompareRow[] = [];
   let ovDur: WindowCmp | null = null;
   let ovTss: WindowCmp | null = null;
   if (isDone && completed) {
-    let pmin = Infinity, pmax = -Infinity, hmin = Infinity, hmax = -Infinity;
-    for (const s of segments) {
-      if (s.powerMin != null) pmin = Math.min(pmin, s.powerMin);
-      if (s.powerMax != null) pmax = Math.max(pmax, s.powerMax);
-      if (s.hrMin != null) hmin = Math.min(hmin, s.hrMin);
-      if (s.hrMax != null) hmax = Math.max(hmax, s.hrMax);
-    }
-    const planPower = Number.isFinite(pmin) ? fmtPower(pmin, Number.isFinite(pmax) ? pmax : pmin) : '—';
-    const avgPower  = completed.avgPower ?? null;
-    const pw = Number.isFinite(pmin) && Number.isFinite(pmax) && avgPower != null ? rangeCompare(avgPower, pmin, pmax) : null;
-    const planHr = Number.isFinite(hmin) ? (hmin === hmax ? `${hmin}` : `${hmin}–${hmax}`) : '—';
-    const hr = Number.isFinite(hmin) && Number.isFinite(hmax) && completed.avgHr != null ? rangeCompare(completed.avgHr, hmin, hmax) : null;
-    // Duration — tick within ±5% of the planned time; TSS — within ±10%.
-    const durGap = (n: number) => fmtMinSec(n / 60);
-    const dur = plannedMins != null && actualMins != null ? rangeCompare(actualMins * 60, plannedMins * 60 * 0.95, plannedMins * 60 * 1.05, durGap) : null;
-    const planDur = plannedMins != null ? fmtClock(plannedMins * 60) : '—';
-    const tssB = plannedTss != null ? { lo: plannedTss * 0.9, hi: plannedTss * 1.1 } : null;
-    const tss  = tssB && actualTss != null ? rangeCompare(actualTss, tssB.lo, tssB.hi) : null;
-    ovDur = dur;
-    ovTss = tss;
-    rideCompareRows = [
-      { metric: 'Duration', plan: planDur, actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: dur?.delta ?? null, tone: dur?.tone ?? 'flat' },
-      { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: pw?.delta ?? null, tone: pw?.tone ?? 'flat' },
-      { metric: 'Avg HR', plan: planHr, actual: completed.avgHr != null ? `${completed.avgHr}` : '—', delta: hr?.delta ?? null, tone: hr?.tone ?? 'flat' },
-      { metric: 'TSS', plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—', actual: actualTss != null ? `${actualTss}` : '—', delta: tss?.delta ?? null, tone: tss?.tone ?? 'flat' },
-    ];
+    const cmp = buildRideCompare({
+      segments,
+      planKm: null, actKm: completed.distanceKm ?? null,
+      planMins: plannedMins, actMins: actualMins,
+      avgPower: completed.avgPower ?? null, avgHr: completed.avgHr ?? null,
+      planTss: plannedTss, actTss: actualTss,
+    });
+    rideCompareRows = cmp.rows;
+    ovDur = cmp.overview.dur;
+    ovTss = cmp.overview.tss;
   }
 
   return (

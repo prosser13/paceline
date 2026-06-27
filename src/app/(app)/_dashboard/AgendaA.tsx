@@ -7,11 +7,10 @@
 
 import { Fragment } from 'react';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
-import SessionHero from './SessionHero';
+import ActivityHero from './ActivityHero';
 import SessionRows from './SessionRows';
 import StrengthHero from '@/components/StrengthHero';
 import YogaHero from '@/components/YogaHero';
-import CyclingHero from '@/components/CyclingHero';
 import OffPlanRow from '@/components/OffPlanRow';
 import { type StrengthEx } from '@/components/StrengthRow';
 import { type YogaPose } from '@/components/YogaRow';
@@ -37,14 +36,10 @@ export default function AgendaA({ d }: { d: DashboardData }) {
       poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done} />
   ) : null;
 
-  // The day's activity hero — a ride or a run, depending on activity_type. The
-  // run hero gets its rich completion (pace/HR) only when this is the run that
-  // owns it.
+  // The day's activity hero — a ride or a run (shared ActivityHero). The run
+  // hero gets its rich completion (pace/HR) only when this is the run that owns it.
   const activityHero = (s: PlanSession, label: string, completed: DashboardData['todayCompleted']) =>
-    s.activity_type === 'cycling'
-      ? <CyclingHero label={label} session={s} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} />
-      : <SessionHero label={label} session={s} thresholdPace={d.thresholdPace}
-          zones={d.zones} hrZones={d.hrZones} completed={completed} />;
+    <ActivityHero d={d} label={label} session={s} completed={completed} />;
 
   const restBox = (
     <div className="border border-fog rounded-[18px] bg-paper px-[22px] py-[16px] mb-[18px] text-stone text-[16px]">

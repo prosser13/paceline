@@ -4,7 +4,7 @@ import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import DashboardExtras from './DashboardExtras';
-import RecentlyCompletedHero from './RecentlyCompletedHero';
+import ActivityHero from './ActivityHero';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
 // The data-dependent dashboard body. Split out of page.tsx so it can sit behind
@@ -89,11 +89,12 @@ export default async function DashboardBody() {
           <AgendaA d={d} />
         </div>
 
-        {/* Recently completed — yesterday's run (or latest finished session) */}
-        {d.recentlyCompleted && (
+        {/* Recently completed — latest finished run/ride before today, rendered
+            by the SAME hero as Today (one card to maintain). */}
+        {d.recentSession && (
           <div className="order-4 md:order-4">
             <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px]">Recently completed</div>
-            <RecentlyCompletedHero r={d.recentlyCompleted} />
+            <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} />
           </div>
         )}
 

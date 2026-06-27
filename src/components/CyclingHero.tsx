@@ -1,10 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import ProfileChart from './ProfileChart';
+import { buildCyclingBars } from '@/lib/profile';
 import { CyclingDetailTable } from './CyclingRow';
 import { BikeGlyph } from './glyphs';
 import { MARINE, FERN, BONE } from '@/lib/colors';
-import { humanHMM, fmtClock } from './session-ui';
+import {
+  CompareTable, StatBox, MetricBlock, buildRideCompare, humanHMM, fmtClock,
+} from './session-ui';
 import {
   normalizeCyclingStructure, sumCyclingMinutes,
   type PowerZoneMap, type BikeHrZoneMap,
@@ -21,51 +25,29 @@ export interface CyclingCompleted {
   avgPower: number | null;
 }
 
-function devClass(pct: number | null): string {
-  if (pct == null) return 'text-stone';
-  const a = Math.abs(pct);
-  if (a < 0.10) return 'text-stone';
-  if (a < 0.20) return 'text-ember';
-  return 'text-oxblood';
+function parseDurMins(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const p = str.split(':').map(Number);
+  if (p.length !== 2 || p.some(isNaN)) return null;
+  return p[0] * 60 + p[1];
 }
 
-// Bordered stat box, matching the run / strength heroes.
-function Stat({ v, u }: { v: React.ReactNode; u: string }) {
+// Ride name + descriptor — mirrors the run hero's HeroTitle.
+function HeroTitle({ name, description }: { name: string; description?: string | null }) {
   return (
-    <div className="border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
-      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{v}</div>
-      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{u}</div>
+    <div className="min-w-0">
+      <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
+        <span className="shrink-0 text-ink"><BikeGlyph size={24} /></span>{name}
+      </h3>
+      {description && <div className="text-[15px] text-stone">{description}</div>}
     </div>
   );
 }
 
-function signedTime(deltaMin: number): string {
-  const sign = deltaMin >= 0 ? '+' : '−';
-  const totalSec = Math.round(Math.abs(deltaMin) * 60);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${sign}${h}h ${m}m`;
-  if (m > 0) return `${sign}${m}m${s ? ` ${s}s` : ''}`;
-  return `${sign}${s}s`;
-}
-
-function VsStat({ label, value, delta, deltaClass }: {
-  label: string; value: string; delta: string | null; deltaClass: string;
-}) {
-  return (
-    <div className="text-left">
-      <div className="font-mono text-[10px] uppercase tracking-[.08em] text-stone">{label}</div>
-      <div className="font-display font-semibold text-[20px] text-ink leading-tight mt-[2px]">{value}</div>
-      {delta && <div className={`font-mono text-[12px] mt-[1px] ${deltaClass}`}>{delta}</div>}
-    </div>
-  );
-}
-
-// Dashboard hero for a ride — mirrors the run SessionHero: a coloured header
-// (marine when planned, fern when done with a ✓/Strava mark), the ride name, and
-// either the planned headline + segment targets, or — when completed — a delta
-// grid (distance / time / load / power / HR) and the segment actuals.
+// Dashboard hero for a ride — the cycling twin of SessionHero. Same shape in both
+// states: a coloured header, title + colour-coded profile graph, three headline
+// stats (planned metrics when upcoming; Dist / Power / TSS with window-deltas when
+// done) and a "Session detail" accordion (plan-vs-actual table + segment targets).
 export default function CyclingHero({
   label, session, powerZones, bikeHrZones, completed = null,
 }: {
@@ -84,22 +66,32 @@ export default function CyclingHero({
   const [open, setOpen] = useState(!isDone);   // collapsed once done, like the run hero
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
   const totalMins = sumCyclingMinutes(segments);
-  const plannedMins = totalMins > 0 ? totalMins : null;
+  const plannedMins = totalMins > 0 ? totalMins : parseDurMins(session.estimated_duration ?? null);
   const duration  = totalMins > 0 ? fmtClock(totalMins * 60) : humanHMM(session.estimated_duration ?? null);
+  const ftp = powerZones['Z4']?.powerMax ?? null;
 
-  // Deltas (done only)
   const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;
   const distActual  = completed?.distanceKm ?? null;
-  const distDelta   = distActual != null && distPlanned != null ? distActual - distPlanned : null;
-  const timeDelta   = completed?.mins != null && plannedMins != null ? completed.mins - plannedMins : null;
   const tssPlanned  = session.estimated_tss ?? null;
-  const tssActual   = completed?.tss ?? null;
-  const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
+
+  const bars = buildCyclingBars(segments, ftp, isDone ? completed!.avgPower : null);
+
+  // Shared completed-ride comparison (Distance/Power/HR/Duration/TSS, tick-in-window).
+  const compare = isDone ? buildRideCompare({
+    segments, planKm: distPlanned, actKm: distActual,
+    planMins: plannedMins, actMins: completed!.mins,
+    avgPower: completed!.avgPower, avgHr: completed!.avgHr,
+    planTss: tssPlanned, actTss: completed!.tss,
+  }) : null;
+  const cmp = (m: string) => compare?.rows.find(r => r.metric === m) ?? null;
+
+  const accentSolid = isDone ? FERN : MARINE;
+  const railClass   = isDone ? 'border-l-fern' : 'border-l-marine';
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: isDone ? FERN : MARINE, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label} · Ride</span>
+      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: accentSolid, color: BONE }}>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         {isDone && (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
             ✓ Completed
@@ -110,56 +102,55 @@ export default function CyclingHero({
         )}
       </div>
 
-      <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
-        <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-          <BikeGlyph size={24} className="shrink-0 text-ink" />{session.name}
-        </h3>
-        {session.description && <div className="text-[13px] text-stone leading-snug">{session.description}</div>}
-        {!isDone && (
-          <div className="grid grid-cols-2 gap-[9px] mt-[16px]">
-            <Stat v={duration ?? '—'} u="dur" />
-            <Stat v={tssPlanned != null ? `~${tssPlanned}` : '—'} u="TSS" />
-          </div>
-        )}
-
-        {isDone && (
-          <div className="grid grid-cols-5 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
-            <VsStat label="Distance"
-              value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
-              delta={distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)} km` : null}
-              deltaClass={devClass(distDelta != null && distPlanned ? distDelta / distPlanned : null)} />
-            <VsStat label="Time"
-              value={humanHMM(completed!.durationStr) ?? '—'}
-              delta={timeDelta != null ? signedTime(timeDelta) : null}
-              deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)} />
-            <VsStat label="Load"
-              value={tssActual != null ? `${tssActual} TSS` : '—'}
-              delta={tssDelta != null ? `${tssDelta >= 0 ? '+' : '−'}${Math.abs(tssDelta)}` : null}
-              deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)} />
-            <VsStat label="Avg power" value={completed!.avgPower != null ? `${completed!.avgPower} W` : '—'} delta={null} deltaClass="" />
-            <VsStat label="Avg HR" value={completed!.avgHr != null ? `${completed!.avgHr} bpm` : '—'} delta={null} deltaClass="" />
+      <div className={`px-[18px] pt-[18px] sm:px-[26px] sm:pt-[22px] ${isDone ? 'pb-[12px] sm:pb-[14px]' : 'pb-[18px] sm:pb-[26px]'}`}>
+        {isDone ? (
+          <>
+            {/* Mobile: title + description full width, graph underneath. Desktop:
+                graph sits inline to the right. (Same as the run hero.) */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
+              <HeroTitle name={session.name} description={session.description} />
+              <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.9} />
+            </div>
+            <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
+              <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+              <StatBox value={completed!.avgPower != null ? `${completed!.avgPower} W` : '—'} label="Power" delta={cmp('Avg power')?.delta ?? null} tone={cmp('Avg power')?.tone} />
+              <StatBox value={completed!.tss != null ? `${completed!.tss}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
+            </div>
+          </>
+        ) : (
+          <div className="flex justify-between items-start gap-6">
+            <HeroTitle name={session.name} description={session.description} />
+            <div className="flex items-center gap-4 shrink-0">
+              <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.6} />
+              <MetricBlock duration={duration} distanceKm={distPlanned} tss={tssPlanned} estimated size="lg" />
+            </div>
           </div>
         )}
 
         {session.rationale && (
-          <p className="text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] border-l-marine pl-[14px] max-w-[64ch] text-ink">
+          <p className={`text-[12px] leading-snug mt-[12px] border-l-[3px] pl-[14px] text-ink ${railClass}`}>
             {session.rationale}
           </p>
         )}
 
         {segments.length > 0 && (
-          <div className="mt-[18px]">
+          <div className={open ? 'mt-[18px]' : 'mt-[14px]'}>
             <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center justify-between w-full min-h-[40px] cursor-pointer select-none">
               <span className="text-[14px] font-semibold text-stone">Session detail</span>
               <span className="font-mono text-[15px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
             </button>
             {open && (
-              <div className="mt-[10px] -mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]">
-                <CyclingDetailTable
-                  segments={segments}
-                  actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
-                />
+              <div className="mt-[9px]">
+                {compare && compare.rows.length > 0 && (
+                  <div className="mb-[10px]"><CompareTable rows={compare.rows} bare /></div>
+                )}
+                <div className="-mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]">
+                  <CyclingDetailTable
+                    segments={segments}
+                    actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
+                  />
+                </div>
               </div>
             )}
           </div>
