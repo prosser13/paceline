@@ -34,7 +34,7 @@ export default function CollapsibleSession({
       {open && (
         <div className="mt-[9px]">
           {compareRows && compareRows.length > 0 && (
-            <div className="mb-[10px]"><CompareTable rows={compareRows} /></div>
+            <div className="mb-[10px]"><CompareTable rows={compareRows} bare /></div>
           )}
           <WorkoutDetail steps={steps} variant="card" isRace={isRace} />
         </div>
