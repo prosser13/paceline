@@ -8,8 +8,10 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, type CompareRow,
+  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, type CompareRow, type CompareTone,
 } from '@/components/session-ui';
+
+type WindowCmp = { delta: string; tone: CompareTone };
 import { PlannedDetail } from '../_dashboard/SessionRows';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import YogaRow, { type YogaPose } from '@/components/YogaRow';
@@ -142,24 +144,7 @@ function parseDurationMins(str: string | null | undefined): number | null {
   return parts[0] * 60 + parts[1];
 }
 
-function formatTssDelta(delta: number): string {
-  return delta >= 0 ? `+${delta}` : `−${Math.abs(delta)}`;
-}
-
-function formatDurationDelta(deltaMins: number): string {
-  const abs  = Math.abs(Math.round(deltaMins));
-  const h    = Math.floor(abs / 60);
-  const m    = abs % 60;
-  const sign = deltaMins >= 0 ? '+' : '−';
-  return `${sign}${h}:${String(m).padStart(2, '0')}`;
-}
-
-function deviationClass(pct: number): string {
-  const abs = Math.abs(pct);
-  if (abs < 0.10) return 'text-stone/60';
-  if (abs < 0.20) return 'text-ember';
-  return 'text-oxblood';
-}
+const toneClass = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
 
 function resolveStatus(
   session: PlanSession,
@@ -197,17 +182,16 @@ function RestCard() {
   );
 }
 
-interface DeltaData { tssDelta: number; tssPct: number; durDelta: number; durPct: number; }
-
-// Compact left-aligned "vs plan" line — sits at the bottom of the description
-// column, level with the TSS metric.
-function DeltaBlock({ delta }: { delta: DeltaData }) {
+// Compact left-aligned "vs plan" line — the TSS and Duration windows from the
+// detail table, so the glance and the table always agree (✓ in band, gap out).
+function DeltaBlock({ tss, dur }: { tss: WindowCmp | null; dur: WindowCmp | null }) {
+  if (!tss && !dur) return null;
   return (
     <div className="font-mono text-[12.5px] flex items-center gap-[6px] whitespace-nowrap leading-none">
       <span className="text-[10px] uppercase tracking-[.08em] text-stone">vs plan</span>
-      <span className={deviationClass(delta.tssPct)}>{formatTssDelta(delta.tssDelta)}</span>
-      <span className="text-fog">·</span>
-      <span className={deviationClass(delta.durPct)}>{formatDurationDelta(delta.durDelta)}</span>
+      {tss && <span className={toneClass(tss.tone)}>{tss.delta}</span>}
+      {tss && dur && <span className="text-fog">·</span>}
+      {dur && <span className={toneClass(dur.tone)}>{dur.delta}</span>}
     </div>
   );
 }
@@ -408,28 +392,16 @@ export default function PlanThread({
     const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
     const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
 
-    const actualTss   = isDone ? completed?.tss ?? null : null;
-    const plannedTss  = session.estimated_tss ?? null;
-    const actualMins  = isDone ? parseDurationMins(completed?.durationStr) : null;
-    const plannedMins = plannedSec > 0 ? plannedSec / 60 : parseDurationMins(session.estimated_duration);
-
-    const tssDelta = actualTss != null && plannedTss != null && plannedTss > 0
-      ? actualTss - plannedTss : null;
-    const tssPct   = tssDelta != null && plannedTss != null ? tssDelta / plannedTss : null;
-    const durDelta = actualMins != null && plannedMins != null && plannedMins > 0
-      ? actualMins - plannedMins : null;
-    const durPct   = durDelta != null && plannedMins != null ? durDelta / plannedMins : null;
-
-    const delta: DeltaData | null =
-      tssDelta != null && tssPct != null && durDelta != null && durPct != null
-        ? { tssDelta, tssPct, durDelta, durPct } : null;
-
     // Completed run → Plan / Actual / Δ comparison table (distance, pace, HR).
+    // ovDur / ovTss feed the compact "vs plan" line so it matches the table.
     let compareRows: CompareRow[] | null = null;
+    let ovDur: WindowCmp | null = null;
+    let ovTss: WindowCmp | null = null;
     if (isDone && completed) {
       const planKm = session.distance_km != null ? Number(session.distance_km) : null;
       const actKm  = completed.distanceKm ?? null;
       const bounds = plannedPaceBounds(detailSteps);
+      const plannedMins = plannedSec > 0 ? plannedSec / 60 : parseDurationMins(session.estimated_duration);
       const planPace = bounds
         ? (bounds.fast === bounds.slow ? secToPace(bounds.fast) : `${secToPace(bounds.fast)}–${secToPace(bounds.slow)}`)
         : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
@@ -459,6 +431,8 @@ export default function PlanThread({
       const actTss  = completed.tss ?? null;
       const tssB = planTss != null ? { lo: planTss * 0.9, hi: planTss * 1.1 } : null;
       const tss  = tssB && actTss != null ? rangeCompare(actTss, tssB.lo, tssB.hi) : null;
+      ovDur = dur;
+      ovTss = tss;
 
       compareRows = [
         {
@@ -546,8 +520,8 @@ export default function PlanThread({
               )}
               {/* Completed: vs-plan, bottom-left. Upcoming: the planned profile. */}
               <div className="mt-auto pt-[8px]">
-                {isDone && delta ? (
-                  <DeltaBlock delta={delta} />
+                {isDone && (ovTss || ovDur) ? (
+                  <DeltaBlock tss={ovTss} dur={ovDur} />
                 ) : (
                   <ProfileChart
                     bars={buildProfileBars(

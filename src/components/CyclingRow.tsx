@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, rangeColor, type CompareRow } from './session-ui';
+import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, rangeCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
@@ -24,36 +24,19 @@ function parseDurMins(str: string | null | undefined): number | null {
   return p[0] * 60 + p[1];
 }
 
-function deltaClass(pct: number | null): string {
-  if (pct == null) return 'text-stone/60';
-  const a = Math.abs(pct);
-  if (a < 0.10) return 'text-stone/60';
-  if (a < 0.20) return 'text-ember';
-  return 'text-oxblood';
-}
+type WindowCmp = { delta: string; tone: CompareTone };
+const toneClass = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
 
-function signedMin(deltaMin: number): string {
-  const sign = deltaMin >= 0 ? '+' : '−';
-  const sec = Math.round(Math.abs(deltaMin) * 60);
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-  if (h > 0) return `${sign}${h}h ${m}m`;
-  if (m > 0) return `${sign}${m}m${s ? ` ${s}s` : ''}`;
-  return `${sign}${s}s`;
-}
-
-// "vs plan" mini-block — TSS + time delta, matching the run row's DeltaBlock.
-function CyclingDelta({ tssDelta, durDelta, plannedTss, plannedMins }: {
-  tssDelta: number | null; durDelta: number | null; plannedTss: number | null; plannedMins: number | null;
-}) {
-  if (tssDelta == null && durDelta == null) return null;
-  const tssPct = tssDelta != null && plannedTss ? tssDelta / plannedTss : null;
-  const durPct = durDelta != null && plannedMins ? durDelta / plannedMins : null;
+// "vs plan" mini-block — TSS + duration windows from the detail table, so the
+// glance matches the table (✓ in band, gap-to-edge out).
+function CyclingDelta({ tss, dur }: { tss: WindowCmp | null; dur: WindowCmp | null }) {
+  if (!tss && !dur) return null;
   return (
     <div className="font-mono text-[12.5px] flex items-center gap-[6px] whitespace-nowrap leading-none">
       <span className="text-[10px] uppercase tracking-[.08em] text-stone">vs plan</span>
-      {tssDelta != null && <span className={deltaClass(tssPct)}>{tssDelta >= 0 ? '+' : '−'}{Math.abs(tssDelta)}</span>}
-      {tssDelta != null && durDelta != null && <span className="text-fog">·</span>}
-      {durDelta != null && <span className={deltaClass(durPct)}>{signedMin(durDelta)}</span>}
+      {tss && <span className={toneClass(tss.tone)}>{tss.delta}</span>}
+      {tss && dur && <span className="text-fog">·</span>}
+      {dur && <span className={toneClass(dur.tone)}>{dur.delta}</span>}
     </div>
   );
 }
@@ -146,15 +129,16 @@ export default function CyclingRow({
   const plannedTss  = session.estimated_tss ?? null;
   const actualMins  = completed?.durationMins ?? null;
   const actualTss   = completed?.tss ?? null;
-  const tssDelta    = isDone && actualTss != null && plannedTss != null ? actualTss - plannedTss : null;
-  const durDelta    = isDone && actualMins != null && plannedMins != null ? actualMins - plannedMins : null;
   const dispDuration = isDone && actualMins != null ? fmtClock(actualMins * 60) : duration;
   const dispDistance = isDone ? completed?.distanceKm ?? null : null;
   const dispTss      = isDone ? actualTss : plannedTss;
 
   // Completed ride → Plan / Actual / Δ table (duration, avg power, avg HR),
-  // mirroring the run comparison table so both read identically.
+  // mirroring the run comparison table so both read identically. ovDur / ovTss
+  // feed the compact "vs plan" line so it matches the table.
   let rideCompareRows: CompareRow[] = [];
+  let ovDur: WindowCmp | null = null;
+  let ovTss: WindowCmp | null = null;
   if (isDone && completed) {
     let pmin = Infinity, pmax = -Infinity, hmin = Infinity, hmax = -Infinity;
     for (const s of segments) {
@@ -174,6 +158,8 @@ export default function CyclingRow({
     const planDur = plannedMins != null ? fmtClock(plannedMins * 60) : '—';
     const tssB = plannedTss != null ? { lo: plannedTss * 0.9, hi: plannedTss * 1.1 } : null;
     const tss  = tssB && actualTss != null ? rangeCompare(actualTss, tssB.lo, tssB.hi) : null;
+    ovDur = dur;
+    ovTss = tss;
     rideCompareRows = [
       { metric: 'Duration', plan: planDur, actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: dur?.delta ?? null, tone: dur?.tone ?? 'flat' },
       { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: pw?.delta ?? null, tone: pw?.tone ?? 'flat' },
@@ -215,7 +201,7 @@ export default function CyclingRow({
             {session.description && <div className="text-[14px] leading-snug text-stone">{session.description}</div>}
             {isDone && (
               <div className="mt-auto pt-[8px]">
-                <CyclingDelta tssDelta={tssDelta} durDelta={durDelta} plannedTss={plannedTss} plannedMins={plannedMins} />
+                <CyclingDelta tss={ovTss} dur={ovDur} />
               </div>
             )}
           </div>
