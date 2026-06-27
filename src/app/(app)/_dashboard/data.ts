@@ -59,25 +59,6 @@ export interface WindowDay {
   hasYoga: boolean;
 }
 
-// The dashboard's "Recently completed" card — the latest finished planned
-// session before today, with plan-vs-actual numbers (all raw; the component
-// formats and computes deltas).
-export interface RecentlyCompleted {
-  dateLabel: string;          // "Tue 24 Jun"
-  name: string;
-  isRide: boolean;
-  stravaId: string | null;
-  actualDistanceKm: number | null;
-  actualMins: number | null;
-  actualPaceSec: number | null;   // seconds per km
-  avgHr: number | null;
-  actualTss: number | null;
-  planDistanceKm: number | null;
-  planMins: number | null;
-  planPaceSec: number | null;
-  planTss: number | null;
-}
-
 export interface DashboardData {
   firstName: string;
   greeting: string;
@@ -126,19 +107,11 @@ export interface DashboardData {
   offPlanToday: OffPlanActivity[];   // extras done today (shown under the Today node)
   offPlanRecent: OffPlanActivity[];  // extras in the last 7 days (excl. today)
 
-  recentlyCompleted: RecentlyCompleted | null;
-}
-
-// "H:MM" → minutes; "M:SS" pace → seconds.
-function hmmToMins(s: string | null | undefined): number | null {
-  if (!s) return null;
-  const [h, m] = s.split(':').map(Number);
-  return Number.isFinite(h) ? h * 60 + (m || 0) : null;
-}
-function paceToSec(s: string | null | undefined): number | null {
-  if (!s) return null;
-  const [m, sec] = s.split(':').map(Number);
-  return Number.isFinite(m) ? m * 60 + (sec || 0) : null;
+  // Recently completed — latest finished run/ride before today, rendered by the
+  // same hero as Today. `recentLabel` is the dated header e.g. "Thu 25 Jun · Done".
+  recentSession: PlanSession | null;
+  recentCompleted: CompletedToday | null;
+  recentLabel: string | null;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -181,6 +154,46 @@ export function formatSpineDay(iso: string): { weekday: string; date: string } {
   return {
     weekday: dt.toLocaleDateString('en-GB', { weekday: 'long' }),
     date:    dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+  };
+}
+
+// Build the rich completion (drives the run/ride hero's actuals, profile
+// colouring and compare table) from a raw completed_workouts row. Shared by
+// Today and Recently-completed so both compute identically — change once.
+function buildCompleted(
+  cw: {
+    actual_duration_mins?: number | string | null;
+    actual_avg_pace_min_km?: number | string | null;
+    actual_avg_power?: number | string | null;
+    actual_distance_km?: number | string | null;
+    actual_avg_hr?: number | string | null;
+    segment_actuals?: unknown;
+    segment_hr?: unknown;
+  },
+  threshMinKm: number,
+  ftp: number | null,
+): CompletedToday {
+  const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
+  const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+  const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
+  const durationStr = mins != null
+    ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
+    : '';
+  let tss: number | null = null;
+  if (mins != null && pace != null && pace > 0) {
+    const IF = threshMinKm / pace;                 // run: pace vs threshold
+    tss = Math.round((mins / 60) * IF * IF * 100);
+  } else if (mins != null && avgPower != null && ftp && ftp > 0) {
+    const IF = avgPower / ftp;                      // ride: power vs FTP
+    tss = Math.round((mins / 60) * IF * IF * 100);
+  }
+  return {
+    durationStr, mins, tss,
+    distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
+    avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
+    avgPower,
+    segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
+    segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
   };
 }
 
@@ -378,68 +391,20 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // same way threshold pace drives run TSS. Updates if the zones are edited.
   const ftp = powerZones['Z4']?.powerMax ?? null;
 
-  let todayCompleted: CompletedToday | null = null;
-  if (cw) {
-    const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
-    const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
-    const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
-    const durationStr = mins != null
-      ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
-      : '';
-    let tss: number | null = null;
-    if (mins != null && pace != null && pace > 0) {
-      const IF = threshMinKm / pace;                 // run: pace vs threshold
-      tss = Math.round((mins / 60) * IF * IF * 100);
-    } else if (mins != null && avgPower != null && ftp && ftp > 0) {
-      const IF = avgPower / ftp;                      // ride: power vs FTP
-      tss = Math.round((mins / 60) * IF * IF * 100);
-    }
-    todayCompleted = {
-      durationStr, mins, tss,
-      distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
-      avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
-      avgPower,
-      segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
-      segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
-    };
-  }
+  const todayCompleted: CompletedToday | null = cw ? buildCompleted(cw, threshMinKm, ftp) : null;
 
-  // Recently completed — the latest finished planned session before today.
-  let recentlyCompleted: RecentlyCompleted | null = null;
+  // Recently completed — the latest finished run/ride before today. Rendered by
+  // the SAME hero as Today (one card to maintain), with a dated "· Done" label.
+  let recentSession: PlanSession | null = null;
+  let recentCompleted: CompletedToday | null = null;
+  let recentLabel: string | null = null;
   if (recentCompletedRaw) {
-    const { cw, ps } = recentCompletedRaw;
-    const aMins    = cw.actual_duration_mins != null ? Number(cw.actual_duration_mins) : null;
-    const aPaceSec = cw.actual_avg_pace_min_km != null ? Math.round(Number(cw.actual_avg_pace_min_km) * 60) : null;
-    const aDist    = cw.actual_distance_km != null ? Number(cw.actual_distance_km) : null;
-    const aHr      = cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null;
-    const pMins    = hmmToMins(ps.estimated_duration);
-    const pDist    = ps.distance_km != null ? Number(ps.distance_km) : null;
-    const pPaceSec = paceToSec(ps.target_pace) ?? (pMins != null && pDist ? Math.round((pMins * 60) / pDist) : null);
-    // Actual TSS: pace vs threshold for runs; if there's no pace/power (e.g. an
-    // indoor ride) fall back to HR vs threshold HR (top of Z4) so rides still
-    // get a TSS.
-    let aTss: number | null = null;
-    if (aMins != null && aPaceSec != null && aPaceSec > 0) {
-      const IF = (threshMinKm * 60) / aPaceSec;
-      aTss = Math.round((aMins / 60) * IF * IF * 100);
-    } else if (aMins != null && aHr != null) {
-      const lthr = ps.activity_type === 'cycling' ? bikeHrZones['Z4']?.max : hrZones['Z4']?.max;
-      if (lthr && lthr > 0) {
-        const IF = aHr / lthr;
-        aTss = Math.round((aMins / 60) * IF * IF * 100);
-      }
-    }
-    recentlyCompleted = {
-      dateLabel: new Date(cw.completed_date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
-      name: ps.name ?? 'Session',
-      isRide: ps.activity_type === 'cycling',
-      stravaId: (cw.strava_activity_id as string | null) ?? null,
-      actualDistanceKm: aDist, actualMins: aMins, actualPaceSec: aPaceSec,
-      avgHr: aHr,
-      actualTss: aTss,
-      planDistanceKm: pDist, planMins: pMins, planPaceSec: pPaceSec,
-      planTss: ps.estimated_tss != null ? Number(ps.estimated_tss) : null,
-    };
+    const { cw: rcw, ps } = recentCompletedRaw;
+    recentSession = ps as unknown as PlanSession;
+    recentCompleted = buildCompleted(rcw, threshMinKm, ftp);
+    const dateLabel = new Date(rcw.completed_date + 'T00:00:00')
+      .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    recentLabel = `${dateLabel} · Done`;
   }
 
   let weekPlannedKm: number | null = null;
@@ -540,6 +505,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     fitnessForm, fitnessHistory,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
-    recentlyCompleted,
+    recentSession, recentCompleted, recentLabel,
   };
 }

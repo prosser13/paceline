@@ -156,7 +156,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getMostRecentCompletedSession(beforeDate: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, strava_activity_id, plan_sessions!inner(name, session_type, activity_type, distance_km, estimated_duration, estimated_tss, target_pace)')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr, strava_activity_id, plan_sessions!inner(*)')
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
