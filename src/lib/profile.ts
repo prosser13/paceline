@@ -1,4 +1,5 @@
 import { normalizeStructure, segmentPerformance, PERF_COLOR, paceToSeconds, secondsToPace, type ZoneMap, type NormSegment } from './plan-structure';
+import type { CyclingSegment } from './cycling';
 
 export interface ProfileBar {
   effort: number;   // 0–100
@@ -158,4 +159,33 @@ export function buildProfileBars(
   const effort      = paceToEffort(defaultPace, thresholdPace);
   const mins        = parseDurationMins(session.estimated_duration);
   return mins > 0 ? [{ effort, minutes: mins }] : [];
+}
+
+// Cycling counterpart of buildProfileBars: bar height from power vs FTP (75% at
+// threshold, mirroring the run), width from segment minutes. Planned segments
+// take their zone colour; a completed single-segment ride colours the bar by
+// whole-ride avg power vs the target band (in → fern, over → marine, under →
+// ember), echoing the run hero's performance colouring.
+export function buildCyclingBars(
+  segments: CyclingSegment[],
+  ftp: number | null,
+  doneAvgPower?: number | null,
+): ProfileBar[] {
+  if (!segments.length) return [];
+  const bars: ProfileBar[] = segments.map(seg => {
+    const mid = seg.powerMin != null && seg.powerMax != null
+      ? (seg.powerMin + seg.powerMax) / 2
+      : seg.powerMin ?? seg.powerMax ?? null;
+    const effort = mid != null && ftp ? Math.round(Math.min(100, Math.max(5, (mid / ftp) * 75))) : 40;
+    const zk = seg.zoneKey?.match(/Z[1-9]/)?.[0];
+    let color = zk ? ZONE_COLOR[zk] : undefined;
+    if (doneAvgPower != null && segments.length === 1 && seg.powerMin != null && seg.powerMax != null) {
+      color = doneAvgPower >= seg.powerMin && doneAvgPower <= seg.powerMax ? PERF_COLOR.on
+        : doneAvgPower > seg.powerMax ? PERF_COLOR.ahead
+        : PERF_COLOR.behind;
+    }
+    return { effort, minutes: Math.max(1, Math.round(seg.durationMins)), ...(color ? { color } : {}) };
+  });
+  // Keep per-segment colours distinct when completed; otherwise merge runs.
+  return doneAvgPower != null ? bars : mergeConsecutive(bars);
 }

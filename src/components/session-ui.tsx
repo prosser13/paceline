@@ -4,6 +4,7 @@
 
 import { segmentPerformance, PERF_COLOR } from '@/lib/plan-structure';
 import type { NormSegment, NormStep, SegmentPerf } from '@/lib/plan-structure';
+import { fmtPower, type CyclingSegment } from '@/lib/cycling';
 import RepeatBlock from './RepeatBlock';
 
 // Intensity → on-brand colour (drives the profile chart) + nominal zone
@@ -544,4 +545,71 @@ export function buildRunCompare(steps: NormStep[], o: RunCompareInput): RunCompa
     { metric: 'TSS', plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—', actual: o.actTss != null ? `${o.actTss}` : '—', delta: tss?.delta ?? null, tone: tss?.tone ?? 'flat' },
   ];
   return { rows, overview: { tss, dur }, pace: { actual: actPaceSec != null ? fmtMMSS(actPaceSec) : '—', cmp: pace } };
+}
+
+// ── Cycling counterpart of buildRunCompare ──
+
+export interface RideCompareInput {
+  segments: CyclingSegment[];
+  planKm: number | null; actKm: number | null;
+  planMins: number | null; actMins: number | null;
+  avgPower: number | null; avgHr: number | null;
+  planTss: number | null; actTss: number | null;
+}
+export interface RideCompareResult {
+  rows: CompareRow[];
+  overview: { tss: WindowCmp | null; dur: WindowCmp | null };
+}
+
+// The five-row completed-ride comparison (Distance/Power/HR/Duration/TSS) — the
+// cycling sibling of buildRunCompare, same tick-in-window / gap-to-edge rule, so
+// the ride hero and the plan ride rows read identically to the run.
+export function buildRideCompare(o: RideCompareInput): RideCompareResult {
+  let pmin = Infinity, pmax = -Infinity, hmin = Infinity, hmax = -Infinity;
+  for (const s of o.segments) {
+    if (s.powerMin != null) pmin = Math.min(pmin, s.powerMin);
+    if (s.powerMax != null) pmax = Math.max(pmax, s.powerMax);
+    if (s.hrMin != null) hmin = Math.min(hmin, s.hrMin);
+    if (s.hrMax != null) hmax = Math.max(hmax, s.hrMax);
+  }
+  const hasP = Number.isFinite(pmin) && Number.isFinite(pmax);
+  const hasH = Number.isFinite(hmin) && Number.isFinite(hmax);
+
+  // Distance — ±2% (rides often carry no planned distance → no delta).
+  const dist = o.planKm != null && o.actKm != null ? rangeCompare(o.actKm, o.planKm * 0.98, o.planKm * 1.02, (n) => n.toFixed(1)) : null;
+  // Power / HR — within the planned watt / bike-HR band.
+  const power = hasP && o.avgPower != null ? rangeCompare(o.avgPower, pmin, pmax) : null;
+  const hr = hasH && o.avgHr != null ? rangeCompare(o.avgHr, hmin, hmax) : null;
+  // Duration — ±5%; TSS — ±10%.
+  const actDurSec = o.actMins != null ? o.actMins * 60 : null;
+  const dur = o.planMins != null && actDurSec != null
+    ? rangeCompare(actDurSec, o.planMins * 60 * 0.95, o.planMins * 60 * 1.05, fmtMMSS) : null;
+  const planDur = o.planMins != null ? secToClock(o.planMins * 60) : '—';
+  const tssB = o.planTss != null ? { lo: o.planTss * 0.9, hi: o.planTss * 1.1 } : null;
+  const tss = tssB && o.actTss != null ? rangeCompare(o.actTss, tssB.lo, tssB.hi) : null;
+
+  const planPower = hasP ? fmtPower(pmin, pmax) : '—';
+  const planHr = hasH ? (hmin === hmax ? `${hmin}` : `${hmin}–${hmax}`) : '—';
+
+  const rows: CompareRow[] = [
+    { metric: 'Distance', plan: o.planKm != null ? `${o.planKm} km` : '—', actual: o.actKm != null ? `${o.actKm % 1 === 0 ? o.actKm : o.actKm.toFixed(1)} km` : '—', delta: dist?.delta ?? null, tone: dist?.tone ?? 'flat' },
+    { metric: 'Avg power', plan: planPower, actual: o.avgPower != null ? `${o.avgPower} W` : '—', delta: power?.delta ?? null, tone: power?.tone ?? 'flat' },
+    { metric: 'Avg HR', plan: planHr, actual: o.avgHr != null ? `${o.avgHr}` : '—', delta: hr?.delta ?? null, tone: hr?.tone ?? 'flat' },
+    { metric: 'Duration', plan: planDur, actual: actDurSec != null ? secToClock(actDurSec) : '—', delta: dur?.delta ?? null, tone: dur?.tone ?? 'flat' },
+    { metric: 'TSS', plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—', actual: o.actTss != null ? `${o.actTss}` : '—', delta: tss?.delta ?? null, tone: tss?.tone ?? 'flat' },
+  ];
+  return { rows, overview: { tss, dur } };
+}
+
+// Headline stat tile with a small window-delta in the bottom-right corner.
+// Shared by the run and ride heroes so the pills stay identical.
+const STAT_TONE = (t?: string) => (t === 'pos' ? '#4f7a52' : t === 'fast' ? '#14617e' : t === 'neg' ? '#c75b33' : '#5f5a50');
+export function StatBox({ value, label, delta, tone }: { value: string; label: string; delta?: string | null; tone?: string }) {
+  return (
+    <div className="relative border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
+      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{value}</div>
+      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{label}</div>
+      {delta && <span className="absolute right-[11px] bottom-[10px] font-mono text-[10.5px] font-semibold" style={{ color: STAT_TONE(tone) }}>{delta}</span>}
+    </div>
+  );
 }

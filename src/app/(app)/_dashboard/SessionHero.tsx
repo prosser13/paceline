@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
+  INTENSITY, MetricBlock, StatBox, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
 } from '@/components/session-ui';
 import CollapsibleSession from '../CollapsibleSession';
 import { RunGlyph } from '@/components/glyphs';
@@ -29,21 +29,6 @@ function HeroTitle({ session }: { session: PlanSession }) {
       {session.description && (
         <div className="text-[15px] text-stone">{session.description}</div>
       )}
-    </div>
-  );
-}
-
-// Δ colour — matches the comparison table (in-window pos / faster-in-race fast /
-// out neg / neutral). Hex so it works in a server component without Tailwind toggles.
-const toneColor = (t?: string) => (t === 'pos' ? FERN : t === 'fast' ? MARINE : t === 'neg' ? '#c75b33' : '#5f5a50');
-
-// Headline stat tile with a small window-delta in the bottom-right corner.
-function Box({ value, label, delta, tone }: { value: string; label: string; delta: string | null; tone?: string }) {
-  return (
-    <div className="relative border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
-      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{value}</div>
-      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{label}</div>
-      {delta && <span className="absolute right-[11px] bottom-[10px] font-mono text-[10.5px] font-semibold" style={{ color: toneColor(tone) }}>{delta}</span>}
     </div>
   );
 }
@@ -129,9 +114,9 @@ export default function SessionHero({
             />
           </div>
           <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
-            <Box value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
-            <Box value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
-            <Box value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
+            <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+            <StatBox value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
+            <StatBox value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
           </div>
         </>
       ) : (
