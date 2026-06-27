@@ -44,7 +44,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* overflow-anchor:none — when an accordion expands, keep the user's
             scroll position and push content down instead of letting the browser
             anchor to a lower element (which yanked the view upward). */}
-        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0 [overflow-anchor:none]">
+        {/* zoom:0.9 — uniform 10% reduction of all page content (fonts, spacing,
+            cards) in one place; reflows layout, unlike transform: scale. */}
+        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0 [overflow-anchor:none]" style={{ zoom: 0.9 }}>
           {children}
         </main>
       </div>

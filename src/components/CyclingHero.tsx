@@ -112,7 +112,7 @@ export default function CyclingHero({
               <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.9} />
             </div>
             <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
-              <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+              <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="km" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
               <StatBox value={completed!.avgPower != null ? `${completed!.avgPower} W` : '—'} label="Power" delta={cmp('Avg power')?.delta ?? null} tone={cmp('Avg power')?.tone} />
               <StatBox value={completed!.tss != null ? `${completed!.tss}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
             </div>
