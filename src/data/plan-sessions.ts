@@ -134,8 +134,18 @@ export async function getEarliestSessionDate(): Promise<string | null> {
 export async function listSessionsForMatching() {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, distance_km, structure, activity_type, session_type');
+    .select('id, scheduled_date, distance_km, structure, activity_type, session_type, estimated_duration');
   return data ?? [];
+}
+
+// Plan-session ids that already have a completion — used by the sync matcher to
+// skip sessions that are already filled, so a second same-day activity (e.g. a
+// second yoga session) lands on the next open session instead of being orphaned.
+export async function listCompletedSessionIds(): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('plan_session_id');
+  return (data ?? []).map(r => r.plan_session_id as string).filter(Boolean);
 }
 
 // ── completed_workouts ───────────────────────────────────────
