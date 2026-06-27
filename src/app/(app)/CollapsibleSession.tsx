@@ -1,20 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { WorkoutDetail } from '@/components/session-ui';
+import { WorkoutDetail, CompareTable, type CompareRow } from '@/components/session-ui';
 import type { NormStep } from '@/lib/plan-structure';
 
 export default function CollapsibleSession({
-  steps, defaultOpen,
+  steps, defaultOpen, compareRows, isRace = false,
 }: {
   steps: NormStep[];
   defaultOpen: boolean;
+  compareRows?: CompareRow[] | null;   // completed → show the Plan/Actual/Δ table above the segments
+  isRace?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   if (!steps.length) return null;
 
+  // Snug to the card bottom when collapsed (mt only above), roomier when open.
   return (
-    <div className="mt-[18px]">
+    <div className={open ? 'mt-[18px]' : 'mt-[14px]'}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
@@ -30,7 +33,10 @@ export default function CollapsibleSession({
       </button>
       {open && (
         <div className="mt-[9px]">
-          <WorkoutDetail steps={steps} variant="card" />
+          {compareRows && compareRows.length > 0 && (
+            <div className="mb-[10px]"><CompareTable rows={compareRows} /></div>
+          )}
+          <WorkoutDetail steps={steps} variant="card" isRace={isRace} />
         </div>
       )}
     </div>

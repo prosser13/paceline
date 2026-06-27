@@ -449,3 +449,97 @@ export function CompareTable({ rows }: { rows: CompareRow[] }) {
     </div>
   );
 }
+
+// ── Shared completed-run comparison builder (plan + dashboard) ──
+
+export type WindowCmp = { delta: string; tone: CompareTone };
+
+function paceToSec(p?: string): number | null {
+  if (!p) return null;
+  const m = p.split(':').map(Number);
+  return m.length === 2 && !m.some(isNaN) ? m[0] * 60 + m[1] : null;
+}
+// Seconds → "M:SS" or "H:MM".
+function secToClock(sec: number): string {
+  const s = Math.round(sec);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
+}
+function paceBounds(steps: NormStep[]): { fast: number; slow: number } | null {
+  let fast = Infinity, slow = -Infinity;
+  const visit = (s: { paceMin?: string; paceMax?: string }) => {
+    const a = paceToSec(s.paceMin); const b = paceToSec(s.paceMax) ?? a;
+    if (a != null) { fast = Math.min(fast, a); slow = Math.max(slow, b ?? a); }
+  };
+  for (const st of steps) { if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit); else visit(st as { paceMin?: string; paceMax?: string }); }
+  return Number.isFinite(fast) && slow >= fast ? { fast, slow } : null;
+}
+function hrBoundsOf(steps: NormStep[]): { lo: number; hi: number } | null {
+  let lo = Infinity, hi = -Infinity;
+  const visit = (s: { hrMin?: number | null; hrMax?: number | null }) => {
+    if (s.hrMin != null) lo = Math.min(lo, s.hrMin);
+    if (s.hrMax != null) hi = Math.max(hi, s.hrMax);
+  };
+  for (const st of steps) { if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit); else visit(st as { hrMin?: number | null; hrMax?: number | null }); }
+  return Number.isFinite(lo) && hi >= lo ? { lo, hi } : null;
+}
+function durBoundsOf(steps: NormStep[]): { lo: number; hi: number } | null {
+  let lo = 0, hi = 0, any = false;
+  const add = (s: { paceMin?: string; paceMax?: string; distanceKm?: number | null; midSeconds?: number | null }, mult: number) => {
+    const pmin = paceToSec(s.paceMin); const pmax = paceToSec(s.paceMax) ?? pmin;
+    if (s.distanceKm != null && pmin != null) { lo += s.distanceKm * pmin * mult; hi += s.distanceKm * (pmax ?? pmin) * mult; any = true; }
+    else if (s.midSeconds != null && s.distanceKm != null) { const t = s.midSeconds * s.distanceKm * mult; lo += t; hi += t; any = true; }
+  };
+  for (const st of steps) { if ('kind' in st && st.kind === 'repeat') st.steps.forEach(s => add(s, st.count)); else add(st as Parameters<typeof add>[0], 1); }
+  return any ? { lo, hi } : null;
+}
+
+export interface RunCompareInput {
+  planKm: number | null; actKm: number | null;
+  actMins: number | null; estimatedDuration: string | null;
+  avgHr: number | null;
+  planTss: number | null; actTss: number | null;
+  isRace: boolean;
+}
+export interface RunCompareResult {
+  rows: CompareRow[];
+  overview: { tss: WindowCmp | null; dur: WindowCmp | null };
+  pace: { actual: string; cmp: WindowCmp | null };
+}
+
+// The five-row completed-run comparison (Distance/Pace/HR/Duration/TSS) using
+// the tick-in-window / gap-to-edge rule, shared by the plan rows and the
+// dashboard hero so the maths and the wording are identical everywhere.
+export function buildRunCompare(steps: NormStep[], o: RunCompareInput): RunCompareResult {
+  const pb = paceBounds(steps);
+  const planPace = pb
+    ? (pb.fast === pb.slow ? fmtMMSS(pb.fast) : `${fmtMMSS(pb.fast)}–${fmtMMSS(pb.slow)}`)
+    : (o.actMins && o.planKm ? fmtMMSS((o.actMins * 60) / o.planKm) : '—');
+  const actPaceSec = o.actMins != null && o.actKm ? (o.actMins * 60) / o.actKm : null;
+  const pace = pb && actPaceSec != null ? rangeCompare(actPaceSec, pb.fast, pb.slow, fmtMMSS, o.isRace ? 'fast' : 'neg') : null;
+
+  const dist = o.planKm != null && o.actKm != null ? rangeCompare(o.actKm, o.planKm * 0.98, o.planKm * 1.02, (n) => n.toFixed(1)) : null;
+
+  const hb = hrBoundsOf(steps);
+  const planHr = hb ? (hb.lo === hb.hi ? `${hb.lo}` : `${hb.lo}–${hb.hi}`) : '—';
+  const hr = hb && o.avgHr != null ? rangeCompare(o.avgHr, hb.lo, hb.hi, undefined, o.isRace ? 'fast' : 'neg') : null;
+
+  const db = durBoundsOf(steps);
+  const actDurSec = o.actMins != null ? o.actMins * 60 : null;
+  const dur = db && actDurSec != null ? rangeCompare(actDurSec, db.lo, db.hi, fmtMMSS, o.isRace ? 'fast' : 'neg') : null;
+  const planDur = db
+    ? (Math.round(db.lo) === Math.round(db.hi) ? secToClock(db.lo) : `${secToClock(db.lo)}–${secToClock(db.hi)}`)
+    : (o.estimatedDuration ?? '—');
+
+  const tssB = o.planTss != null ? { lo: o.planTss * 0.9, hi: o.planTss * 1.1 } : null;
+  const tss = tssB && o.actTss != null ? rangeCompare(o.actTss, tssB.lo, tssB.hi) : null;
+
+  const rows: CompareRow[] = [
+    { metric: 'Distance', plan: o.planKm != null ? `${o.planKm} km` : '—', actual: o.actKm != null ? `${o.actKm % 1 === 0 ? o.actKm : o.actKm.toFixed(1)} km` : '—', delta: dist?.delta ?? null, tone: dist?.tone ?? 'flat' },
+    { metric: 'Pace', plan: planPace, actual: actPaceSec != null ? fmtMMSS(actPaceSec) : '—', delta: pace?.delta ?? null, tone: pace?.tone ?? 'flat' },
+    { metric: 'Avg HR', plan: planHr, actual: o.avgHr != null ? `${o.avgHr}` : '—', delta: hr?.delta ?? null, tone: hr?.tone ?? 'flat' },
+    { metric: 'Duration', plan: planDur, actual: actDurSec != null ? secToClock(actDurSec) : '—', delta: dur?.delta ?? null, tone: dur?.tone ?? 'flat' },
+    { metric: 'TSS', plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—', actual: o.actTss != null ? `${o.actTss}` : '—', delta: tss?.delta ?? null, tone: tss?.tone ?? 'flat' },
+  ];
+  return { rows, overview: { tss, dur }, pace: { actual: actPaceSec != null ? fmtMMSS(actPaceSec) : '—', cmp: pace } };
+}
