@@ -6,7 +6,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMMSS, fmtMMSS, humanHMM, wholeRunActuals,
+  INTENSITY, MetricBlock, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
 } from '@/components/session-ui';
 import CollapsibleSession from '../CollapsibleSession';
 import { RunGlyph } from '@/components/glyphs';
@@ -33,33 +33,17 @@ function HeroTitle({ session }: { session: PlanSession }) {
   );
 }
 
-function devClass(pct: number | null): string {
-  if (pct == null) return 'text-stone';
-  const a = Math.abs(pct);
-  if (a < 0.10) return 'text-stone';
-  if (a < 0.20) return 'text-ember';
-  return 'text-oxblood';
-}
+// Δ colour — matches the comparison table (in-window pos / faster-in-race fast /
+// out neg / neutral). Hex so it works in a server component without Tailwind toggles.
+const toneColor = (t?: string) => (t === 'pos' ? FERN : t === 'fast' ? MARINE : t === 'neg' ? '#c75b33' : '#5f5a50');
 
-function signedTime(deltaMin: number): string {
-  const sign     = deltaMin >= 0 ? '+' : '−';
-  const totalSec = Math.round(Math.abs(deltaMin) * 60);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${sign}${h}h ${m}m`;
-  if (m > 0) return `${sign}${m}m${s ? ` ${s}s` : ''}`;
-  return `${sign}${s}s`;
-}
-
-function VsStat({ label, value, delta, deltaClass, align = 'right' }: {
-  label: string; value: string; delta: string | null; deltaClass: string; align?: 'left' | 'right';
-}) {
+// Headline stat tile with a small window-delta in the bottom-right corner.
+function Box({ value, label, delta, tone }: { value: string; label: string; delta: string | null; tone?: string }) {
   return (
-    <div className={align === 'left' ? 'text-left' : 'text-right'}>
-      <div className="font-mono text-[10px] uppercase tracking-[.08em] text-stone">{label}</div>
-      <div className="font-display font-semibold text-[20px] text-ink leading-tight mt-[2px]">{value}</div>
-      {delta && <div className={`font-mono text-[12px] mt-[1px] ${deltaClass}`}>{delta}</div>}
+    <div className="relative border border-fog bg-bone rounded-[12px] px-[12px] py-[11px]">
+      <div className="font-display font-semibold text-[21px] leading-none text-ink tabular-nums">{value}</div>
+      <div className="font-mono text-[10.5px] tracking-[.07em] uppercase text-stone mt-[5px]">{label}</div>
+      {delta && <span className="absolute right-[11px] bottom-[10px] font-mono text-[10.5px] font-semibold" style={{ color: toneColor(tone) }}>{delta}</span>}
     </div>
   );
 }
@@ -103,18 +87,16 @@ export default function SessionHero({
 
   const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;
   const distActual  = completed?.distanceKm ?? null;
-  const distDelta   = distActual != null && distPlanned != null ? distActual - distPlanned : null;
-
-  const plannedMins = plannedSec > 0 ? plannedSec / 60 : null;
-  const timeDelta   = completed?.mins != null && plannedMins != null ? completed.mins - plannedMins : null;
-
-  const tssPlanned  = session.estimated_tss ?? null;
   const tssActual   = completed?.tss ?? null;
-  const tssDelta    = tssActual != null && tssPlanned != null ? tssActual - tssPlanned : null;
+  const isRace      = session.session_type === 'RACE';
 
-  const avgPaceStr  = completed?.mins != null && completed?.distanceKm
-    ? fmtMMSS((completed.mins * 60) / completed.distanceKm)
-    : null;
+  // Shared completed-run comparison (Distance/Pace/HR/Duration/TSS, tick-in-window).
+  const compare = isDone ? buildRunCompare(steps, {
+    planKm: distPlanned, actKm: distActual, actMins: completed?.mins ?? null,
+    estimatedDuration: session.estimated_duration ?? null, avgHr: completed?.avgHr ?? null,
+    planTss: session.estimated_tss ?? null, actTss: tssActual, isRace,
+  }) : null;
+  const cmp = (m: string) => compare?.rows.find(r => r.metric === m) ?? null;
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
@@ -132,7 +114,7 @@ export default function SessionHero({
         </div>
       </div>
 
-      <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
+      <div className={`px-[18px] pt-[18px] sm:px-[26px] sm:pt-[22px] ${isDone ? 'pb-[12px] sm:pb-[14px]' : 'pb-[18px] sm:pb-[26px]'}`}>
       {isDone ? (
         <>
           <div className="flex items-start justify-between gap-6">
@@ -144,21 +126,10 @@ export default function SessionHero({
               opacity={segActuals ? 0.9 : 0.6}
             />
           </div>
-          <div className="grid grid-cols-5 gap-[14px] mt-[16px] pt-[14px] border-t border-fog">
-            <VsStat align="left" label="Distance"
-              value={distActual != null ? `${distActual.toFixed(1)} km` : '—'}
-              delta={distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)} km` : null}
-              deltaClass={devClass(distDelta != null && distPlanned ? distDelta / distPlanned : null)} />
-            <VsStat align="left" label="Time"
-              value={humanHMM(displayDuration) ?? '—'}
-              delta={timeDelta != null ? signedTime(timeDelta) : null}
-              deltaClass={devClass(timeDelta != null && plannedMins ? timeDelta / plannedMins : null)} />
-            <VsStat align="left" label="Load"
-              value={tssActual != null ? `${tssActual} TSS` : '—'}
-              delta={tssDelta != null ? `${tssDelta >= 0 ? '+' : '−'}${Math.abs(tssDelta)}` : null}
-              deltaClass={devClass(tssDelta != null && tssPlanned ? tssDelta / tssPlanned : null)} />
-            <VsStat align="left" label="Avg pace" value={avgPaceStr ? `${avgPaceStr}/km` : '—'} delta={null} deltaClass="" />
-            <VsStat align="left" label="Avg HR" value={completed?.avgHr != null ? `${completed.avgHr} bpm` : '—'} delta={null} deltaClass="" />
+          <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
+            <Box value={distActual != null ? distActual.toFixed(1) : '—'} label="Distance" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+            <Box value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
+            <Box value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
           </div>
         </>
       ) : (
@@ -182,7 +153,7 @@ export default function SessionHero({
         </p>
       )}
 
-      <CollapsibleSession steps={steps} defaultOpen={!isDone} />
+      <CollapsibleSession steps={steps} defaultOpen={!isDone} compareRows={compare?.rows} isRace={isRace} />
 
       {!isDone && showAdjust && label === 'Today' && (
         <div className="mt-[18px]">
