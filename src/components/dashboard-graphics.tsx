@@ -161,7 +161,7 @@ export function FormMeter({ form, fitness, fatigue }: { form: number | null; fit
 /* ── Countdown ring + weekly km (bottom) ───────────────────── */
 
 export function CountdownRing({
-  headerLabel, purpose, daysToRace, ringPct, weekPlannedKm, weekDoneKm,
+  headerLabel, purpose, daysToRace, ringPct, weekPlannedKm, weekDoneKm, weekToGoKm,
 }: {
   headerLabel: string;
   purpose: string | null;
@@ -169,9 +169,10 @@ export function CountdownRing({
   ringPct: number;
   weekPlannedKm: number | null;
   weekDoneKm: number;
+  weekToGoKm: number;
 }) {
   const donePct = weekPlannedKm ? Math.min(100, (weekDoneKm / weekPlannedKm) * 100) : 0;
-  const toGo = weekPlannedKm != null ? Math.max(0, Math.round(weekPlannedKm - weekDoneKm)) : null;
+  const toGo = weekPlannedKm != null ? weekToGoKm : null;
   const planPct = Math.max(0, Math.min(100, 100 - ringPct)); // elapsed through the plan
 
   return (
@@ -220,17 +221,18 @@ export interface WeekDay {
 }
 
 export function WeeklyBars({
-  headerLabel, days, weekDoneKm, weekPlannedKm, daysToRace, raceName,
+  headerLabel, days, weekDoneKm, weekPlannedKm, weekToGoKm, daysToRace, raceName,
 }: {
   headerLabel: string;
   days: WeekDay[];
   weekDoneKm: number;
   weekPlannedKm: number | null;
+  weekToGoKm: number;
   daysToRace: number | null;
   raceName: string | null;
 }) {
   const maxKm = Math.max(...days.map(d => d.km), 1);
-  const toGo = weekPlannedKm != null ? Math.max(0, Math.round(weekPlannedKm - weekDoneKm)) : null;
+  const toGo = weekPlannedKm != null ? weekToGoKm : null;
   const hasRace = days.some(d => (d.raceKm ?? 0) > 0);
 
   return (

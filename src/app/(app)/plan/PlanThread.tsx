@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ProfileChart from '@/components/ProfileChart';
@@ -270,6 +270,11 @@ export default function PlanThread({
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const matchSourceById = new Map(manualMatches.map(m => [m.id, m.source]));
+
+  // Open the plan landed on today, not the top of the week.
+  useEffect(() => {
+    document.getElementById('plan-today')?.scrollIntoView({ block: 'start' });
+  }, []);
 
   const tomorrowStr = (() => {
     const d = new Date(todayStr + 'T00:00:00');
@@ -615,7 +620,7 @@ export default function PlanThread({
     };
 
     return (
-      <div key={dateStr} className={dim ? 'opacity-55' : ''}>
+      <div key={dateStr} id={isToday ? 'plan-today' : undefined} className={`scroll-mt-[16px] ${dim ? 'opacity-55' : ''}`}>
         <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] text-[13.5px] font-semibold ${isToday ? 'text-oxblood' : isTomorrow ? 'text-marine' : 'text-ink'}`}>
           <span>{weekday}</span>
           <span className="font-normal text-stone text-[12.5px]">{dateLabel}</span>

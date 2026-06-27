@@ -291,6 +291,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               days={weekBars}
               weekDoneKm={doneTotal}
               weekPlannedKm={plannedTotal}
+              weekToGoKm={Math.max(0, Math.round(plannedTotal - doneTotal))}
               daysToRace={daysToGo}
               raceName={plan?.name ?? guide.eventName}
             />
