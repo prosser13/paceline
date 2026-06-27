@@ -23,12 +23,14 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
             ringPct={d.ringPct}
             weekPlannedKm={d.weekPlannedKm}
             weekDoneKm={d.weekDoneKm}
+            weekToGoKm={d.weekToGoKm}
           />
           <WeeklyBars
             headerLabel={d.weekLabel}
             days={d.weekDays}
             weekDoneKm={d.weekDoneKm}
             weekPlannedKm={d.weekPlannedKm}
+            weekToGoKm={d.weekToGoKm}
             daysToRace={d.daysToRace}
             raceName={d.raceName}
           />

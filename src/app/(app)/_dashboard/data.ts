@@ -115,6 +115,7 @@ export interface DashboardData {
 
   weekPlannedKm: number | null;
   weekDoneKm: number;
+  weekToGoKm: number;
   weekDays: WeekDay[];
 
   fitnessForm: { form: number | null; fitness: number | null; fatigue: number | null } | null;
@@ -152,7 +153,13 @@ function eachDate(from: string, to: string): string[] {
   const out: string[] = [];
   const d = new Date(from + 'T00:00:00');
   const end = new Date(to + 'T00:00:00');
-  while (d <= end) { out.push(isoDate(d)); d.setDate(d.getDate() + 1); }
+  // Format from LOCAL components — d is local midnight, so isoDate()'s UTC
+  // conversion would shift back a day in any positive-offset timezone (e.g. BST),
+  // dropping the final day of the week.
+  while (d <= end) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    d.setDate(d.getDate() + 1);
+  }
   return out;
 }
 function greet(): string {
@@ -437,6 +444,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   let weekPlannedKm: number | null = null;
   let weekDoneKm = 0;
+  let weekToGoKm = 0;
   let weekDays: WeekDay[] = [];
   if (weekData && weekRow?.date_from && weekRow?.date_to) {
     const [weekSessions, weekCompleted] = weekData;
@@ -482,6 +490,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
       const raceKm = raceKmByDate.get(date) ?? 0;
       return { label, km, state, ...(raceKm > 0 && km > 0 ? { raceKm } : {}) };
     });
+
+    // "To go" = planned run km still ahead — today (if unfinished) + future days.
+    // Measured per-day so over-running a done day can't eat into what's left:
+    // running 43 of a planned 37 today still leaves tomorrow's full 19 to go.
+    weekToGoKm = Math.round(eachDate(weekRow.date_from, weekRow.date_to).reduce((s, date) => {
+      if (date < todayStr) return s;
+      const planned = plannedByDate.get(date) ?? 0;
+      const done = doneByDate.get(date) ?? 0;
+      return s + Math.max(0, planned - done);
+    }, 0));
   }
 
   // Phase timeline
@@ -518,7 +536,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     weekLabel, weekPurpose,
     phaseSegments, todayPct, ringPct,
     daysToRace, raceName, raceDateStr,
-    weekPlannedKm, weekDoneKm, weekDays,
+    weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
     fitnessForm, fitnessHistory,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
