@@ -112,6 +112,29 @@ function plannedHrBounds(steps: NormStep[]): { lo: number; hi: number } | null {
   return Number.isFinite(lo) && hi >= lo ? { lo, hi } : null;
 }
 
+// Seconds → "M:SS" or "H:MM".
+function secToClock(sec: number): string {
+  const s = Math.round(sec);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
+}
+
+// The planned duration window (seconds) across a run's segments, derived from
+// each segment's pace bounds — the boundary the actual time is judged against.
+function plannedDurationBounds(steps: NormStep[]): { lo: number; hi: number } | null {
+  let lo = 0, hi = 0, any = false;
+  const add = (s: { paceMin?: string; paceMax?: string; distanceKm?: number | null; midSeconds?: number | null }, mult: number) => {
+    const pmin = paceToSec(s.paceMin); const pmax = paceToSec(s.paceMax) ?? pmin;
+    if (s.distanceKm != null && pmin != null) { lo += s.distanceKm * pmin * mult; hi += s.distanceKm * (pmax ?? pmin) * mult; any = true; }
+    else if (s.midSeconds != null && s.distanceKm != null) { const t = s.midSeconds * s.distanceKm * mult; lo += t; hi += t; any = true; }
+  };
+  for (const st of steps) {
+    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(s => add(s, st.count));
+    else add(st as { paceMin?: string; paceMax?: string; distanceKm?: number | null; midSeconds?: number | null }, 1);
+  }
+  return any ? { lo, hi } : null;
+}
+
 function parseDurationMins(str: string | null | undefined): number | null {
   if (!str) return null;
   const parts = str.split(':').map(Number);
@@ -415,19 +438,35 @@ export default function PlanThread({
       // Pace gap shown as +0:04 (slower) / −0:04 (faster). In a race, faster
       // than the window reads marine; for a planned run it's off-plan (ember).
       const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace, isRace ? 'fast' : 'neg') : null;
-      const distDelta  = planKm != null && actKm != null ? actKm - planKm : null;
+
+      // Distance — tick within ±2% of the planned distance, else the signed gap.
+      const dist = planKm != null && actKm != null ? rangeCompare(actKm, planKm * 0.98, planKm * 1.02, (n) => n.toFixed(1)) : null;
 
       const hrBounds = plannedHrBounds(detailSteps);
       const planHr   = hrBounds ? (hrBounds.lo === hrBounds.hi ? `${hrBounds.lo}` : `${hrBounds.lo}–${hrBounds.hi}`) : '—';
       const hr = hrBounds && completed.avgHr != null ? rangeCompare(completed.avgHr, hrBounds.lo, hrBounds.hi, undefined, isRace ? 'fast' : 'neg') : null;
+
+      // Duration — window from the segment pace bounds.
+      const durBounds = plannedDurationBounds(detailSteps);
+      const actDurSec = actMins != null ? actMins * 60 : null;
+      const dur = durBounds && actDurSec != null ? rangeCompare(actDurSec, durBounds.lo, durBounds.hi, secToPace, isRace ? 'fast' : 'neg') : null;
+      const planDur = durBounds
+        ? (Math.round(durBounds.lo) === Math.round(durBounds.hi) ? secToClock(durBounds.lo) : `${secToClock(durBounds.lo)}–${secToClock(durBounds.hi)}`)
+        : (session.estimated_duration ?? '—');
+
+      // TSS — tick within ±10% of the planned estimate.
+      const planTss = session.estimated_tss ?? null;
+      const actTss  = completed.tss ?? null;
+      const tssB = planTss != null ? { lo: planTss * 0.9, hi: planTss * 1.1 } : null;
+      const tss  = tssB && actTss != null ? rangeCompare(actTss, tssB.lo, tssB.hi) : null;
 
       compareRows = [
         {
           metric: 'Distance',
           plan: planKm != null ? `${planKm} km` : '—',
           actual: actKm != null ? `${actKm % 1 === 0 ? actKm : actKm.toFixed(1)} km` : '—',
-          delta: distDelta != null ? `${distDelta >= 0 ? '+' : '−'}${Math.abs(distDelta).toFixed(1)}` : null,
-          tone: distDelta == null ? 'flat' : distDelta >= 0 ? 'pos' : 'neg',
+          delta: dist?.delta ?? null,
+          tone: dist?.tone ?? 'flat',
         },
         {
           metric: 'Pace',
@@ -442,6 +481,20 @@ export default function PlanThread({
           actual: completed.avgHr != null ? `${completed.avgHr}` : '—',
           delta: hr?.delta ?? null,
           tone: hr?.tone ?? 'flat',
+        },
+        {
+          metric: 'Duration',
+          plan: planDur,
+          actual: actDurSec != null ? secToClock(actDurSec) : (completed.durationStr || '—'),
+          delta: dur?.delta ?? null,
+          tone: dur?.tone ?? 'flat',
+        },
+        {
+          metric: 'TSS',
+          plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—',
+          actual: actTss != null ? `${actTss}` : '—',
+          delta: tss?.delta ?? null,
+          tone: tss?.tone ?? 'flat',
         },
       ];
     }

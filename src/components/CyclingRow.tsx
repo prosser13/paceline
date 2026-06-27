@@ -168,10 +168,17 @@ export default function CyclingRow({
     const pw = Number.isFinite(pmin) && Number.isFinite(pmax) && avgPower != null ? rangeCompare(avgPower, pmin, pmax) : null;
     const planHr = Number.isFinite(hmin) ? (hmin === hmax ? `${hmin}` : `${hmin}–${hmax}`) : '—';
     const hr = Number.isFinite(hmin) && Number.isFinite(hmax) && completed.avgHr != null ? rangeCompare(completed.avgHr, hmin, hmax) : null;
+    // Duration — tick within ±5% of the planned time; TSS — within ±10%.
+    const durGap = (n: number) => fmtMinSec(n / 60);
+    const dur = plannedMins != null && actualMins != null ? rangeCompare(actualMins * 60, plannedMins * 60 * 0.95, plannedMins * 60 * 1.05, durGap) : null;
+    const planDur = plannedMins != null ? fmtClock(plannedMins * 60) : '—';
+    const tssB = plannedTss != null ? { lo: plannedTss * 0.9, hi: plannedTss * 1.1 } : null;
+    const tss  = tssB && actualTss != null ? rangeCompare(actualTss, tssB.lo, tssB.hi) : null;
     rideCompareRows = [
-      { metric: 'Duration', plan: plannedMins != null ? fmtClock(plannedMins * 60) : '—', actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: durDelta != null ? signedMin(durDelta) : null, tone: 'flat' },
+      { metric: 'Duration', plan: planDur, actual: actualMins != null ? fmtClock(actualMins * 60) : '—', delta: dur?.delta ?? null, tone: dur?.tone ?? 'flat' },
       { metric: 'Avg power', plan: planPower, actual: avgPower != null ? `${avgPower} W` : '—', delta: pw?.delta ?? null, tone: pw?.tone ?? 'flat' },
       { metric: 'Avg HR', plan: planHr, actual: completed.avgHr != null ? `${completed.avgHr}` : '—', delta: hr?.delta ?? null, tone: hr?.tone ?? 'flat' },
+      { metric: 'TSS', plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—', actual: actualTss != null ? `${actualTss}` : '—', delta: tss?.delta ?? null, tone: tss?.tone ?? 'flat' },
     ];
   }
 
