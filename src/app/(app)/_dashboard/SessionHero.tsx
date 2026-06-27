@@ -114,7 +114,7 @@ export default function SessionHero({
             />
           </div>
           <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
-            <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+            <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="km" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
             <StatBox value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
             <StatBox value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
           </div>
