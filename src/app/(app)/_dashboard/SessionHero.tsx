@@ -117,7 +117,9 @@ export default function SessionHero({
       <div className={`px-[18px] pt-[18px] sm:px-[26px] sm:pt-[22px] ${isDone ? 'pb-[12px] sm:pb-[14px]' : 'pb-[18px] sm:pb-[26px]'}`}>
       {isDone ? (
         <>
-          <div className="flex items-start justify-between gap-6">
+          {/* Mobile: title + description full width, graph underneath (like the
+              prototype). Desktop: graph sits inline to the right. */}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
             <HeroTitle session={session} />
             <ProfileChart
               bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
@@ -127,7 +129,7 @@ export default function SessionHero({
             />
           </div>
           <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
-            <Box value={distActual != null ? distActual.toFixed(1) : '—'} label="Distance" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
+            <Box value={distActual != null ? distActual.toFixed(1) : '—'} label="Dist" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
             <Box value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
             <Box value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
           </div>
@@ -148,7 +150,7 @@ export default function SessionHero({
       )}
 
       {session.rationale && (
-        <p className={`text-[12px] leading-snug mt-[12px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${accent.rail}`}>
+        <p className={`text-[12px] leading-snug mt-[12px] border-l-[3px] pl-[14px] text-ink ${accent.rail}`}>
           {session.rationale}
         </p>
       )}
