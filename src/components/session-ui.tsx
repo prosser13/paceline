@@ -427,10 +427,12 @@ export function rangeCompare(
 
 const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;
 
-export function CompareTable({ rows }: { rows: CompareRow[] }) {
+// `bare` drops the left-border indent so the table spans the full width (the
+// hero card uses this so the cells don't squeeze rows onto two lines).
+export function CompareTable({ rows, bare = false }: { rows: CompareRow[]; bare?: boolean }) {
   const toneCls = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
   return (
-    <div className={`${DETAIL_WRAP} py-[10px]`}>
+    <div className={bare ? 'py-[2px]' : `${DETAIL_WRAP} py-[10px]`}>
       <div className="border border-fog rounded-[11px] overflow-hidden">
         <div className="grid bg-bone" style={COMPARE_COLS}>
           {['Metric', 'Plan', 'Actual', 'Δ'].map((h, i) => (

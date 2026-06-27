@@ -148,7 +148,7 @@ export default function SessionHero({
       )}
 
       {session.rationale && (
-        <p className={`text-[16.5px] leading-relaxed mt-[14px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${accent.rail}`}>
+        <p className={`text-[12px] leading-snug mt-[12px] border-l-[3px] pl-[14px] max-w-[64ch] text-ink ${accent.rail}`}>
           {session.rationale}
         </p>
       )}
