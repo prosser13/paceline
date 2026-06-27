@@ -4,6 +4,7 @@ import { getStravaTokens, updateStravaTokens, markStravaSynced } from '@/data/st
 import {
   getEarliestSessionDate, listSessionsForMatching, completedWorkoutExistsForSession,
   insertCompletedWorkout, listCompletedMissingSegments, updateCompletedWorkout,
+  listCompletedSessionIds,
 } from '@/data/plan-sessions';
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
@@ -198,6 +199,13 @@ async function computeForActivity(
 
 const BACKFILL_LIMIT = 50;
 
+// "H:MM" estimated_duration → minutes (e.g. "0:10" → 10). Null when blank/bad.
+function hmmToMins(d: string | null | undefined): number | null {
+  if (!d) return null;
+  const [h, m] = d.split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+}
+
 export async function syncActivities(): Promise<{ synced: number; matched: number }> {
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
@@ -252,6 +260,12 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   const planSessions = await listSessionsForMatching();
   if (!planSessions.length) return { synced: relevant.length, matched: 0 };
 
+  // Sessions already filled (this sync or a prior one) so a second same-day
+  // activity skips them and lands on the next open session of its kind, instead
+  // of all colliding on the first and the extras orphaning as "off-plan".
+  const takenSessionIds = new Set(await listCompletedSessionIds());
+  const isOpen = (s: { id: string }) => !takenSessionIds.has(s.id);
+
   let matched = 0;
   for (const activity of stored) {
     const kind = kindByStravaId.get(activity.strava_activity_id);
@@ -266,7 +280,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       // distance only disambiguates when several runs are planned that day.
       const sameDay = planSessions.filter(s =>
         s.session_type !== 'STRENGTH' && s.activity_type !== 'cycling' &&
-        s.scheduled_date === activity.activity_date && Number(s.distance_km) > 0);
+        s.scheduled_date === activity.activity_date && Number(s.distance_km) > 0 && isOpen(s));
       if (sameDay.length === 1) {
         match = sameDay[0];
       } else if (sameDay.length > 1) {
@@ -284,6 +298,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       for (const s of planSessions) {
         if (s.activity_type !== 'cycling') continue;
         if (s.scheduled_date !== activity.activity_date) continue;
+        if (!isOpen(s)) continue;
         const planKm = Number(s.distance_km);
         const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
         if (err < bestErr) { bestErr = err; match = s; }
@@ -291,21 +306,28 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     } else if (kind === 'strength') {
       // Strength has no distance, and recorded duration runs long (elapsed time can
       // push a 1h session to 1h30), so don't gate on duration — match purely on the
-      // same-day strength/core session.
+      // first open same-day strength/core session.
       match = planSessions.find(s =>
         (s.session_type === 'STRENGTH' || s.session_type === 'CORE') &&
-        s.scheduled_date === activity.activity_date) ?? null;
+        s.scheduled_date === activity.activity_date && isOpen(s)) ?? null;
     } else {
-      // Yoga (mobility/stretch) — no distance, short duration; match the same-day
-      // planned yoga session.
-      match = planSessions.find(s =>
-        s.session_type === 'YOGA' && s.scheduled_date === activity.activity_date) ?? null;
+      // Yoga (mobility/stretch) — no distance. A day can hold several (warm-up +
+      // stretches), so pick the open same-day yoga session whose planned duration
+      // is closest to the activity (a 4-min warm-up vs a 19-min stretch); fall
+      // back to the first open one when durations are unknown.
+      const cands = planSessions.filter(s =>
+        s.session_type === 'YOGA' && s.scheduled_date === activity.activity_date && isOpen(s));
+      let bestErr = Infinity;
+      for (const s of cands) {
+        const planMin = hmmToMins(s.estimated_duration);
+        const err = planMin != null && activity.duration_mins != null ? Math.abs(activity.duration_mins - planMin) : 0;
+        if (err < bestErr) { bestErr = err; match = s; }
+      }
     }
     if (!match) continue;
 
-    // Idempotent: one completion per planned session. Guarding on the completion
-    // (not the match row) means a prior run that wrote a match but died before the
-    // completion still gets the completion written here.
+    // Idempotent safety: one completion per planned session. (Open sessions are
+    // already excluded above; this guards a partial prior run or a concurrent sync.)
     if (await completedWorkoutExistsForSession(match.id)) continue;
 
     // Per-segment pacing only applies to distance-structured runs.
@@ -342,6 +364,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       });
     }
 
+    takenSessionIds.add(match.id);   // claim it so the next activity skips it
     matched++;
   }
 
