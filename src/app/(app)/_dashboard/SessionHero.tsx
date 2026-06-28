@@ -19,15 +19,21 @@ const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
   fern:    { rail: 'border-l-fern',    solid: FERN },
 };
 
-// Run name + descriptor — identical across the done / not-done layouts.
-function HeroTitle({ session }: { session: PlanSession }) {
+// Run name + descriptor — identical across the done / not-done layouts. The
+// optional km prefix leads the description (upcoming runs, where distance no
+// longer sits in the right-hand metric stack).
+function HeroTitle({ session, kmPrefix }: { session: PlanSession; kmPrefix?: string | null }) {
   return (
     <div className="min-w-0">
       <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
         <RunGlyph size={24} className="shrink-0 text-ink" />{session.name}
       </h3>
-      {session.description && (
-        <div className="text-[15px] text-stone">{session.description}</div>
+      {(kmPrefix || session.description) && (
+        <div className="text-[15px] text-stone">
+          {kmPrefix && <span className="font-semibold text-ink">{kmPrefix}</span>}
+          {kmPrefix && session.description && ' · '}
+          {session.description}
+        </div>
       )}
     </div>
   );
@@ -82,6 +88,8 @@ export default function SessionHero({
     planTss: session.estimated_tss ?? null, actTss: tssActual, isRace,
   }) : null;
   const cmp = (m: string) => compare?.rows.find(r => r.metric === m) ?? null;
+  // Upcoming: distance leads the description instead of the right metric stack.
+  const planKmLabel = distPlanned != null ? `${distPlanned % 1 === 0 ? distPlanned : distPlanned.toFixed(1)} km` : null;
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
@@ -120,16 +128,19 @@ export default function SessionHero({
           </div>
         </>
       ) : (
-        <div className="flex justify-between items-start gap-6">
-          <HeroTitle session={session} />
-          <div className="flex items-center gap-4 shrink-0">
+        // Mobile: title + km-led description full width, then graph + metrics
+        // beneath (so the wide graph never collides with the title). Desktop:
+        // graph + metrics inline on the right, top-aligned with the title.
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-[12px] sm:gap-6">
+          <HeroTitle session={session} kmPrefix={planKmLabel} />
+          <div className="flex items-start gap-4 shrink-0">
             <ProfileChart
               bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
               size="lg"
               color={INTENSITY[intensity]?.hex ?? '#17191e'}
               opacity={segActuals ? 0.9 : 0.6}
             />
-            <MetricBlock duration={displayDuration} distanceKm={distPlanned} tss={displayTss} estimated size="lg" />
+            <MetricBlock duration={displayDuration} distanceKm={null} tss={displayTss} estimated size="lg" />
           </div>
         </div>
       )}
