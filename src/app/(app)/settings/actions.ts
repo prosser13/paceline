@@ -5,7 +5,7 @@ import {
   setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones,
   savePowerConfig, replacePowerZones, saveBikeHrConfig, replaceBikeHrZones,
 } from '@/data/zones';
-import { getPlanTargetInfo, updatePlanTarget } from '@/data/plans';
+import { getPlanTargetInfo, updatePlanTarget, updatePlanStrengthPriority } from '@/data/plans';
 import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import {
   replacePlanConstraints, saveCoachingPrefs,
@@ -214,6 +214,19 @@ export async function saveTargetTime(planId: number, targetTime: string) {
   revalidatePath('/');
 
   return { ok: true as const, pace: newPace };
+}
+
+// ── Plan: strength priority (intra-day session ordering) ─────
+
+export async function saveStrengthPriority(planId: number, value: boolean) {
+  await requireUser();
+  await updatePlanStrengthPriority(planId, value);
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
+
+  return { ok: true };
 }
 
 // ── Coaching: scheduling constraints the agent must respect ───
