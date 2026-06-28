@@ -482,6 +482,20 @@ export default function PlanThread({
       ];
     }
 
+    // The graph (upcoming) / vs-plan (completed) slot, rendered at two sizes:
+    // a small one beneath the description on mobile, a larger one in its own
+    // centred column on desktop (see below).
+    const profileBars = buildProfileBars(
+      { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
+      thresholdPace, zones, segActuals,
+    );
+    const renderSlot = (size: 'xs' | 'sm') => (isDone && (ovTss || ovDur)) ? (
+      <DeltaBlock tss={ovTss} dur={ovDur} />
+    ) : (
+      <ProfileChart bars={profileBars} size={size}
+        color={INTENSITY[intensity]?.hex ?? '#17191e'} opacity={segActuals ? 0.9 : 0.6} />
+    );
+
     return withUnlink(
       <div key={session.id}>
         <div
@@ -518,40 +532,28 @@ export default function PlanThread({
                 </span>
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-start sm:gap-[14px] mt-[7px]">
-                <div className="min-w-0">
-                  {(kmLabel || session.description) && (
-                    <div className="text-[14px] leading-snug text-stone">
-                      {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
-                      {kmLabel && session.description && ' · '}
-                      {session.description}
-                    </div>
-                  )}
-                  {session.race_slug && (
-                    <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
-                      className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
-                      Race Guide →
-                    </Link>
-                  )}
-                </div>
-                {/* Completed: vs-plan. Upcoming: the planned profile. */}
-                <div className="mt-[8px] sm:mt-0 shrink-0">
-                  {isDone && (ovTss || ovDur) ? (
-                    <DeltaBlock tss={ovTss} dur={ovDur} />
-                  ) : (
-                    <ProfileChart
-                      bars={buildProfileBars(
-                        { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
-                        thresholdPace, zones, segActuals,
-                      )}
-                      size="xs"
-                      color={INTENSITY[intensity]?.hex ?? '#17191e'}
-                      opacity={segActuals ? 0.9 : 0.6}
-                    />
-                  )}
-                </div>
+              <div className="mt-[7px]">
+                {(kmLabel || session.description) && (
+                  <div className="text-[14px] leading-snug text-stone">
+                    {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
+                    {kmLabel && session.description && ' · '}
+                    {session.description}
+                  </div>
+                )}
+                {session.race_slug && (
+                  <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
+                    className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
+                    Race Guide →
+                  </Link>
+                )}
+                {/* Mobile: graph / vs-plan beneath the description (unchanged). */}
+                <div className="mt-[8px] sm:hidden">{renderSlot('xs')}</div>
               </div>
             </div>
+
+            {/* Desktop: graph / vs-plan in its own column, vertically centred so
+                it straddles the title + description, right beside the metrics. */}
+            <div className="hidden sm:flex items-center self-stretch shrink-0">{renderSlot('sm')}</div>
 
             <MetricBlock
               duration={displayDuration}
