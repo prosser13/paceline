@@ -132,6 +132,8 @@ export default function CyclingRow({
   const dispDuration = isDone && actualMins != null ? fmtClock(actualMins * 60) : duration;
   const dispDistance = isDone ? completed?.distanceKm ?? null : null;
   const dispTss      = isDone ? actualTss : plannedTss;
+  // Distance leads the description line (not the right-hand metric stack).
+  const kmLabel = dispDistance != null ? `${dispDistance % 1 === 0 ? dispDistance : dispDistance.toFixed(1)} km` : null;
 
   // Completed ride → Plan / Actual / Δ table (Distance/Power/HR/Duration/TSS) via
   // the shared builder, so the plan rows read identically to the run rows and the
@@ -178,22 +180,27 @@ export default function CyclingRow({
           </span>
         </div>
 
-        {/* Info row — description (with vs-plan beneath, level with the TSS) on
-            the left; metrics on the right. */}
-        <div className="flex items-stretch justify-between gap-[14px] mt-[7px]">
-          <div className="flex-1 min-w-0 flex flex-col">
-            {session.description && <div className="text-[14px] leading-snug text-stone">{session.description}</div>}
+        {/* Info row — km + description on the left (vs-plan beside it on desktop,
+            beneath on mobile); time + TSS top-aligned on the right. */}
+        <div className="flex items-start justify-between gap-[14px] mt-[7px]">
+          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start sm:gap-[14px]">
+            <div className="min-w-0">
+              {(kmLabel || session.description) && (
+                <div className="text-[14px] leading-snug text-stone">
+                  {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
+                  {kmLabel && session.description && ' · '}
+                  {session.description}
+                </div>
+              )}
+            </div>
             {isDone && (
-              <div className="mt-auto pt-[8px]">
+              <div className="mt-[8px] sm:mt-0 shrink-0">
                 <CyclingDelta tss={ovTss} dur={ovDur} />
               </div>
             )}
           </div>
           <div className="shrink-0 text-right">
             <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{dispDuration ?? '—'}</div>
-            {dispDistance != null && (
-              <div className="font-mono text-[13px] text-ink mt-[3px]">{dispDistance % 1 === 0 ? dispDistance : dispDistance.toFixed(1)} km</div>
-            )}
             {dispTss != null && (
               <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
             )}

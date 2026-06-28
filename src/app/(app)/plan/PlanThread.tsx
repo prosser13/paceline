@@ -290,6 +290,7 @@ export default function PlanThread({
 
   const pastWeeks         = weeks.filter(w => w.date_to < todayStr);
   const currentAndFuture  = weeks.filter(w => w.date_to >= todayStr);
+  const currentWeekNum    = weeks.find(w => w.date_from <= todayStr && w.date_to >= todayStr)?.week_number ?? null;
 
   function renderSessionRow(session: PlanSession) {
     const status    = resolveStatus(session, todayStr, completedMap);
@@ -396,6 +397,9 @@ export default function PlanThread({
     const plannedDurationStr = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
     const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
     const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
+    // Distance now leads the description line (not the right-hand metric stack).
+    const rowKm   = isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null);
+    const kmLabel = rowKm != null ? `${rowKm % 1 === 0 ? rowKm : rowKm.toFixed(1)} km` : null;
 
     // Completed run → Plan / Actual / Δ comparison table (distance, pace, HR).
     // ovDur / ovTss feed the compact "vs plan" line so it matches the table.
@@ -510,21 +514,27 @@ export default function PlanThread({
             </span>
           </div>
 
-          {/* Info row — description (with the vs-plan line / graph beneath it,
-              level with the TSS) on the left; metrics on the right. */}
-          <div className="flex items-stretch justify-between gap-[14px] mt-[7px]">
-            <div className="flex-1 min-w-0 flex flex-col">
-              {session.description && (
-                <div className="text-[14px] leading-snug text-stone">{session.description}</div>
-              )}
-              {session.race_slug && (
-                <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
-                  className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
-                  Race Guide →
-                </Link>
-              )}
-              {/* Completed: vs-plan, bottom-left. Upcoming: the planned profile. */}
-              <div className="mt-auto pt-[8px]">
+          {/* Info row — km + description on the left (graph/vs-plan beside it on
+              desktop, beneath on mobile); time + TSS top-aligned on the right. */}
+          <div className="flex items-start justify-between gap-[14px] mt-[7px]">
+            <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start sm:gap-[14px]">
+              <div className="min-w-0">
+                {(kmLabel || session.description) && (
+                  <div className="text-[14px] leading-snug text-stone">
+                    {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
+                    {kmLabel && session.description && ' · '}
+                    {session.description}
+                  </div>
+                )}
+                {session.race_slug && (
+                  <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
+                    className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
+                    Race Guide →
+                  </Link>
+                )}
+              </div>
+              {/* Completed: vs-plan. Upcoming: the planned profile. */}
+              <div className="mt-[8px] sm:mt-0 shrink-0">
                 {isDone && (ovTss || ovDur) ? (
                   <DeltaBlock tss={ovTss} dur={ovDur} />
                 ) : (
@@ -543,7 +553,7 @@ export default function PlanThread({
 
             <MetricBlock
               duration={displayDuration}
-              distanceKm={isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null)}
+              distanceKm={null}
               tss={displayTss}
               estimated={!isDone}
             />
@@ -621,14 +631,18 @@ export default function PlanThread({
 
     return (
       <div key={dateStr} id={isToday ? 'plan-today' : undefined} className={`scroll-mt-[16px] ${dim ? 'opacity-55' : ''}`}>
-        <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] text-[13.5px] font-semibold ${isToday ? 'text-oxblood' : isTomorrow ? 'text-marine' : 'text-ink'}`}>
-          <span>{weekday}</span>
-          <span className="font-normal text-stone text-[12.5px]">{dateLabel}</span>
+        <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] font-semibold ${
+          isToday    ? 'bg-oxblood text-bone rounded-[8px] px-[12px] py-[8px]'
+          : isTomorrow ? 'bg-marine text-bone rounded-[8px] px-[12px] py-[8px]'
+          : 'text-ink'
+        }`}>
+          <span className="text-[16px]">{weekday}</span>
+          <span className={`font-normal text-[15px] ${isToday || isTomorrow ? 'text-bone/75' : 'text-stone'}`}>{dateLabel}</span>
           {isToday && (
-            <span className="ml-auto font-mono text-[9.5px] tracking-[.05em] uppercase text-bone bg-oxblood rounded-[5px] px-[7px] py-[3px]">Today</span>
+            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Today</span>
           )}
           {isTomorrow && (
-            <span className="ml-auto font-mono text-[9.5px] tracking-[.05em] uppercase text-bone bg-marine rounded-[5px] px-[7px] py-[3px]">Tomorrow</span>
+            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Tomorrow</span>
           )}
         </div>
         {sessions.map(s => sessionNode(s))}
@@ -644,6 +658,8 @@ export default function PlanThread({
   function renderWeekSection(week: PlanWeek, dimPast: boolean) {
     const sessions  = byWeek[week.week_number] ?? [];
     const isCurrent = week.date_from <= todayStr && week.date_to >= todayStr;
+    // Open the next week too, so the upcoming days are visible without a click.
+    const isNext    = currentWeekNum != null && week.week_number === currentWeekNum + 1;
 
     let weekTss = 0, weekTssEstimated = false, weekKm = 0;
     for (const sess of sessions) {
@@ -665,7 +681,7 @@ export default function PlanThread({
 
     const hex = PHASE_HEX[week.phase] ?? '#8a857a';
     return (
-      <details key={week.week_number} className="group border-t border-fog" open={isCurrent}>
+      <details key={week.week_number} className="group border-t border-fog" open={isCurrent || isNext}>
         <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[11px] py-[12px] px-[2px]">
           <span className="w-[4px] self-stretch rounded-[2px] min-h-[34px] shrink-0" style={{ background: hex }} aria-hidden="true" />
           <span className="flex-1 min-w-0 flex flex-col">
