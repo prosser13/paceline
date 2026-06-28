@@ -34,7 +34,7 @@ It returns one JSON object:
 | `zones` | Threshold pace, pace/HR/power zones — used to translate intent into targets |
 | `constraints` | Standing scheduling limits the user set (see §3) |
 | `coaching` | Autonomy + guardrails + standing guidance (see §3) |
-| `recent_changes` | Tail of the change log — what prior passes did and why (🔜 empty until §4 lands) |
+| `recent_changes` | Tail of the change log — what prior passes did and why (§4) |
 
 Reason from this object. Don't re-derive it by querying tables piecemeal — the
 point of one deterministic read is that every session starts from the same state.
@@ -80,29 +80,65 @@ briefing; never override them.
 
 ---
 
-## 4. How to change the plan 🔜
+## 4. How to change the plan ✅
 
-Not yet wired — documented here so it's built against a fixed contract.
+**All mutations go through one logged path** — never raw `UPDATE`s. Apply one
+change to one session:
 
-**All mutations go through a single logged path** (`adjustment_logs`), never raw
-`UPDATE`s. Each change records:
+```
+POST /api/plan-change
+{
+  "idempotency_key": "2026-06-28:ease-w4-long-run",   // unique per intent
+  "actor": "claude",                                   // "claude" | "user"
+  "reason": "Form is -25; trim the long run to protect recovery",
+  "session_id": "<plan_sessions.id>",
+  "patch": { "distance_km": 26, "estimated_tss": 150, "rationale": "…" }
+}
+```
 
-- the session(s) touched
-- `before_state` / `after_state` (the diff) — enables review **and** revert
-- a reason
-- an actor (`claude` / `user`)
-- an idempotency key — so the same intent in a new session can't double-apply
+(or `applyPlanChange(input)` from [`src/data/plan-mutations.ts`](../src/data/plan-mutations.ts).)
 
-Re-running a coaching pass must be safe. (A single Strava activity once double-logged
-across two yoga slots because dedup was keyed to the wrong thing — the same class of
-bug at plan scale is what the idempotency key prevents.)
+- **`patch`** may set only editable fields: `scheduled_date` (moving a session also
+  re-derives `day_of_week`), `am_pm`, `session_type`, `activity_type`, `name`,
+  `description`, `distance_km`, `warmup_km`, `cooldown_km`, `structure`,
+  `target_pace`, `target_pace_end`, `estimated_tss`, `estimated_duration`,
+  `intensity`, `profile_shape`, `week_phase`, `priority`, `status`, `rationale`,
+  `notes`. Any other field rejects the whole change.
+- **`idempotency_key`** makes re-runs safe: a repeated key returns
+  `{ applied: false, status: "duplicate" }` and changes nothing. (A single Strava
+  activity once double-logged across two yoga slots because dedup was keyed to the
+  wrong thing — the key is that lesson, at plan scale.)
+- Each apply records `before_state` / `after_state`, the reason, and the actor in
+  `adjustment_logs` — enabling review and revert.
 
-**Hard invariants** (independent of autonomy):
-- Never modify a session with `status = 'completed'`, or any session dated before `as_of`.
-- Never change a session's `id`.
+**Responses:** `applied` (done), `duplicate` (key already used), `proposal_only`
+(autonomy is `propose` — surface it for approval, nothing changed), `rejected`
+(an invariant or guardrail blocked it, with a reason).
+
+**Revert** a prior change:
+
+```
+POST /api/plan-change
+{ "revert_adjustment_id": "<adjustment_logs.id>", "reason": "…" }
+```
+
+Replays the change's `before_state` and writes its own audit row. Idempotent per
+source change.
+
+**Enforced in code:**
+- Never modifies a `completed` session or one dated before today; never moves a
+  session into the past.
+- Never changes a session's `id` (not an editable field).
+- For `actor: "claude"`: honours `autonomy` (`propose` → not applied;
+  `auto_within_week` → must stay inside the current week) and `protect_priority_a`.
+  User-initiated changes bypass these agent guardrails but not the safety invariants.
+
+**Agent-respected (not code-enforced — they're week-level, not single-session):**
+- `max_weekly_ramp_pct`, `min_rest_days`. Check these yourself against the briefing
+  before issuing changes.
 - Keep targets consistent with `zones` — derive paces/HR from the zone windows,
   don't invent them.
-- Respect every constraint and guardrail in §3.
+- Honour every `constraint` in §3.
 
 ---
 
