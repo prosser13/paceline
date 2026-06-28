@@ -130,6 +130,27 @@ export async function getPlanStrengthPriority(planId: number): Promise<boolean> 
   return !!(data as { strength_priority?: boolean } | null)?.strength_priority;
 }
 
+export interface PlanPrefRow {
+  id: number;
+  name: string;
+  kind: string;
+  strength_priority: boolean;
+}
+
+// Plans with their strength-priority flag, in display order (settings).
+export async function listPlanPrefs(): Promise<PlanPrefRow[]> {
+  const { data } = await supabaseAdmin
+    .from('plans')
+    .select('id, name, kind, strength_priority')
+    .order('sort_order');
+  return (data ?? []) as PlanPrefRow[];
+}
+
+// Set whether a plan orders strength ahead of running.
+export async function updatePlanStrengthPriority(planId: number, value: boolean): Promise<void> {
+  await supabaseAdmin.from('plans').update({ strength_priority: value }).eq('id', planId);
+}
+
 // ── plan_weeks ───────────────────────────────────────────────
 
 // The plan week containing `onDate`, or null.

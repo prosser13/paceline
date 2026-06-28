@@ -6,11 +6,13 @@ import {
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
+import { listPlanPrefs } from '@/data/plans';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
 import PowerZonesClient from './PowerZonesClient';
 import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
+import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
 import {
@@ -22,7 +24,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs,
+    constraints, coachingPrefs, planPrefs,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -36,6 +38,7 @@ export default async function SettingsPage() {
     listRacePlans(),
     listPlanConstraints(),
     getCoachingPrefs(),
+    listPlanPrefs(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -124,6 +127,22 @@ export default async function SettingsPage() {
             {targetTimePlans.length
               ? <TargetTimesClient plans={targetTimePlans} />
               : <p className="text-[14px] text-stone/70">No races yet.</p>}
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Plan · strength priority</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              How a day with both a run and a lift is ordered. <span className="text-ink font-medium">Strength
+              first</span> leads the day with the lift (suited to ultra/strength blocks);
+              <span className="text-ink font-medium"> run first</span> puts the run ahead and the lift last.
+            </p>
+            {planPrefs.length
+              ? <PlanPrefsClient plans={planPrefs} />
+              : <p className="text-[14px] text-stone/70">No plans yet.</p>}
           </div>
         </section>
 
