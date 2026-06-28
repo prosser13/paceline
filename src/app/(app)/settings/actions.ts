@@ -6,6 +6,7 @@ import {
   savePowerConfig, replacePowerZones, saveBikeHrConfig, replaceBikeHrZones,
 } from '@/data/zones';
 import { getPlanTargetInfo, updatePlanTarget, updatePlanStrengthPriority } from '@/data/plans';
+import { revertPlanChange } from '@/data/plan-mutations';
 import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import {
   replacePlanConstraints, saveCoachingPrefs,
@@ -214,6 +215,19 @@ export async function saveTargetTime(planId: number, targetTime: string) {
   revalidatePath('/');
 
   return { ok: true as const, pace: newPace };
+}
+
+// ── Plan: revert a logged change (change-log review card) ────
+
+export async function revertAdjustment(adjustmentId: string) {
+  await requireUser();
+  const result = await revertPlanChange(adjustmentId, 'user', 'Reverted from settings');
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
+
+  return result;
 }
 
 // ── Plan: strength priority (intra-day session ordering) ─────

@@ -148,4 +148,6 @@ source change.
   target times, strength priority).
 - **View the plan** in human form: the dashboard (`/`) and plan page (`/plan`) —
   these *are* the rendered context; there's no separate "context" screen.
-- **Review changes** the agent made: 🔜 a read-only change-log card (after §4).
+- **Review changes** the agent made: the change-log card in `/settings`
+  ("Coaching · change log") — every change newest-first with its reason and an
+  inline **Revert**.

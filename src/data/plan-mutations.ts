@@ -219,6 +219,50 @@ export async function revertPlanChange(
   return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: current, after: restore };
 }
 
+export interface AdjustmentEntry {
+  id: string;
+  logged_at: string | null;
+  actor: string;
+  operation: string;
+  reason: string | null;
+  before_state: Record<string, unknown> | null;
+  after_state: Record<string, unknown> | null;
+  session: { name: string; scheduled_date: string; session_type: string } | null;
+  reverted: boolean;   // an update that has since been reverted (no-op for revert rows)
+}
+
+// The change log for the review card — recent entries with their session context,
+// each flagged if it's already been reverted.
+export async function listAdjustments(limit = 50): Promise<AdjustmentEntry[]> {
+  const { data } = await supabaseAdmin
+    .from('adjustment_logs')
+    .select('id, actor, operation, reason, before_state, after_state, logged_at, plan_sessions(name, scheduled_date, session_type)')
+    .order('logged_at', { ascending: false })
+    .limit(limit);
+
+  // Which updates have a matching revert row (idempotency_key = revert:<id>).
+  const { data: reverts } = await supabaseAdmin
+    .from('adjustment_logs')
+    .select('idempotency_key')
+    .like('idempotency_key', 'revert:%');
+  const revertedIds = new Set((reverts ?? []).map(r => (r.idempotency_key as string).slice('revert:'.length)));
+
+  return (data ?? []).map(r => {
+    const ps = Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions;
+    return {
+      id: r.id as string,
+      logged_at: (r.logged_at as string | null) ?? null,
+      actor: r.actor as string,
+      operation: r.operation as string,
+      reason: (r.reason as string | null) ?? null,
+      before_state: (r.before_state as Record<string, unknown> | null) ?? null,
+      after_state: (r.after_state as Record<string, unknown> | null) ?? null,
+      session: ps ? { name: ps.name as string, scheduled_date: ps.scheduled_date as string, session_type: ps.session_type as string } : null,
+      reverted: revertedIds.has(r.id as string),
+    };
+  });
+}
+
 async function findByKey(key: string): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('adjustment_logs')
