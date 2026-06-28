@@ -684,6 +684,7 @@ export default function PlanThread({
     const dates = Array.from(new Set([...Object.keys(byDate), ...offPlanDates])).sort();
 
     const hex = PHASE_HEX[week.phase] ?? '#8a857a';
+    const weekRace = sessions.find(s => s.session_type === 'RACE' && s.priority)?.priority ?? null;
     return (
       <details key={week.week_number} className="group border-t border-fog" open={isCurrent || isNext}>
         <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[11px] py-[12px] px-[2px]">
@@ -697,6 +698,7 @@ export default function PlanThread({
           {isCurrent && (
             <span className="font-mono text-[9.5px] tracking-[.09em] uppercase text-oxblood font-semibold shrink-0">Now</span>
           )}
+          {weekRace && <RaceBadge priority={weekRace} />}
           <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
         </summary>
         <div className="pb-[10px]">
