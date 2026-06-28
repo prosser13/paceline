@@ -164,40 +164,42 @@ export default function CyclingRow({
         aria-expanded={hasDetail ? open : undefined}
         onKeyDown={hasDetail ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } } : undefined}
       >
-        {/* Title row — full-width name next to the glyph. */}
-        <div className="flex items-start gap-[7px] leading-tight">
-          {next && (
-            <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">Next up</span>
-          )}
-          {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
-          <span className="text-marine shrink-0 mt-[3px]"><BikeGlyph size={emphasis ? 18 : 15} /></span>
-          <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>
-            {session.name}
-            {hasDetail && (
-              <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
-                style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
-            )}
-          </span>
-        </div>
+        {/* Title + description on the left, time + TSS top-aligned with the title
+            on the right (so a 1-line ride leaves no empty space below). The
+            vs-plan sits beside the description on desktop, beneath it on mobile. */}
+        <div className="flex items-start justify-between gap-[14px]">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start gap-[7px] leading-tight">
+              {next && (
+                <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">Next up</span>
+              )}
+              {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
+              <span className="text-marine shrink-0 mt-[3px]"><BikeGlyph size={emphasis ? 18 : 15} /></span>
+              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>
+                {session.name}
+                {hasDetail && (
+                  <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
+                    style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
+                )}
+              </span>
+            </div>
 
-        {/* Info row — km + description on the left (vs-plan beside it on desktop,
-            beneath on mobile); time + TSS top-aligned on the right. */}
-        <div className="flex items-start justify-between gap-[14px] mt-[7px]">
-          <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-start sm:gap-[14px]">
-            <div className="min-w-0">
-              {(kmLabel || session.description) && (
-                <div className="text-[14px] leading-snug text-stone">
-                  {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
-                  {kmLabel && session.description && ' · '}
-                  {session.description}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:gap-[14px] mt-[7px]">
+              <div className="min-w-0">
+                {(kmLabel || session.description) && (
+                  <div className="text-[14px] leading-snug text-stone">
+                    {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
+                    {kmLabel && session.description && ' · '}
+                    {session.description}
+                  </div>
+                )}
+              </div>
+              {isDone && (
+                <div className="mt-[8px] sm:mt-0 shrink-0">
+                  <CyclingDelta tss={ovTss} dur={ovDur} />
                 </div>
               )}
             </div>
-            {isDone && (
-              <div className="mt-[8px] sm:mt-0 shrink-0">
-                <CyclingDelta tss={ovTss} dur={ovDur} />
-              </div>
-            )}
           </div>
           <div className="shrink-0 text-right">
             <div className={`font-display font-semibold ${emphasis ? 'text-[21px]' : 'text-[19px]'} leading-none text-ink`}>{dispDuration ?? '—'}</div>
