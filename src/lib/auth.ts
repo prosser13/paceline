@@ -23,3 +23,14 @@ export async function requireUser(): Promise<User> {
   if (!user) throw new Error('Unauthorized');
   return user;
 }
+
+// Authorise a route handler for either a logged-in user OR a valid service token
+// (Authorization: Bearer <PLAN_AGENT_TOKEN>). The token path lets the headless
+// coaching agent — which has no browser session — reach the plan-agent endpoints.
+// Returns false unless PLAN_AGENT_TOKEN is set, so an unset/blank env can't be
+// matched by an empty header.
+export async function isAuthorizedRequest(request: Request): Promise<boolean> {
+  const token = process.env.PLAN_AGENT_TOKEN;
+  if (token && request.headers.get('authorization') === `Bearer ${token}`) return true;
+  return !!(await getCurrentUser());
+}

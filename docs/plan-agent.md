@@ -9,6 +9,12 @@ data. This contract is the read it starts from and the rules it works within.
 
 ---
 
+## Auth
+
+Both endpoints accept either a logged-in session (the app/UI) or a service token
+for the headless coach: `Authorization: Bearer <PLAN_AGENT_TOKEN>`. The token must
+match in Vercel (prod) and wherever the agent reads it.
+
 ## 1. Start here — the briefing read ✅
 
 Load the whole picture in one call:
