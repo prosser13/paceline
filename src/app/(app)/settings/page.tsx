@@ -5,17 +5,24 @@ import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
 } from '@/data/zones';
+import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
 import PowerZonesClient from './PowerZonesClient';
 import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
-import { saveBikeHrZones, type ZoneInput, type HrZoneInput, type PowerZoneInput } from './actions';
+import ConstraintsClient from './ConstraintsClient';
+import CoachingClient from './CoachingClient';
+import {
+  saveBikeHrZones,
+  type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
+} from './actions';
 
 export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
+    constraints, coachingPrefs,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -27,6 +34,8 @@ export default async function SettingsPage() {
     getBikeHrConfig(),
     listBikeHrZones(),
     listRacePlans(),
+    listPlanConstraints(),
+    getCoachingPrefs(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -68,6 +77,20 @@ export default async function SettingsPage() {
     hr_max: String(z.hr_max),
   }));
 
+  const constraintInputs: ConstraintInput[] = constraints.map(c => ({
+    kind:        (c.kind as ConstraintInput['kind']) ?? 'note',
+    label:       c.label ?? '',
+    day_of_week: c.day_of_week != null ? String(c.day_of_week) : '1',
+    date_from:   c.date_from ?? '',
+    date_to:     c.date_to ?? '',
+  }));
+
+  const coachAutonomy: Autonomy = (coachingPrefs?.autonomy as Autonomy) ?? 'propose';
+  const coachMaxRamp  = coachingPrefs?.max_weekly_ramp_pct != null ? String(coachingPrefs.max_weekly_ramp_pct) : '10';
+  const coachMinRest  = coachingPrefs?.min_rest_days != null ? String(coachingPrefs.min_rest_days) : '1';
+  const coachProtectA = coachingPrefs?.protect_priority_a ?? true;
+  const coachNotes    = coachingPrefs?.notes ?? '';
+
   return (
     <>
       <div className="px-[26px] py-[22px] max-w-[720px]">
@@ -101,6 +124,39 @@ export default async function SettingsPage() {
             {targetTimePlans.length
               ? <TargetTimesClient plans={targetTimePlans} />
               : <p className="text-[14px] text-stone/70">No races yet.</p>}
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · constraints</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Hard limits on when you can train. The coach reads these every time it reviews
+              your plan and works around them — recurring days off, travel blackouts, or a
+              free-text rule it should always respect.
+            </p>
+            <ConstraintsClient initialConstraints={constraintInputs} />
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · autonomy</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              How much latitude the coach has when it adapts your plan, and the guardrails it
+              must stay within. Changes are picked up on the next coaching review.
+            </p>
+            <CoachingClient
+              initialAutonomy={coachAutonomy}
+              initialMaxRamp={coachMaxRamp}
+              initialMinRest={coachMinRest}
+              initialProtectA={coachProtectA}
+              initialNotes={coachNotes}
+            />
           </div>
         </section>
 

@@ -7,6 +7,10 @@ import {
 } from '@/data/zones';
 import { getPlanTargetInfo, updatePlanTarget } from '@/data/plans';
 import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
+import {
+  replacePlanConstraints, saveCoachingPrefs,
+  type ConstraintKind, type Autonomy,
+} from '@/data/coaching';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -210,4 +214,62 @@ export async function saveTargetTime(planId: number, targetTime: string) {
   revalidatePath('/');
 
   return { ok: true as const, pace: newPace };
+}
+
+// ── Coaching: scheduling constraints the agent must respect ───
+
+export interface ConstraintInput {
+  kind: ConstraintKind;
+  label: string;
+  day_of_week: string;  // '' or '1'..'7'
+  date_from: string;    // '' or ISO date
+  date_to: string;      // '' or ISO date
+}
+
+export async function saveConstraints(constraints: ConstraintInput[]) {
+  await requireUser();
+
+  // Replace the whole set (supports add/remove). Only fields relevant to each
+  // kind are persisted; the rest are nulled so a stale value can't mislead the agent.
+  const rows = constraints
+    .filter(c => c.label.trim())
+    .map((c, i) => ({
+      kind:        c.kind,
+      label:       c.label.trim(),
+      day_of_week: c.kind === 'recurring' && c.day_of_week ? Number(c.day_of_week) : null,
+      date_from:   c.kind === 'blackout' && c.date_from ? c.date_from : null,
+      date_to:     c.kind === 'blackout' && c.date_to ? c.date_to : null,
+      sort_order:  i + 1,
+    }));
+  await replacePlanConstraints(rows);
+
+  revalidatePath('/settings');
+
+  return { ok: true };
+}
+
+// ── Coaching: autonomy + guardrails ──────────────────────────
+
+export interface CoachingPrefsInput {
+  autonomy: Autonomy;
+  max_weekly_ramp_pct: string;
+  min_rest_days: string;
+  protect_priority_a: boolean;
+  notes: string;
+}
+
+export async function saveCoaching(prefs: CoachingPrefsInput) {
+  await requireUser();
+
+  await saveCoachingPrefs({
+    autonomy:            prefs.autonomy,
+    max_weekly_ramp_pct: Number(prefs.max_weekly_ramp_pct) || 0,
+    min_rest_days:       Number(prefs.min_rest_days) || 0,
+    protect_priority_a:  prefs.protect_priority_a,
+    notes:               prefs.notes.trim() || null,
+  });
+
+  revalidatePath('/settings');
+
+  return { ok: true };
 }
