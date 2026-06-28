@@ -148,6 +148,22 @@ export async function listCompletedSessionIds(): Promise<string[]> {
   return (data ?? []).map(r => r.plan_session_id as string).filter(Boolean);
 }
 
+// Strava activity ids that already produced a completion (including ids merged
+// into one) — used by the sync matcher to skip an activity it has already logged,
+// so a single activity can't roll onto a second open same-day session on a later
+// sync (e.g. one yoga session filling both the day's warm-up and stretch slots).
+export async function listCompletedStravaActivityIds(): Promise<number[]> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('strava_activity_id, merged_strava_ids');
+  const ids: number[] = [];
+  for (const r of data ?? []) {
+    if (r.strava_activity_id != null) ids.push(r.strava_activity_id as number);
+    for (const m of (r.merged_strava_ids as number[] | null) ?? []) ids.push(m);
+  }
+  return ids;
+}
+
 // ── completed_workouts ───────────────────────────────────────
 
 // Summary fields for completions within [from, to] (last-7-days stats).

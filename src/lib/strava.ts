@@ -5,6 +5,7 @@ import {
   getEarliestSessionDate, listSessionsForMatching, completedWorkoutExistsForSession,
   insertCompletedWorkout, listCompletedMissingSegments, updateCompletedWorkout,
   listCompletedSessionIds,
+  listCompletedStravaActivityIds,
 } from '@/data/plan-sessions';
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
@@ -271,10 +272,18 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   const takenSessionIds = new Set(await listCompletedSessionIds());
   const isOpen = (s: { id: string }) => !takenSessionIds.has(s.id);
 
+  // Activities that already produced a completion (any prior sync). Without this,
+  // a single activity re-matches to the next still-open same-day session on every
+  // sync — harmless for one-per-day kinds, but it double-logs yoga (warm-up +
+  // stretch both filled by one session). Activity-level dedup, alongside the
+  // session-level dedup above.
+  const completedActivityIds = new Set(await listCompletedStravaActivityIds());
+
   let matched = 0;
   for (const activity of stored) {
     const kind = kindByStravaId.get(activity.strava_activity_id);
     if (!kind) continue;
+    if (completedActivityIds.has(activity.strava_activity_id)) continue;
 
     const actKm = Number(activity.distance_km);
     let match: (typeof planSessions)[number] | null = null;
