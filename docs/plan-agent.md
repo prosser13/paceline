@@ -41,6 +41,7 @@ It returns one JSON object:
 | `constraints` | Standing scheduling limits the user set (see §3) |
 | `coaching` | Autonomy + guardrails + standing guidance (see §3) |
 | `recent_changes` | Tail of the change log — what prior passes did and why (§4) |
+| `reference` | Static authoring aid: `session_schemas` (run vs strength `structure` shapes) + `exercise_catalog` (strength exercise ids + defaults) — so editing needs no code search |
 
 Reason from this object. Don't re-derive it by querying tables piecemeal — the
 point of one deterministic read is that every session starts from the same state.
@@ -145,6 +146,18 @@ source change.
 - Keep targets consistent with `zones` — derive paces/HR from the zone windows,
   don't invent them.
 - Honour every `constraint` in §3.
+
+### Session `structure` shapes
+
+`structure` is jsonb, shaped differently by session type. Don't search the code —
+the briefing's `reference` block carries both schemas and the exercise catalog.
+
+- **Runs** — array of phases: `{ phase, description, pace_per_km ("m:ss"), duration_mins }`.
+  Phase distances should sum to `distance_km`; `target_pace` is the headline/quality pace.
+- **Strength / Core** — array of exercises: `{ name, sets, reps, reps_type ("reps"|"secs"),
+  weight (kg or null), target, exercise_id }`. `exercise_id` comes from
+  `reference.exercise_catalog` (id · name · group · default sets/reps/weight/equipment) —
+  use a real id; don't invent one.
 
 ---
 

@@ -15,6 +15,36 @@ import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
   getPowerConfig, listPowerZones,
 } from '@/data/zones';
+import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+
+// Static reference an agent needs to author edits, bundled into the briefing so a
+// fresh session has it without searching the codebase. `structure` is shaped
+// differently for runs vs strength — see session_schemas; strength exercise_ids
+// come from exercise_catalog.
+const SESSION_SCHEMAS = {
+  run: {
+    field: 'structure (jsonb array of phases)',
+    phase: { phase: 'string, e.g. "Z2" | "Ultra pace" | "Tempo"', description: 'string', pace_per_km: 'string "m:ss"', duration_mins: 'number' },
+    note: 'Phase distances should sum to distance_km. target_pace is the headline/quality pace.',
+    example: [
+      { phase: 'Z2', description: '11km easy Z2', pace_per_km: '5:00', duration_mins: 55 },
+      { phase: 'Ultra pace', description: '10km at 5:30/km ultra pace', pace_per_km: '5:30', duration_mins: 55 },
+    ],
+  },
+  strength: {
+    field: 'structure (jsonb array of exercises)',
+    exercise: { name: 'string', sets: 'number', reps: 'number', reps_type: "'reps' | 'secs'", weight: 'number kg | null (bodyweight/band)', target: 'string, e.g. "Chest"', exercise_id: 'number — from reference.exercise_catalog' },
+    note: 'CORE sessions use the same shape as STRENGTH.',
+    example: [{ name: 'Push-up', sets: 3, reps: 12, reps_type: 'reps', weight: null, target: 'Chest', exercise_id: 62 }],
+  },
+} as const;
+
+// Compact catalog — enough to author a strength entry (id + sensible defaults)
+// without loading the full library. Built once at module load.
+const EXERCISE_CATALOG = STRENGTH_EXERCISES.map(e => ({
+  id: e.id, name: e.name, group: e.group, reps_type: e.repsType,
+  sets: e.sets, reps: e.repsValue, weight_kg: e.weightKg, weight_type: e.weightType,
+}));
 
 // How far forward the editable schedule reaches, and how far back adherence looks.
 const UPCOMING_DAYS = 14;
@@ -53,6 +83,10 @@ export interface PlanContext {
   constraints: Record<string, unknown>[];
   coaching: Record<string, unknown> | null;     // autonomy + guardrails + standing notes
   recent_changes: Record<string, unknown>[];    // adjustment_logs tail (empty until the agent writes)
+  reference: {                                   // static — how to author edits (no need to search the code)
+    session_schemas: typeof SESSION_SCHEMAS;
+    exercise_catalog: typeof EXERCISE_CATALOG;
+  };
 }
 
 export interface RecentSession {
@@ -122,6 +156,7 @@ export async function getPlanContext(asOf?: string): Promise<PlanContext> {
     constraints: constraints as Record<string, unknown>[],
     coaching: coaching as Record<string, unknown> | null,
     recent_changes: recentChanges,
+    reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
   };
 }
 
