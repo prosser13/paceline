@@ -1,4 +1,4 @@
-import { getCurrentUser } from '@/lib/auth';
+import { isAuthorizedRequest } from '@/lib/auth';
 import { applyPlanChange, revertPlanChange, type PlanChangeInput } from '@/data/plan-mutations';
 import { NextResponse } from 'next/server';
 
@@ -14,8 +14,9 @@ import { NextResponse } from 'next/server';
 //
 // Responses: 200 (applied | duplicate), 422 (rejected | proposal_only), 400/401.
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!(await isAuthorizedRequest(request))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   let body: Record<string, unknown>;
   try {
