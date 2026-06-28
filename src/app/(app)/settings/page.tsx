@@ -7,6 +7,7 @@ import {
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
 import { listPlanPrefs } from '@/data/plans';
+import { listAdjustments } from '@/data/plan-mutations';
 import SettingsClient from './SettingsClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
@@ -15,6 +16,7 @@ import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
+import ChangeLogClient from './ChangeLogClient';
 import {
   saveBikeHrZones,
   type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
@@ -24,7 +26,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs,
+    constraints, coachingPrefs, planPrefs, adjustments,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -39,6 +41,7 @@ export default async function SettingsPage() {
     listPlanConstraints(),
     getCoachingPrefs(),
     listPlanPrefs(),
+    listAdjustments(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -176,6 +179,19 @@ export default async function SettingsPage() {
               initialProtectA={coachProtectA}
               initialNotes={coachNotes}
             />
+          </div>
+        </section>
+
+        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
+          <div className="px-[18px] py-[14px] border-b border-fog">
+            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · change log</span>
+          </div>
+          <div className="px-[18px] py-[18px]">
+            <p className="text-[15px] text-stone mb-4">
+              Every change the coach (or you) makes to the plan, newest first — what changed, when,
+              and why. Use <span className="text-ink font-medium">Revert</span> to undo one.
+            </p>
+            <ChangeLogClient entries={adjustments} />
           </div>
         </section>
 
