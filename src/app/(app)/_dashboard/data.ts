@@ -165,6 +165,7 @@ function buildCompleted(
     actual_duration_mins?: number | string | null;
     actual_avg_pace_min_km?: number | string | null;
     actual_avg_power?: number | string | null;
+    actual_ngp_min_km?: number | string | null;
     actual_distance_km?: number | string | null;
     actual_avg_hr?: number | string | null;
     segment_actuals?: unknown;
@@ -175,13 +176,16 @@ function buildCompleted(
 ): CompletedToday {
   const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
   const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+  const ngp  = cw.actual_ngp_min_km != null ? Number(cw.actual_ngp_min_km) : null;
   const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
   const durationStr = mins != null
     ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
     : '';
+  // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
+  const runPace = ngp ?? pace;
   let tss: number | null = null;
-  if (mins != null && pace != null && pace > 0) {
-    const IF = threshMinKm / pace;                 // run: pace vs threshold
+  if (mins != null && runPace != null && runPace > 0) {
+    const IF = threshMinKm / runPace;              // run: NGP (or pace) vs threshold
     tss = Math.round((mins / 60) * IF * IF * 100);
   } else if (mins != null && avgPower != null && ftp && ftp > 0) {
     const IF = avgPower / ftp;                      // ride: power vs FTP
@@ -349,9 +353,11 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const m = Math.round(totalMins % 60);
   const totalTss = Math.round((recent ?? []).reduce((s, w) => {
     const mins = w.actual_duration_mins ? Number(w.actual_duration_mins) : null;
-    const pace = w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
-    if (mins == null || pace == null || pace <= 0) return s;
-    const IF = threshMinKm / pace;
+    // NGP-based rTSS when available, else average pace.
+    const runPace = w.actual_ngp_min_km != null ? Number(w.actual_ngp_min_km)
+      : w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
+    if (mins == null || runPace == null || runPace <= 0) return s;
+    const IF = threshMinKm / runPace;
     return s + (mins / 60) * IF * IF * 100;
   }, 0));
 
