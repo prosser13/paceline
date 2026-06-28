@@ -170,3 +170,8 @@ the briefing's `reference` block carries both schemas and the exercise catalog.
 - **Review changes** the agent made: the change-log card in `/settings`
   ("Coaching · change log") — every change newest-first with its reason and an
   inline **Revert**.
+- **Talk to your plan in Claude Desktop:** the local MCP bridge
+  (`scripts/coach-mcp-server.mjs`) exposes `get_plan_context`, `apply_plan_change`,
+  and `revert_plan_change` as tools, proxying these endpoints with `PLAN_AGENT_TOKEN`.
+  Add it to `claude_desktop_config.json` (config in the script header). claude.ai
+  web/mobile would instead need an OAuth remote connector — a later addition.
