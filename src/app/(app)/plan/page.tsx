@@ -131,15 +131,18 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     if (!cw.plan_session_id) continue;
     const mins  = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
     const pace  = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
+    const ngp   = cw.actual_ngp_min_km != null ? Number(cw.actual_ngp_min_km) : null;
     const power = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
     const durationStr = mins != null
       ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
       : null;
+    // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
+    const runPace = ngp ?? pace;
     let tss: number | null = null;
-    if (mins != null && pace != null && pace > 0) {
+    if (mins != null && runPace != null && runPace > 0) {
       const parts = thresholdPace.split(':').map(Number);
       const threshMinKm = parts[0] + parts[1] / 60;
-      const IF = threshMinKm / pace;                    // run: pace vs threshold
+      const IF = threshMinKm / runPace;                 // run: NGP (or pace) vs threshold
       tss = Math.round((mins / 60) * IF * IF * 100);
     } else if (mins != null && power != null && ftp && ftp > 0) {
       const IF = power / ftp;                            // ride: power vs FTP

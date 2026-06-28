@@ -154,7 +154,7 @@ export async function listCompletedSessionIds(): Promise<string[]> {
 export async function listCompletedBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km')
+    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km')
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -166,7 +166,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getMostRecentCompletedSession(beforeDate: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr, strava_activity_id, plan_sessions!inner(*)')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, strava_activity_id, plan_sessions!inner(*)')
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
@@ -184,7 +184,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr')
+    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr')
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -204,7 +204,7 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
 export async function listAllCompleted() {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, segment_actuals, segment_hr, strava_activity_id, merged_strava_ids');
+    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, strava_activity_id, merged_strava_ids');
   return data ?? [];
 }
 
@@ -268,8 +268,10 @@ export async function deletePlanSession(id: string): Promise<void> {
 export async function listCompletedMissingSegments(limit: number) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, strava_activity_id, actual_avg_hr')
-    .or('segment_actuals.is.null,segment_hr.is.null')
+    .select('id, plan_session_id, strava_activity_id, actual_avg_hr, actual_ngp_min_km')
+    // Runs missing per-segment pacing OR (runs only — non-null pace) missing NGP.
+    // Rides have empty (not null) segments and null pace, so they never match.
+    .or('segment_actuals.is.null,segment_hr.is.null,and(actual_avg_pace_min_km.not.is.null,actual_ngp_min_km.is.null)')
     .eq('source', 'strava')
     .limit(limit);
   return data ?? [];

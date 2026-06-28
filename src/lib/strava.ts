@@ -9,6 +9,7 @@ import {
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
+import { computeNgp } from '@/lib/run-tss';
 
 export interface StravaActivity {
   id: number;
@@ -115,9 +116,9 @@ export async function getValidAccessToken(): Promise<string | null> {
 async function fetchStreams(
   activityId: number,
   token: string,
-): Promise<{ distance: number[]; time: number[]; heartrate: number[] | null } | null> {
+): Promise<{ distance: number[]; time: number[]; heartrate: number[] | null; altitude: number[] | null } | null> {
   const res = await stravaGet(
-    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time,heartrate&key_by_type=true`,
+    `https://www.strava.com/api/v3/activities/${activityId}/streams?keys=distance,time,heartrate,altitude&key_by_type=true`,
     token,
   );
   if (!res || !res.ok) return null;
@@ -125,6 +126,7 @@ async function fetchStreams(
   const distance = data?.distance?.data;
   const time     = data?.time?.data;
   const hr       = data?.heartrate?.data;
+  const alt      = data?.altitude?.data;
   if (!Array.isArray(distance) || !Array.isArray(time) || distance.length !== time.length || !distance.length) {
     return null;
   }
@@ -132,6 +134,7 @@ async function fetchStreams(
     distance,
     time,
     heartrate: Array.isArray(hr) && hr.length === distance.length ? hr : null,
+    altitude:  Array.isArray(alt) && alt.length === distance.length ? alt : null,
   };
 }
 
@@ -186,14 +189,16 @@ async function computeForActivity(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure: any[] | null | undefined,
   token: string,
-): Promise<{ pace: (number | null)[]; hr: (number | null)[] | null } | null> {
-  const distances = expandSegmentDistances(structure);
-  if (!distances.length) return null;
+): Promise<{ pace: (number | null)[] | null; hr: (number | null)[] | null; ngpMinKm: number | null } | null> {
   const streams = await fetchStreams(stravaId, token);
   if (!streams) return null;
+  // NGP needs only the streams; per-segment pacing additionally needs a structure.
+  const ngpMinKm = computeNgp(streams.distance, streams.time, streams.altitude);
+  const distances = expandSegmentDistances(structure);
   return {
-    pace: computeSegmentActuals(distances, streams.distance, streams.time),
-    hr:   streams.heartrate ? computeSegmentHr(distances, streams.distance, streams.heartrate) : null,
+    pace: distances.length ? computeSegmentActuals(distances, streams.distance, streams.time) : null,
+    hr:   distances.length && streams.heartrate ? computeSegmentHr(distances, streams.distance, streams.heartrate) : null,
+    ngpMinKm,
   };
 }
 
@@ -353,6 +358,8 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       // the run-only segment backfill doesn't re-examine them on every sync.
       segment_actuals:        kind === 'run' ? (seg?.pace ?? null) : [],
       segment_hr:             kind === 'run' ? (seg?.hr ?? null)   : [],
+      // Normalized Graded Pace (runs only) → grade-adjusted rTSS downstream.
+      actual_ngp_min_km:      kind === 'run' ? (seg?.ngpMinKm ?? null) : null,
     });
 
     if (!(await planSessionHasMatch(match.id))) {
@@ -368,7 +375,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
     matched++;
   }
 
-  // Backfill per-segment actuals + HR for matched runs missing them (capped).
+  // Backfill per-segment actuals + HR + NGP for matched runs missing them (capped).
   const missing = await listCompletedMissingSegments(BACKFILL_LIMIT);
   if (missing.length === BACKFILL_LIMIT) {
     console.warn(`[strava] backfill hit the ${BACKFILL_LIMIT}-row cap; the rest will process on the next sync`);
@@ -385,6 +392,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       const update: Record<string, any> = {};
       if (seg?.pace) update.segment_actuals = seg.pace;
       if (seg?.hr)   update.segment_hr = seg.hr;
+      if (cw.actual_ngp_min_km == null && seg?.ngpMinKm != null) update.actual_ngp_min_km = seg.ngpMinKm;
       if (cw.actual_avg_hr == null && hrById.get(cw.strava_activity_id) != null) {
         update.actual_avg_hr = hrById.get(cw.strava_activity_id);
       }
