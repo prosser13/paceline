@@ -128,16 +128,16 @@ const marathon = () => ({ st: 'RACE', name: 'Malaga Marathon', intensity: 'race'
 
 // ── 12-week plan (day keys: 2=Tue .. 7=Sun; Mon=rest, no row) ──
 const WEEKS = [
-  { phase: 'Endurance', purpose: 'Aerobic base + leg speed',           days: { 2: speed(14, { hills: 6, strides: 8 }), 3: mlr(19), 4: rec(10), 5: ga(16), 6: rec(10), 7: mp(26, 13) } },
-  { phase: 'Endurance', purpose: 'Endurance with first LT work',       days: { 2: mlr(19), 3: ga(16), 4: rec(10), 5: lt(16, 25), 6: rec(10), 7: lr(29) } },
-  { phase: 'Endurance', purpose: 'Volume build + marathon pace',       days: { 2: speed(14, { hills: 6, strides: 8 }), 3: mlr(23), 4: rec(10), 5: ga(16), 6: rec(10), 7: mp(29, 16) } },
-  { phase: 'Endurance', purpose: 'Peak endurance + LT',                days: { 2: ga(16), 3: mlr(24), 4: rec(10), 5: lt(18, 30), 6: rec(10), 7: lr(31) } },
-  { phase: 'Endurance', purpose: 'Endurance, LT sharpening',           days: { 2: speed(13, { strides: 10 }), 3: mlr(19), 4: rec(8), 5: lt(16, 30), 6: rec(10), 7: lr(26) } },
-  { phase: 'Race prep', purpose: 'VO₂max introduced, big MP run', days: { 2: rec(11), 3: vo2(19, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(16), 6: rec(11), 7: mp(31, 19) } },
-  { phase: 'Race prep', purpose: 'Peak volume + long LT',              days: { 2: speed(14, { strides: 8 }), 3: mlr(24), 4: rec(11), 5: lt(19, 40), 6: rec(10), 7: lr(34) } },
-  { phase: 'Race prep', purpose: 'VO₂ + first tune-up race',      days: { 2: ga(16), 3: vo2(16, 5, 0.6), 4: speed(11, { base: 'Z1', strides: 6 }), 5: rec(10), 6: tuneup(10), 7: lr(27) } },
-  { phase: 'Race prep', purpose: 'Final big block, peak long run',     days: { 2: rec(11), 3: vo2(18, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(14), 6: rec(10), 7: lr(34) } },
-  { phase: 'Taper',     purpose: 'Taper begins, tune-up race',         days: { 2: speed(16, { hills: 6, strides: 12 }), 3: ga(14), 4: speed(10, { base: 'Z1', strides: 6 }), 5: rec(8), 6: tuneup(10), 7: lr(27) } },
+  { phase: 'Base',      purpose: 'Aerobic base + leg speed',           days: { 2: speed(14, { hills: 6, strides: 8 }), 3: mlr(19), 4: rec(10), 5: ga(16), 6: rec(10), 7: mp(26, 13) } },
+  { phase: 'Base',      purpose: 'Endurance with first LT work',       days: { 2: mlr(19), 3: ga(16), 4: rec(10), 5: lt(16, 25), 6: rec(10), 7: lr(29) } },
+  { phase: 'Base',      purpose: 'Volume build + marathon pace',       days: { 2: speed(14, { hills: 6, strides: 8 }), 3: mlr(23), 4: rec(10), 5: ga(16), 6: rec(10), 7: mp(29, 16) } },
+  { phase: 'Base',      purpose: 'Peak endurance + LT',                days: { 2: ga(16), 3: mlr(24), 4: rec(10), 5: lt(18, 30), 6: rec(10), 7: lr(31) } },
+  { phase: 'Build',     purpose: 'Endurance, LT sharpening',           days: { 2: speed(13, { strides: 10 }), 3: mlr(19), 4: rec(8), 5: lt(16, 30), 6: rec(10), 7: lr(26) } },
+  { phase: 'Build',     purpose: 'VO₂max introduced, big MP run', days: { 2: rec(11), 3: vo2(19, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(16), 6: rec(11), 7: mp(31, 19) } },
+  { phase: 'Build',     purpose: 'Peak volume + long LT',              days: { 2: speed(14, { strides: 8 }), 3: mlr(24), 4: rec(11), 5: lt(19, 40), 6: rec(10), 7: lr(34) } },
+  { phase: 'Peak',      purpose: 'VO₂ + first tune-up race',      days: { 2: ga(16), 3: vo2(16, 5, 0.6), 4: speed(11, { base: 'Z1', strides: 6 }), 5: rec(10), 6: tuneup(10), 7: lr(27) } },
+  { phase: 'Peak',      purpose: 'Final big block, peak long run',     days: { 2: rec(11), 3: vo2(18, 6, 1), 4: mlr(24, { afterHard: true }), 5: ga(14), 6: rec(10), 7: lr(34) } },
+  { phase: 'Peak',      purpose: 'Final tune-up race, peak block ends',         days: { 2: speed(16, { hills: 6, strides: 12 }), 3: ga(14), 4: speed(10, { base: 'Z1', strides: 6 }), 5: rec(8), 6: tuneup(10), 7: lr(27) } },
   { phase: 'Taper',     purpose: 'Sharpening taper',                   days: { 2: speed(11, { base: 'Z1', strides: 10 }), 3: rec(8), 4: vo2(14, 5, 1), 5: rec(10), 6: speed(10, { base: 'Z1', strides: 10 }), 7: mlr(21) } },
   { phase: 'Taper',     purpose: 'Race week',                          days: { 2: rec(11), 3: dress(11, 3), 4: rec(6), 5: speed(8, { base: 'Z1', strides: 6 }), 6: rec(6), 7: marathon() } },
 ];
