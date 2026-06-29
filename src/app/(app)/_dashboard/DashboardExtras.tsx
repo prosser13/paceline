@@ -2,8 +2,10 @@
 // days" stat cards. Identical across the three prototypes so the comparison
 // stays focused on the top (today / tomorrow / coming-up) redesign.
 
-import { CountdownRing, WeeklyBars, FitnessChart } from '@/components/dashboard-graphics';
+import { Suspense } from 'react';
+import { CountdownRing, WeeklyBars, CardSkeleton } from '@/components/dashboard-graphics';
 import OffPlanRow from '@/components/OffPlanRow';
+import FitnessChartAsync from './FitnessChartAsync';
 import type { DashboardData } from './data';
 
 function fmtDay(iso: string): string {
@@ -35,12 +37,9 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
             raceName={d.raceName}
           />
           <div>
-            <FitnessChart
-              history={d.fitnessHistory}
-              form={d.fitnessForm?.form ?? null}
-              fitness={d.fitnessForm?.fitness ?? null}
-              fatigue={d.fitnessForm?.fatigue ?? null}
-            />
+            <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue · last 6 weeks" bodyHeight={138} />}>
+              <FitnessChartAsync />
+            </Suspense>
           </div>
         </div>
       </div>

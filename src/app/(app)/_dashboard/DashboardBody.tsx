@@ -1,10 +1,12 @@
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { PhaseTimeline, FormMeter } from '@/components/dashboard-graphics';
+import { PhaseTimeline, CardSkeleton } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
+import FormMeterAsync from './FormMeterAsync';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
 // The data-dependent dashboard body. Split out of page.tsx so it can sit behind
@@ -70,11 +72,9 @@ export default async function DashboardBody() {
             </div>
           )}
 
-          <FormMeter
-            form={d.fitnessForm?.form ?? null}
-            fitness={d.fitnessForm?.fitness ?? null}
-            fatigue={d.fitnessForm?.fatigue ?? null}
-          />
+          <Suspense fallback={<CardSkeleton header="Current status · intervals.icu" bodyHeight={132} />}>
+            <FormMeterAsync />
+          </Suspense>
         </div>
 
         {/* Week strip — below today on mobile; on desktop it drops to sit just
