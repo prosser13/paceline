@@ -5,6 +5,7 @@
 
 import { unstable_cache, revalidateTag } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { recomputeAllCompletedTss } from '@/data/plan-sessions';
 
 // Zone config is global, single-row/single-set, and changes only when the user
 // edits it in Settings — so reads are cached (cutting them out of the dashboard's
@@ -143,6 +144,8 @@ export async function setThresholdPace(threshold: string): Promise<void> {
     .update({ threshold_pace_per_km: threshold })
     .not('key', 'is', null);
   revalidateTag(ZONES_TAG, 'max');
+  // Threshold pace drives run TSS — restore stored completions to the new value.
+  await recomputeAllCompletedTss();
 }
 
 // Replace the full pace-zone set (supports add/remove).
@@ -176,6 +179,8 @@ export async function replacePowerZones(rows: PowerZoneRow[]): Promise<void> {
   await supabaseAdmin.from('power_zones').delete().gte('sort_order', 0);
   if (rows.length) await supabaseAdmin.from('power_zones').insert(rows);
   revalidateTag(ZONES_TAG, 'max');
+  // The Z4 ceiling is the FTP proxy that drives ride TSS — refresh stored rows.
+  await recomputeAllCompletedTss();
 }
 
 // Upsert the single bike HR config row.

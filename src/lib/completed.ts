@@ -31,6 +31,7 @@ export interface CompletedRow {
   actual_avg_hr?: number | string | null;
   segment_actuals?: unknown;
   segment_hr?: unknown;
+  tss?: number | string | null;   // stored (recomputed on threshold/FTP change); null → compute live
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
@@ -41,8 +42,10 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
   const durationStr = mins != null
     ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
     : '';
+  // Prefer the stored TSS (kept fresh by recomputeAllCompletedTss); fall back to a
+  // live calc when null (e.g. a row synced before this column, or pending NGP).
   // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
-  const tss = sessionTss({ mins, runPace: ngp ?? pace, power: avgPower }, threshMinKm, ftp);
+  const tss = cw.tss != null ? Number(cw.tss) : sessionTss({ mins, runPace: ngp ?? pace, power: avgPower }, threshMinKm, ftp);
   return {
     durationStr, mins, tss,
     distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,

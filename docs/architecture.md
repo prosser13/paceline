@@ -43,8 +43,18 @@ Training lives in two tables:
   `estimated_duration`, `structure` (jsonb — sport-specific segment shape), `target_pace`, `status`.
 - **`completed_workouts`** — Strava-matched actuals (one row per fulfilled session). Key columns:
   `plan_session_id`, `strava_activity_id`, `merged_strava_ids`, `actual_*` (distance/duration/pace/hr/
-  power), `actual_ngp_min_km` (grade-adjusted pace, computed at sync), `segment_actuals`, `segment_hr`,
+  power), `actual_ngp_min_km` (grade-adjusted pace — computed at sync), `segment_actuals`, `segment_hr`,
   `tss`.
+
+**TSS storage & invalidation.** TSS depends on the user's threshold pace / FTP (both editable), so a
+naively-stored value would go stale. The model: `tss` *is* stored, but **`recomputeAllCompletedTss()`**
+(`src/data/plan-sessions.ts`) is the single write path — it recomputes every row from the current
+threshold + Z4-FTP and runs (a) at the end of a Strava sync (new actuals / backfilled NGP) and (b) from
+the two Settings writers that change the inputs (`setThresholdPace`, `replacePowerZones` in
+`src/data/zones.ts`). Reads select `tss`; `buildCompletedActuals` prefers the stored value and falls
+back to a live `sessionTss` calc when null, so a render is always correct even before a row is populated.
+The formula lives once, in `sessionTss` (`src/lib/run-tss.ts`). (Off-plan activity TSS is still computed
+live in the loaders — not stored.)
 
 A session's **sport is decided by two fields**, in this priority:
 
