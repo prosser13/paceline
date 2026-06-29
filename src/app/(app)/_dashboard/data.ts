@@ -95,6 +95,9 @@ export interface DashboardData {
   raceName: string | null;
   raceDateStr: string | null;
 
+  // Next-race card: nearest upcoming RACE session (incl. tune-ups), with its A/B/C priority.
+  nextRace: { name: string; daysTo: number | null; dateStr: string | null; priority: string | null; km: number | null } | null;
+
   weekPlannedKm: number | null;
   weekDoneKm: number;
   weekToGoKm: number;
@@ -326,6 +329,25 @@ export async function loadDashboardData(): Promise<DashboardData> {
     ? new Date(raceRow.race_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;
 
+  // Next-race card — the nearest upcoming RACE session in the window (e.g. a
+  // tune-up), with its A/B/C priority; falls back to the goal race if none.
+  const raceSessions = (all as Array<PlanSession & { priority?: string | null }>)
+    .filter(s => s.session_type === 'RACE' && s.scheduled_date >= todayStr)
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+  const nrs = raceSessions[0] ?? null;
+  let nextRace: DashboardData['nextRace'] = null;
+  if (nrs) {
+    nextRace = {
+      name: nrs.name,
+      daysTo: Math.ceil((new Date(nrs.scheduled_date + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000),
+      dateStr: fmtDate(nrs.scheduled_date),
+      priority: nrs.priority ?? null,
+      km: nrs.distance_km ?? null,
+    };
+  } else if (raceName) {
+    nextRace = { name: raceName, daysTo: daysToRace, dateStr: raceDateStr, priority: null, km: null };
+  }
+
   // Per-session completion: which of today's sessions are logged, plus the run's
   // rich completion (drives the run hero's pace/HR breakdown).
   const todayDoneIds = todaySessions.filter(s => completionById.get(s.id)).map(s => s.id);
@@ -438,7 +460,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     hasPlanWeek: !!weekRow,
     weekLabel, weekPurpose,
     phaseSegments, todayPct, ringPct,
-    daysToRace, raceName, raceDateStr,
+    daysToRace, raceName, raceDateStr, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,

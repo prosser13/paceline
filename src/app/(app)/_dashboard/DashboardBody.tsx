@@ -6,7 +6,9 @@ import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
-import FormMeterAsync from './FormMeterAsync';
+import NextRaceCard from './NextRaceCard';
+import ReadinessTile from './ReadinessTile';
+import { fmtDate } from '@/lib/dates';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
 // The data-dependent dashboard body. Split out of page.tsx so it can sit behind
@@ -24,10 +26,8 @@ export default async function DashboardBody() {
       {/* Date + greeting + settings */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="min-w-0">
-          <h2 className="font-display font-semibold text-[22px] leading-tight">{d.todayFull}</h2>
-          {d.firstName && (
-            <div className="font-mono text-[13px] text-stone mt-[2px]">{d.greeting}, {d.firstName}</div>
-          )}
+          <div className="font-mono text-[11px] uppercase tracking-[.08em] font-bold text-stone">{fmtDate(d.todayStr, 'short')}</div>
+          <h2 className="font-display font-bold text-[26px] leading-tight mt-[2px]">{d.greeting}{d.firstName ? `, ${d.firstName}` : ''}</h2>
         </div>
         <Link
           href="/settings"
@@ -48,8 +48,9 @@ export default async function DashboardBody() {
       */}
       <div className="flex flex-col">
 
-        {/* Context row — stacks on mobile, two-up on sm+ */}
-        <div className="order-2 md:order-1 grid grid-cols-1 sm:grid-cols-[1.5fr_1fr] gap-[14px] mb-5">
+        {/* Metric strip — fast-changing context: plan/phase · next race · readiness.
+            Stacks on mobile, 2-up on sm, 3-up on md+. */}
+        <div className="order-2 md:order-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-[1.25fr_1fr_1.1fr] gap-[14px] mb-5">
           {d.hasPlanWeek ? (
             <PhaseTimeline
               headerLabel={d.weekLabel}
@@ -72,8 +73,12 @@ export default async function DashboardBody() {
             </div>
           )}
 
-          <Suspense fallback={<CardSkeleton header="Current status · intervals.icu" bodyHeight={132} />}>
-            <FormMeterAsync />
+          {d.nextRace
+            ? <NextRaceCard {...d.nextRace} />
+            : <NextRaceCard name="No race scheduled" daysTo={null} dateStr={null} priority={null} />}
+
+          <Suspense fallback={<CardSkeleton header="Readiness" bodyHeight={96} />}>
+            <ReadinessTile />
           </Suspense>
         </div>
 
