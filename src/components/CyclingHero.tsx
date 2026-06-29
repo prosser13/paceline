@@ -121,9 +121,22 @@ export default function CyclingHero({
           <div className="flex justify-between items-start gap-6">
             <HeroTitle name={session.name} description={session.description} />
             <div className="flex items-center gap-4 shrink-0">
-              <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.6} />
+              {/* Desktop: graph sits inline, left of the metrics. On mobile it
+                  would collide with the title, so it drops out here and renders
+                  centered directly above Session detail (see below). */}
+              <div className="hidden sm:block">
+                <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.6} />
+              </div>
               <MetricBlock duration={duration} distanceKm={distPlanned} tss={tssPlanned} estimated size="lg" />
             </div>
+          </div>
+        )}
+
+        {/* Mobile, upcoming: the profile graph drops out of the title row to sit
+            centered directly above Session detail, so it never overlaps the title. */}
+        {!isDone && bars.length > 0 && (
+          <div className="sm:hidden flex justify-center mt-[16px]">
+            <ProfileChart bars={bars} size="lg" color={MARINE} opacity={0.6} />
           </div>
         )}
 
