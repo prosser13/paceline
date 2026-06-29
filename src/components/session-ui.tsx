@@ -426,6 +426,16 @@ export function rangeCompare(
   return { delta: `+${fmt(actual - hi)}`, tone: 'neg' };                       // slower pace / higher HR
 }
 
+// Distance is a single target, not a range like pace/HR: tick when within ±`tol`
+// of the plan (default ±5%), otherwise show the TRUE signed gap from the plan —
+// not the gap to the tolerance edge (which understated overshoots, e.g. a 19 km
+// plan run at 19.4 km read "+0.0"). Both over and under read off-plan (ember).
+export function distanceCompare(actual: number, plan: number, tol = 0.05): { delta: string; tone: CompareTone } {
+  if (actual >= plan * (1 - tol) && actual <= plan * (1 + tol)) return { delta: '✓', tone: 'pos' };
+  const gap = actual - plan;
+  return { delta: `${gap >= 0 ? '+' : '−'}${Math.abs(gap).toFixed(1)}`, tone: 'neg' };
+}
+
 const COMPARE_COLS = { gridTemplateColumns: '1.25fr 1fr 1fr .8fr' } as const;
 
 // `bare` drops the left-border indent so the table spans the full width (the
@@ -521,7 +531,7 @@ export function buildRunCompare(steps: NormStep[], o: RunCompareInput): RunCompa
   const actPaceSec = o.actMins != null && o.actKm ? (o.actMins * 60) / o.actKm : null;
   const pace = pb && actPaceSec != null ? rangeCompare(actPaceSec, pb.fast, pb.slow, fmtMMSS, o.isRace ? 'fast' : 'neg') : null;
 
-  const dist = o.planKm != null && o.actKm != null ? rangeCompare(o.actKm, o.planKm * 0.98, o.planKm * 1.02, (n) => n.toFixed(1)) : null;
+  const dist = o.planKm != null && o.actKm != null ? distanceCompare(o.actKm, o.planKm) : null;
 
   const hb = hrBoundsOf(steps);
   const planHr = hb ? (hb.lo === hb.hi ? `${hb.lo}` : `${hb.lo}–${hb.hi}`) : '—';
@@ -575,8 +585,9 @@ export function buildRideCompare(o: RideCompareInput): RideCompareResult {
   const hasP = Number.isFinite(pmin) && Number.isFinite(pmax);
   const hasH = Number.isFinite(hmin) && Number.isFinite(hmax);
 
-  // Distance — ±2% (rides often carry no planned distance → no delta).
-  const dist = o.planKm != null && o.actKm != null ? rangeCompare(o.actKm, o.planKm * 0.98, o.planKm * 1.02, (n) => n.toFixed(1)) : null;
+  // Distance — tick within ±5%, else the true signed gap from plan (rides often
+  // carry no planned distance → no delta).
+  const dist = o.planKm != null && o.actKm != null ? distanceCompare(o.actKm, o.planKm) : null;
   // Power / HR — within the planned watt / bike-HR band.
   const power = hasP && o.avgPower != null ? rangeCompare(o.avgPower, pmin, pmax) : null;
   const hr = hasH && o.avgHr != null ? rangeCompare(o.avgHr, hmin, hmax) : null;
