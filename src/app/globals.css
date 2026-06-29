@@ -1,40 +1,65 @@
 @import "tailwindcss";
 
 @theme {
-  /* ── Foundation ─────────────────────────────── */
-  --color-ink:   #17191e;
-  --color-bone:  #f4efe4;
-  --color-paper: #fbf8f2;
-  --color-stone: #5f5a50;
-  --color-fog:   #d9d3c6;
+  /* ── Foundation (neutrals) ──────────────────── */
+  --color-ink:    #17150f;   /* primary text */
+  --color-bone:   #e6e4df;   /* page background (warm grey) */
+  --color-paper:  #faf8f1;   /* card surface */
+  --color-stone:  #5b5852;   /* secondary / muted text */
+  --color-fog:    #d8d3c9;   /* hairline borders + dividers */
+  --color-hero:   #1b1a16;   /* near-black focal tile */
+  --color-onhero: #f3f1ea;   /* text on hero tile */
 
-  /* ── Signature ──────────────────────────────── */
-  --color-oxblood:      #8c2b2b;
-  --color-oxblood-dark: #73221f;
-  --color-oxblood-soft: #f0e1e0;
+  /* ── Sport (semantic) ───────────────────────── */
+  --color-run:      #c4452c;
+  --color-ride:     #2f6f9e;
+  --color-strength: #b07d12;
+  --color-yoga:     #2f8f7a;
+  --color-hard:     #d2691e;   /* quality / VO2 */
+  --color-race:     #b3271e;
+  --color-ready:    #2e9e6b;   /* readiness / good status */
 
-  /* ── Accents ────────────────────────────────── */
-  --color-marine:      #14617e;
-  --color-marine-dark: #0f4e64;
-  --color-marine-soft: #dce9ee;
+  --color-run-soft:      #f3ddd6;
+  --color-ride-soft:     #dde8f0;
+  --color-strength-soft: #efe3c9;
+  --color-yoga-soft:     #d9ece6;
+  --color-race-soft:     #f4d9d6;
 
-  --color-fern:      #4f7a52;
-  --color-fern-soft: #e2ece2;
+  /* ── Phases ─────────────────────────────────── */
+  --color-phase-base:  #2f6f9e;
+  --color-phase-build: #b07d12;
+  --color-phase-taper: #2f8f7a;
 
-  --color-amber:      #dfa01c;
-  --color-amber-dark: #7a5a08;   /* text on amber-soft bg */
-  --color-amber-soft: #f8eccf;
+  /* ── Zones (run pace / HR / power intensity) ── */
+  --color-z1: #9ab8c9;
+  --color-z2: #2f6f9e;
+  --color-z3: #3f8f6a;
+  --color-z4: #caa23a;
+  --color-z5: #d2691e;
 
-  --color-ember:      #c75b33;
-  --color-ember-soft: #f4e1d7;
+  /* ── Legacy accent names, remapped to the nearest new value.
+        Components still referencing these stay coherent until their
+        page-level PR migrates them to the semantic tokens above. ─── */
+  --color-oxblood:      #c4452c;   /* was signature red → run */
+  --color-oxblood-dark: #9e371f;
+  --color-oxblood-soft: #f3ddd6;
+  --color-marine:      #2f6f9e;
+  --color-marine-dark: #23566f;
+  --color-marine-soft: #dde8f0;
+  --color-fern:      #3f8f6a;
+  --color-fern-soft: #dceee6;
+  --color-amber:      #b07d12;
+  --color-amber-dark: #7a5a08;
+  --color-amber-soft: #efe3c9;
+  --color-ember:      #d2691e;
+  --color-ember-soft: #f5e4d4;
+  --color-coffee:      #2f8f7a;
+  --color-coffee-soft: #d9ece6;
 
-  --color-coffee:      #6f4e37;   /* yoga */
-  --color-coffee-soft: #ece3da;
-
-  /* ── Type (Poppins everywhere, injected by next/font) ─── */
-  --font-sans:    var(--font-poppins), "Poppins", ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-poppins), "Poppins", ui-sans-serif, sans-serif;
-  --font-mono:    var(--font-poppins), "Poppins", ui-sans-serif, sans-serif;
+  /* ── Type — Lora (display) + Inter (body / numbers) ─── */
+  --font-sans:    var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-lora), "Lora", Georgia, "Times New Roman", serif;
+  --font-mono:    var(--font-inter), "Inter", ui-sans-serif, system-ui, sans-serif;
 }
 
 body {

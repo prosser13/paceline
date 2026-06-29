@@ -5,14 +5,14 @@
 import React from 'react';
 import PhaseBar, { type PhaseSeg } from './PhaseBar';
 
-const BONE = '#f4efe4';
-const OXBLOOD = '#8c2b2b';
-const FERN = '#4f7a52';
-const MARINE = '#14617e';
-const EMBER = '#c75b33';
-const FOG = '#d9d3c6';
-const AMBER = '#dfa01c';
-const INK = '#17191e';
+const BONE = '#e6e4df';
+const OXBLOOD = '#c4452c';
+const FERN = '#3f8f6a';
+const MARINE = '#2f6f9e';
+const EMBER = '#d2691e';
+const FOG = '#d8d3c9';
+const AMBER = '#caa23a';
+const INK = '#17150f';
 
 export function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
@@ -89,7 +89,7 @@ export function PhaseTimeline({
 
 function formBand(f: number): { label: string; color: string } {
   if (f > 5)    return { label: 'Fresh — well rested',        color: MARINE };
-  if (f >= -10) return { label: 'Neutral — balanced load',    color: '#5f5a50' };
+  if (f >= -10) return { label: 'Neutral — balanced load',    color: '#5b5852' };
   if (f >= -30) return { label: 'Productive — building fitness', color: FERN };
   return { label: 'Fatigued — ease off soon', color: EMBER };
 }
@@ -98,7 +98,7 @@ function StatBar({ label, value, pct, color }: { label: string; value: number; p
   return (
     <div className="flex items-center gap-[9px]">
       <span className="font-mono text-[10px] uppercase tracking-[.1em] text-stone w-[48px]">{label}</span>
-      <div className="flex-1 h-[7px] rounded-[4px] overflow-hidden" style={{ background: '#eae4d6' }}>
+      <div className="flex-1 h-[7px] rounded-[4px] overflow-hidden" style={{ background: '#ddd8cd' }}>
         <div className="h-full" style={{ width: `${Math.max(0, Math.min(100, pct))}%`, background: color }} />
       </div>
       <span className="font-display font-semibold text-[13px] w-[22px] text-right" style={{ color }}>{value}</span>
@@ -286,7 +286,7 @@ export function WeeklyBars({
             <span
               key={i}
               className="flex-1 text-center font-mono text-[10px] uppercase tracking-[.1em]"
-              style={{ color: d.state === 'today' ? AMBER : '#5f5a50' }}
+              style={{ color: d.state === 'today' ? AMBER : '#5b5852' }}
             >
               {d.label}
             </span>

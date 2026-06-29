@@ -9,23 +9,23 @@ import RepeatBlock from './RepeatBlock';
 
 // Intensity → on-brand colour (drives the profile chart) + nominal zone
 export const INTENSITY: Record<string, { label: string; hex: string; zone: string }> = {
-  easy:     { label: 'Easy',     hex: '#14617e', zone: 'Z2' },
-  recovery: { label: 'Recovery', hex: '#14617e', zone: 'Z1' },
-  steady:   { label: 'Steady',   hex: '#4f7a52', zone: 'Z3' },
-  tempo:    { label: 'Tempo',    hex: '#dfa01c', zone: 'Z4' },
-  hard:     { label: 'Hard',     hex: '#c75b33', zone: 'Z5' },
-  race:     { label: 'Race',     hex: '#8c2b2b', zone: 'Z5' },
+  easy:     { label: 'Easy',     hex: '#2f6f9e', zone: 'Z2' },
+  recovery: { label: 'Recovery', hex: '#9ab8c9', zone: 'Z1' },
+  steady:   { label: 'Steady',   hex: '#3f8f6a', zone: 'Z3' },
+  tempo:    { label: 'Tempo',    hex: '#caa23a', zone: 'Z4' },
+  hard:     { label: 'Hard',     hex: '#d2691e', zone: 'Z5' },
+  race:     { label: 'Race',     hex: '#b3271e', zone: 'Z5' },
 };
 
 // Inline styles for zone chips — avoids dynamic Tailwind class purging
 const ZONE_STYLE: Record<string, { background: string; color: string }> = {
-  Z1:     { background: 'rgba(138,133,122,.10)', color: '#5f5a55' },
-  Z2:     { background: 'rgba(20,97,126,.12)',   color: '#14617e' },
-  Z3:     { background: 'rgba(79,122,82,.13)',   color: '#3b6343' },
-  Z4:     { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  Z5:     { background: 'rgba(140,43,43,.16)',   color: '#8c2b2b' },
-  'Z4-5': { background: 'rgba(199,91,51,.13)',   color: '#8f3512' },
-  'Z1-2': { background: 'rgba(20,97,126,.10)',   color: '#14617e' },
+  Z1:     { background: 'rgba(154,184,201,.20)', color: '#566f7d' },
+  Z2:     { background: 'rgba(47,111,158,.13)',  color: '#2f6f9e' },
+  Z3:     { background: 'rgba(63,143,106,.14)',  color: '#3f8f6a' },
+  Z4:     { background: 'rgba(202,162,58,.18)',  color: '#9a7a14' },
+  Z5:     { background: 'rgba(210,105,30,.15)',  color: '#b4571a' },
+  'Z4-5': { background: 'rgba(210,105,30,.15)',  color: '#b4571a' },
+  'Z1-2': { background: 'rgba(47,111,158,.10)',  color: '#2f6f9e' },
 };
 
 export function ZoneChip({ zone }: { zone: string }) {

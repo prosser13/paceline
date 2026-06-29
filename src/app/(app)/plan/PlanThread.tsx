@@ -59,7 +59,7 @@ interface CompletedData {
 // ── Constants / helpers ────────────────────────────────────────
 
 const PHASE_HEX: Record<string, string> = {
-  Base: '#14617e', Build: '#dfa01c', Peak: '#c75b33', Taper: '#4f7a52',
+  Base: '#2f6f9e', Build: '#b07d12', Peak: '#d2691e', Taper: '#2f8f7a',
 };
 
 function resolveStatus(

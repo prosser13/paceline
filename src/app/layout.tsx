@@ -1,11 +1,17 @@
 import type { Metadata } from 'next';
-import { Poppins } from 'next/font/google';
+import { Lora, Inter } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
-const poppins = Poppins({
+// Display headings + big numerals use Lora (serif); body, labels and metrics use Inter.
+const lora = Lora({
   subsets: ['latin'],
-  variable: '--font-poppins',
+  variable: '--font-lora',
+  weight: ['500', '600', '700'],
+});
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
   weight: ['400', '500', '600', '700'],
 });
 
@@ -19,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${poppins.variable} h-full`}
+      className={`${lora.variable} ${inter.variable} h-full`}
     >
       <body className="h-full">
         {children}
