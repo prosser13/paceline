@@ -16,3 +16,11 @@ node scripts/setup-worktree.mjs
 
 This installs deps (offline-first from the warm npm cache) and copies `.env.local`
 from the main checkout. Then `npm run dev` / the preview tool work as normal.
+
+# Architecture
+
+See [`docs/architecture.md`](docs/architecture.md) for the codebase map: the data model
+(`plan_sessions` + `completed_workouts`, the two sport-dispatch axes), the **sport touch-point map**
+(where to edit when adding a sport/metric), the page data-loading & caching patterns, the shared-utility
+catalog (reuse these before writing new logic), and the multi-tenant migration recipe. Read it before
+adding a feature.

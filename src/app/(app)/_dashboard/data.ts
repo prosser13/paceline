@@ -10,11 +10,14 @@ import {
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
-  getCompletedForSession, listCompletedDistancesBetween, getMostRecentCompletedSession,
+  listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
 } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
+import { buildZoneMaps } from '@/lib/zone-builders';
+import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
+import { sessionTss } from '@/lib/run-tss';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
@@ -38,13 +41,9 @@ export interface PlanSession {
   structure?: Array<{ phase: string; description: string; pace_per_km?: string; duration_mins?: number }> | null;
 }
 
-export interface CompletedToday {
-  durationStr: string; mins: number | null; tss: number | null; distanceKm: number | null;
-  avgHr: number | null;
-  avgPower: number | null;   // rides only
-  segmentActuals: (number | null)[] | null;
-  segmentHr: (number | null)[] | null;
-}
+// Canonical completion shape lives in @/lib/completed; kept as a named alias so
+// the dashboard's consumers (SessionHero etc.) keep importing CompletedToday.
+export type CompletedToday = CompletedActuals;
 
 export interface WindowDay {
   iso: string;
@@ -155,50 +154,6 @@ export function formatSpineDay(iso: string): { weekday: string; date: string } {
   };
 }
 
-// Build the rich completion (drives the run/ride hero's actuals, profile
-// colouring and compare table) from a raw completed_workouts row. Shared by
-// Today and Recently-completed so both compute identically — change once.
-function buildCompleted(
-  cw: {
-    actual_duration_mins?: number | string | null;
-    actual_avg_pace_min_km?: number | string | null;
-    actual_avg_power?: number | string | null;
-    actual_ngp_min_km?: number | string | null;
-    actual_distance_km?: number | string | null;
-    actual_avg_hr?: number | string | null;
-    segment_actuals?: unknown;
-    segment_hr?: unknown;
-  },
-  threshMinKm: number,
-  ftp: number | null,
-): CompletedToday {
-  const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
-  const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
-  const ngp  = cw.actual_ngp_min_km != null ? Number(cw.actual_ngp_min_km) : null;
-  const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
-  const durationStr = mins != null
-    ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
-    : '';
-  // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
-  const runPace = ngp ?? pace;
-  let tss: number | null = null;
-  if (mins != null && runPace != null && runPace > 0) {
-    const IF = threshMinKm / runPace;              // run: NGP (or pace) vs threshold
-    tss = Math.round((mins / 60) * IF * IF * 100);
-  } else if (mins != null && avgPower != null && ftp && ftp > 0) {
-    const IF = avgPower / ftp;                      // ride: power vs FTP
-    tss = Math.round((mins / 60) * IF * IF * 100);
-  }
-  return {
-    durationStr, mins, tss,
-    distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
-    avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
-    avgPower,
-    segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
-    segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
-  };
-}
-
 export async function loadDashboardData(): Promise<DashboardData> {
   const today       = new Date();
   const todayStr    = isoDate(today);
@@ -255,9 +210,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // resolve in ONE parallel wave (was: await the flag on its own, then a separate
   // Tier 2 — two serial transatlantic round-trips, now collapsed into one).
   const todayListRaw = (byDate.get(todayStr) ?? []).filter(s => s.status !== 'rest');
-  const [strengthFirst, todayCompletionList, weekData, planWeeks] = await Promise.all([
+  const [strengthFirst, todayCompletions, weekData, planWeeks] = await Promise.all([
     planId ? getPlanStrengthPriority(planId) : Promise.resolve(false),
-    Promise.all(todayListRaw.map(s => getCompletedForSession(s.id))),
+    listCompletedForSessions(todayListRaw.map(s => s.id)),
     weekRow?.date_from && weekRow?.date_to
       ? Promise.all([
           listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
@@ -267,7 +222,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
   ]);
   // id → completion, so the lookups below survive the in-place sort that follows.
-  const completionById = new Map(todayListRaw.map((s, i) => [s.id, todayCompletionList[i]]));
+  const completionById = new Map(todayCompletions.map(c => [c.plan_session_id as string, c]));
 
   // Display order within a day: the sequence sessions are actually done in
   // (warm-up → run → stretch → core → strength), or strength-first on
@@ -294,37 +249,21 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const tomorrowStrength = pickStrength(byDate.get(tomorrowStr));
 
   const thresholdPace = thresholdPaceRaw ?? '3:40';
-  const threshParts   = thresholdPace.split(':').map(Number);
-  const threshMinKm   = threshParts[0] + (threshParts[1] || 0) / 60;
+  const threshMinKm   = parseThresholdPace(thresholdPace);
+
+  const { zones, hrZones, powerZones, bikeHrZones, ftp } = buildZoneMaps({
+    paceZones, hrZones: hrZoneRows, powerZones: powerZoneRows, bikeHrZones: bikeHrZoneRows,
+  });
 
   // Off-plan extras: run TSS from pace, then split today vs recent (newest-first
   // already from the query).
   for (const a of offPlanRaw) {
-    if (activityKind(a.activityType) === 'run' && a.durationMins != null && a.avgPaceMinKm && a.avgPaceMinKm > 0) {
-      const IF = threshMinKm / a.avgPaceMinKm;
-      a.tss = Math.round((a.durationMins / 60) * IF * IF * 100);
-    }
+    if (activityKind(a.activityType) !== 'run') continue;
+    const tss = sessionTss({ mins: a.durationMins, runPace: a.avgPaceMinKm ?? null, power: null }, threshMinKm, null);
+    if (tss != null) a.tss = tss;
   }
   const offPlanToday  = offPlanRaw.filter(a => a.date === todayStr);
   const offPlanRecent = offPlanRaw.filter(a => a.date !== todayStr);
-
-  const zones: ZoneMap = {};
-  for (const z of paceZones) {
-    zones[z.zone_key] = { key: z.zone_key, name: z.name, paceMin: z.pace_min, paceMax: z.pace_max, sortOrder: z.sort_order };
-  }
-  const hrZones: HrZoneMap = {};
-  for (const z of hrZoneRows) {
-    hrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
-  }
-
-  const powerZones: PowerZoneMap = {};
-  for (const z of powerZoneRows) {
-    powerZones[z.zone_key] = { key: z.zone_key, name: z.name, powerMin: z.power_min, powerMax: z.power_max, sortOrder: z.sort_order };
-  }
-  const bikeHrZones: BikeHrZoneMap = {};
-  for (const z of bikeHrZoneRows) {
-    bikeHrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
-  }
 
   // Upcoming (+2..+7), rest-filled
   const upcomingWithRest: PlanSession[] = [];
@@ -391,11 +330,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const todayDoneIds = todaySessions.filter(s => completionById.get(s.id)).map(s => s.id);
   const cw = todaySession ? completionById.get(todaySession.id) ?? null : null;
 
-  // FTP proxy = the top of the Threshold (Z4) power zone — drives ride TSS the
-  // same way threshold pace drives run TSS. Updates if the zones are edited.
-  const ftp = powerZones['Z4']?.powerMax ?? null;
-
-  const todayCompleted: CompletedToday | null = cw ? buildCompleted(cw, threshMinKm, ftp) : null;
+  const todayCompleted: CompletedToday | null = cw ? buildCompletedActuals(cw, threshMinKm, ftp) : null;
 
   // Recently completed — the latest finished run/ride before today. Rendered by
   // the SAME hero as Today (one card to maintain), with a dated "· Done" label.
@@ -405,7 +340,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   if (recentCompletedRaw) {
     const { cw: rcw, ps } = recentCompletedRaw;
     recentSession = ps as unknown as PlanSession;
-    recentCompleted = buildCompleted(rcw, threshMinKm, ftp);
+    recentCompleted = buildCompletedActuals(rcw, threshMinKm, ftp);
     const dateLabel = new Date(rcw.completed_date + 'T00:00:00')
       .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     recentLabel = `${dateLabel} · Done`;

@@ -102,3 +102,28 @@ export function runTss(
   const intensity = threshMinKm / paceMinKm;        // faster than threshold → > 1
   return Math.round((durationMins / 60) * intensity * intensity * 100);
 }
+
+// Parse a threshold-pace string ("m:ss" per km) to a numeric pace in min/km.
+// e.g. "3:40" → 3.6667. Tolerates a missing seconds component.
+export function parseThresholdPace(str: string): number {
+  const [m, s] = str.split(':').map(Number);
+  return m + (s || 0) / 60;
+}
+
+// One TSS for either sport: run (NGP/pace vs threshold) when a `runPace` is given,
+// else ride (power vs FTP). `runPace` is the caller's chosen pace (NGP ?? avg).
+// Mirrors the same hours × IF² × 100 model the run formula uses. Returns null
+// without enough to compute (e.g. strength/yoga with neither pace nor power).
+export function sessionTss(
+  input: { mins: number | null; runPace: number | null; power: number | null },
+  threshMinKm: number | null,
+  ftp: number | null,
+): number | null {
+  const run = runTss(input.mins, input.runPace, threshMinKm);
+  if (run != null) return run;
+  if (input.mins != null && input.power != null && ftp && ftp > 0) {
+    const intensity = input.power / ftp;
+    return Math.round((input.mins / 60) * intensity * intensity * 100);
+  }
+  return null;
+}
