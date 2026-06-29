@@ -14,6 +14,7 @@ import {
 } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
+import { resolveSport, sportSpec } from '@/lib/sports/registry';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
@@ -227,15 +228,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // Display order within a day: the sequence sessions are actually done in
   // (warm-up → run → stretch → core → strength), or strength-first on
   // strength-priority plans. STRENGTH and CORE share a tier.
-  const isStrengthTier = (s: PlanSession) => s.session_type === 'STRENGTH' || s.session_type === 'CORE';
+  const isStrengthTier = (s: PlanSession) => sportSpec(s).isStrengthTier;
   for (const list of byDate.values()) {
     list.sort((a, b) =>
       strengthFirst
         ? strengthFirstOrder(a) - strengthFirstOrder(b)
         : intraDayOrder(a) - intraDayOrder(b));
   }
+  // The day's primary cardio session (run/ride) feeds the hero + "next up".
   function pickRun(list?: PlanSession[]): PlanSession | null {
-    return list?.find(s => !isStrengthTier(s) && s.session_type !== 'YOGA') ?? null;
+    return list?.find(s => sportSpec(s).isMain) ?? null;
   }
   function pickStrength(list?: PlanSession[]): PlanSession | null {
     return list?.find(isStrengthTier) ?? null;
@@ -280,7 +282,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const iso = isoDate(addDays(today, i));
     const sessions = byDate.get(iso) ?? [];
     const volumeKm = sessions.reduce((s, x) => s + (Number(x.distance_km) || 0), 0);
-    const isRide = (s: PlanSession) => s.activity_type === 'cycling';
     windowDays.push({
       iso,
       short: fmtShort(iso),
@@ -289,10 +290,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
       isTomorrow: i === 1,
       sessions,
       volumeKm,
-      hasRun: sessions.some(s => !isStrengthTier(s) && s.session_type !== 'YOGA' && !isRide(s)),
-      hasRide: sessions.some(isRide),
-      hasStrength: sessions.some(isStrengthTier),
-      hasYoga: sessions.some(s => s.session_type === 'YOGA'),
+      hasRun: sessions.some(s => resolveSport(s) === 'run'),
+      hasRide: sessions.some(s => resolveSport(s) === 'cycling'),
+      hasStrength: sessions.some(s => resolveSport(s) === 'strength'),
+      hasYoga: sessions.some(s => resolveSport(s) === 'yoga'),
     });
   }
 
@@ -365,12 +366,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
     }
     // "This week" tracks RUNNING volume only — exclude rides and
     // strength/core/yoga completions so a logged ride doesn't inflate the km.
-    const NON_RUN = new Set(['STRENGTH', 'CORE', 'YOGA']);
     const isRunCompletion = (c: { plan_sessions?: unknown }) => {
       const ps = Array.isArray(c.plan_sessions) ? c.plan_sessions[0] : c.plan_sessions;
       if (!ps) return true; // off-plan completion — assume a run
-      const p = ps as { session_type?: string | null; activity_type?: string | null };
-      return p.activity_type !== 'cycling' && !NON_RUN.has(p.session_type ?? '');
+      return sportSpec(ps as { session_type?: string | null; activity_type?: string | null }).countsToWeeklyVolume;
     };
     const doneByDate = new Map<string, number>();
     for (const c of weekCompleted ?? []) {

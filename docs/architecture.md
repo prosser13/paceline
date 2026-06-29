@@ -56,39 +56,40 @@ back to a live `sessionTss` calc when null, so a render is always correct even b
 The formula lives once, in `sessionTss` (`src/lib/run-tss.ts`). (Off-plan activity TSS is still computed
 live in the loaders — not stored.)
 
-A session's **sport is decided by two fields**, in this priority:
+A session's **sport** comes from one classifier — `resolveSport(session)` in
+`src/lib/sports/registry.ts` — which applies this priority (the only place this ladder lives):
 
-| Test | Sport | Renders as |
-|------|-------|-----------|
-| `session_type === 'STRENGTH'` or `'CORE'` | strength | `StrengthRow` / `StrengthHero` |
-| `session_type === 'YOGA'` | yoga | `YogaRow` / `YogaHero` |
-| `activity_type === 'cycling'` | ride | `CyclingRow` / `CyclingHero` |
-| otherwise | run (incl. `session_type === 'RACE'`) | `RunRow` / `SessionHero` |
+| Test | `SportKey` | Renders as |
+|------|-----------|-----------|
+| `session_type === 'STRENGTH'` or `'CORE'` | `strength` | `StrengthRow` / `StrengthHero` |
+| `session_type === 'YOGA'` | `yoga` | `YogaRow` / `YogaHero` |
+| `activity_type === 'cycling'` | `cycling` | `CyclingRow` / `CyclingHero` |
+| otherwise (incl. `RACE`) | `run` | `RunRow` / `SessionHero` |
 
-`src/lib/activity-types.ts` maps a Strava `sport_type` → `ActivityKind` (`run|ride|strength|yoga`) for
-synced/off-plan activities — the seed for any future sport registry.
+`SPORTS[key]` carries the behaviour flags (`isMain`, `isStrengthTier`, `countsToWeeklyVolume`) that the
+loaders read instead of re-deriving them. `src/lib/activity-types.ts` separately maps a Strava
+`sport_type` → `ActivityKind` for *synced/off-plan* activities.
 
 ---
 
 ## 3. Sport touch-point map  ⚠️ read before adding a sport
 
-Sport handling is **dispatched inline in several places**. To add a sport (e.g. swim) today you touch:
+The per-sport `if` ladders were collapsed into the **registry** (`src/lib/sports/registry.ts`) +
+the **shared row dispatcher** (`src/components/SessionRow.tsx`). To add a sport (e.g. swim), edit:
 
-| File | What lives there |
-|------|------------------|
-| `src/lib/activity-types.ts` | `*_TYPES` sets + `activityKind()` classification |
-| `src/app/(app)/plan/PlanThread.tsx` (~220-285) | row dispatch (the `if` ladder); link/merge target rules |
-| `src/app/(app)/_dashboard/SessionRows.tsx` (37-47) | the *same* row dispatch (dashboard "Tomorrow") |
-| `src/app/(app)/_dashboard/ActivityHero.tsx` | run vs ride hero dispatch |
-| `src/lib/session-order.ts` | `intraDayOrder` / `strengthFirstOrder` (per-`session_type` ordering) |
-| `src/app/(app)/_dashboard/data.ts` | `isStrengthTier`, `pickRun`, `isRunCompletion`, `NON_RUN`, `hasRun/Ride/Yoga` |
-| `src/lib/strava.ts` | per-kind activity matching |
-| `src/lib/activity-merge.ts` | pace combine (run-only) |
-| `src/data/plan-context.ts` | `SESSION_SCHEMAS` (agent edit schemas — run + strength only) |
+| File | What to add |
+|------|-------------|
+| `src/lib/sports/registry.ts` | a `SportKey`, a `SPORTS` entry, and a `resolveSport()` branch |
+| `src/components/SessionRow.tsx` | one `case` returning the sport's row component |
+| `src/app/(app)/_dashboard/ActivityHero.tsx` | a hero branch — only if it's a "main" cardio sport |
+| `src/lib/session-order.ts` | an `intraDayOrder` value (finer than sport: RACE + yoga sub-roles) |
+| `src/lib/strava.ts` | the per-kind matching rule (distance/date/duration) |
+| `src/lib/activity-types.ts` | the `*_TYPES` set so synced activities classify |
 
-> This scattering is the motivation for the planned **sport registry** (`src/lib/sports/registry.ts`):
-> one `SPORTS[key]` entry carrying `{ Row, Hero, intraDayOrder, countsToWeeklyVolume, tss, … }`, so the
-> dispatchers become `SPORTS[resolveSport(s)].Row`. Until that lands, edit all the rows above.
+These derive automatically from the registry, so you **don't** touch them: `SessionRows` + `PlanThread`
+(both render via `<SessionRow>`), and `_dashboard/data.ts` (`isStrengthTier`/`pickRun`/`hasRun|Ride|Yoga`/
+weekly-volume all read `resolveSport`/`SPORTS`). Still per-sport-bespoke and out of the registry today:
+`activity-merge.ts` (pace combine) and `plan-context.ts` `SESSION_SCHEMAS` (agent edit schemas).
 
 **Per-sport metrics:** run uses pace zones + threshold pace; ride uses power zones + FTP (proxied as the
 top of the Z4 power zone) + a separate (lower) bike-HR zone set. Strength/yoga are time-only (no zones).
