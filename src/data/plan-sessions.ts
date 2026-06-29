@@ -206,6 +206,17 @@ export async function getCompletedForSession(planSessionId: string) {
   return data;
 }
 
+// Completions for several planned sessions in one round-trip (the dashboard's
+// "today" list) — each row carries its plan_session_id so the caller can key them.
+export async function listCompletedForSessions(planSessionIds: string[]) {
+  if (!planSessionIds.length) return [];
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr')
+    .in('plan_session_id', planSessionIds);
+  return data ?? [];
+}
+
 // Completed date + distance within [from, to] (weekly done volume).
 export async function listCompletedDistancesBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
