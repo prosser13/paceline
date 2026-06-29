@@ -1,6 +1,7 @@
 // Shared dashboard data loader — all the queries and derivations the dashboard
 // (src/app/page.tsx) and its sub-components need, in one place.
 
+import { cache } from 'react';
 import { getCurrentUser } from '@/lib/supabase-server';
 import { getWellnessCached } from '@/lib/intervals';
 import {
@@ -98,9 +99,6 @@ export interface DashboardData {
   weekDoneKm: number;
   weekToGoKm: number;
   weekDays: WeekDay[];
-
-  fitnessForm: { form: number | null; fitness: number | null; fatigue: number | null } | null;
-  fitnessHistory: { date: string; ctl: number; atl: number }[] | null;
 
   last7: { totalKm: number; sessions: number; h: number; m: number; totalTss: number };
 
@@ -221,7 +219,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     bikeHrZoneRows,
     weekRow,
     raceRow,
-    wellness,
     offPlanRaw,
     recentCompletedRaw,
   ] = await Promise.all([
@@ -235,7 +232,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
     listBikeHrZones(),
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
-    getWellnessCached(),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
     getMostRecentCompletedSession(todayStr),
   ]);
@@ -277,9 +273,6 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const todaySession     = pickRun(byDate.get(todayStr));
   const tomorrowSession  = pickRun(byDate.get(tomorrowStr));
   const tomorrowStrength = pickStrength(byDate.get(tomorrowStr));
-
-  const fitnessForm    = wellness.form;
-  const fitnessHistory = wellness.history;
 
   const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshParts   = thresholdPace.split(':').map(Number);
@@ -508,9 +501,19 @@ export async function loadDashboardData(): Promise<DashboardData> {
     phaseSegments, todayPct, ringPct,
     daysToRace, raceName, raceDateStr,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
-    fitnessForm, fitnessHistory,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
   };
 }
+
+// Wellness (fitness/fatigue/form) is loaded separately from the main dashboard
+// data because it depends on the external intervals.icu API (a cross-region
+// fetch on the first load of each day). Keeping it out of loadDashboardData()
+// means the slow call can't block the agenda/week/today content — it streams
+// into its own <Suspense> boundary instead. cache() collapses the two consumers
+// (FormMeter + FitnessChart) to a single fetch per request.
+export const loadWellness = cache(async () => {
+  const w = await getWellnessCached();
+  return { fitnessForm: w.form, fitnessHistory: w.history };
+});

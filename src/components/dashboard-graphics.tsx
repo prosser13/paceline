@@ -25,6 +25,20 @@ export function CardHeader({ accent, children, right }: { accent: string; childr
 
 export const cardClass = 'flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper';
 
+// Loading placeholder for a wellness card while its intervals.icu-backed data
+// streams in. Renders the real header instantly (no data needed) and a pulsing
+// body sized to the loaded card so the swap doesn't shift layout.
+export function CardSkeleton({ header, bodyHeight }: { header: string; bodyHeight: number }) {
+  return (
+    <div className={cardClass}>
+      <CardHeader accent={FERN}>{header}</CardHeader>
+      <div className="flex-1 px-[18px] py-[15px]" style={{ minHeight: bodyHeight }}>
+        <div className="h-full w-full rounded-[8px] bg-fog/40 animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
 /* ── Phase timeline (top-left) ─────────────────────────────── */
 
 export type { PhaseSeg };
