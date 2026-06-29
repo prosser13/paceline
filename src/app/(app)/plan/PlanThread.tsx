@@ -2,17 +2,9 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import ProfileChart from '@/components/ProfileChart';
-import { buildProfileBars } from '@/lib/profile';
-import { normalizeStructure } from '@/lib/plan-structure';
-import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
-import {
-  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, distanceCompare, type CompareRow, type CompareTone,
-} from '@/components/session-ui';
-
-type WindowCmp = { delta: string; tone: CompareTone };
-import { PlannedDetail } from '../_dashboard/SessionRows';
+import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
+import { RaceBadge } from '@/components/session-ui';
+import RunRow from '@/components/RunRow';
 import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
 import YogaRow, { type YogaPose } from '@/components/YogaRow';
 import CyclingRow from '@/components/CyclingRow';
@@ -20,7 +12,6 @@ import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
 import { unlinkSession, removePromotedSession, unmergeActivity } from './match-actions';
-import { RunGlyph } from '@/components/glyphs';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
 
@@ -74,78 +65,6 @@ const PHASE_HEX: Record<string, string> = {
   Base: '#14617e', Build: '#dfa01c', Peak: '#c75b33', Taper: '#4f7a52',
 };
 
-const RACE_COLOR: Record<string, string> = { A: '#8c2b2b', B: '#b5790f', C: '#14617e' };
-
-// Pace helpers for the completed-run comparison table.
-function paceToSec(p: string | null | undefined): number | null {
-  if (!p) return null;
-  const m = p.split(':').map(Number);
-  return m.length === 2 && !m.some(isNaN) ? m[0] * 60 + m[1] : null;
-}
-function secToPace(sec: number): string {
-  const s = Math.round(sec);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-// The overall planned pace window across a run's segments (fastest..slowest).
-function plannedPaceBounds(steps: NormStep[]): { fast: number; slow: number } | null {
-  let fast = Infinity, slow = -Infinity;
-  const visit = (s: { paceMin?: string; paceMax?: string }) => {
-    const a = paceToSec(s.paceMin); const b = paceToSec(s.paceMax) ?? a;
-    if (a != null) { fast = Math.min(fast, a); slow = Math.max(slow, b ?? a); }
-  };
-  for (const st of steps) {
-    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit);
-    else visit(st as { paceMin?: string; paceMax?: string });
-  }
-  return Number.isFinite(fast) && slow >= fast ? { fast, slow } : null;
-}
-
-// The overall planned HR window across a run's segments (from the HR zones).
-function plannedHrBounds(steps: NormStep[]): { lo: number; hi: number } | null {
-  let lo = Infinity, hi = -Infinity;
-  const visit = (s: { hrMin?: number | null; hrMax?: number | null }) => {
-    if (s.hrMin != null) lo = Math.min(lo, s.hrMin);
-    if (s.hrMax != null) hi = Math.max(hi, s.hrMax);
-  };
-  for (const st of steps) {
-    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(visit);
-    else visit(st as { hrMin?: number | null; hrMax?: number | null });
-  }
-  return Number.isFinite(lo) && hi >= lo ? { lo, hi } : null;
-}
-
-// Seconds → "M:SS" or "H:MM".
-function secToClock(sec: number): string {
-  const s = Math.round(sec);
-  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
-}
-
-// The planned duration window (seconds) across a run's segments, derived from
-// each segment's pace bounds — the boundary the actual time is judged against.
-function plannedDurationBounds(steps: NormStep[]): { lo: number; hi: number } | null {
-  let lo = 0, hi = 0, any = false;
-  const add = (s: { paceMin?: string; paceMax?: string; distanceKm?: number | null; midSeconds?: number | null }, mult: number) => {
-    const pmin = paceToSec(s.paceMin); const pmax = paceToSec(s.paceMax) ?? pmin;
-    if (s.distanceKm != null && pmin != null) { lo += s.distanceKm * pmin * mult; hi += s.distanceKm * (pmax ?? pmin) * mult; any = true; }
-    else if (s.midSeconds != null && s.distanceKm != null) { const t = s.midSeconds * s.distanceKm * mult; lo += t; hi += t; any = true; }
-  };
-  for (const st of steps) {
-    if ('kind' in st && st.kind === 'repeat') st.steps.forEach(s => add(s, st.count));
-    else add(st as { paceMin?: string; paceMax?: string; distanceKm?: number | null; midSeconds?: number | null }, 1);
-  }
-  return any ? { lo, hi } : null;
-}
-
-function parseDurationMins(str: string | null | undefined): number | null {
-  if (!str) return null;
-  const parts = str.split(':').map(Number);
-  if (parts.length !== 2 || parts.some(isNaN)) return null;
-  return parts[0] * 60 + parts[1];
-}
-
-const toneClass = (t?: string) => (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
-
 function resolveStatus(
   session: PlanSession,
   todayStr: string,
@@ -179,27 +98,6 @@ function RestCard() {
       </svg>
       <span className="text-[14px]">Rest day — recover</span>
     </div>
-  );
-}
-
-// Compact left-aligned "vs plan" line — the TSS and Duration windows from the
-// detail table, so the glance and the table always agree (✓ in band, gap out).
-function DeltaBlock({ tss, dur }: { tss: WindowCmp | null; dur: WindowCmp | null }) {
-  if (!tss && !dur) return null;
-  return (
-    <div className="font-mono text-[12.5px] flex items-center gap-[6px] whitespace-nowrap leading-none">
-      <span className="text-[10px] uppercase tracking-[.08em] text-stone">vs plan</span>
-      {tss && <span className={toneClass(tss.tone)}>{tss.delta}</span>}
-      {tss && dur && <span className="text-fog">·</span>}
-      {dur && <span className={toneClass(dur.tone)}>{dur.delta}</span>}
-    </div>
-  );
-}
-
-function RaceBadge({ priority }: { priority: string }) {
-  return (
-    <span className="font-mono text-[11px] font-bold text-bone rounded-[4px] px-[6px] py-[2px] shrink-0"
-      style={{ background: RACE_COLOR[priority] ?? '#8c2b2b' }}>{priority}</span>
   );
 }
 
@@ -299,7 +197,6 @@ export default function PlanThread({
     const isToday   = status === 'today';
     const isNext    = session.id === nextSessionId;
     const isFocus   = isToday || isNext;
-    const intensity = (session.intensity as string | null) ?? 'easy';
     const isExpanded = expandedIds.has(session.id);
     const completed  = completedMap[session.id];
 
@@ -369,212 +266,22 @@ export default function PlanThread({
       );
     }
 
-    // Running / Race
-    const isRace = session.session_type === 'RACE';
-
-    const { segActuals, segHr } = isDone && completed
-      ? wholeRunActuals(
-          !!session.structure?.length,
-          {
-            totalSeconds: (() => {
-              const mins = completed.durationMins ?? parseDurationMins(completed.durationStr);
-              return mins != null ? mins * 60 : null;
-            })(),
-            distanceKm: completed.distanceKm ?? null,
-            avgHr: completed.avgHr ?? null,
-          },
-          completed.segmentActuals ?? null,
-          completed.segmentHr ?? null,
-        )
-      : { segActuals: null, segHr: null };
-
-    const detailSteps: NormStep[] = normalizeStructure(
-      session.structure?.length ? session.structure : syntheticStructure(session, intensity),
-      zones, segActuals, hrZones, segHr,
-    );
-
-    const plannedSec         = sumSegmentSeconds(detailSteps);
-    const plannedDurationStr = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
-    const displayTss      = isDone && completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
-    const displayDuration = isDone && completed?.durationStr ? completed.durationStr : plannedDurationStr;
-    // Distance now leads the description line (not the right-hand metric stack).
-    const rowKm   = isDone ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null);
-    const kmLabel = rowKm != null ? `${rowKm % 1 === 0 ? rowKm : rowKm.toFixed(1)} km` : null;
-
-    // Completed run → Plan / Actual / Δ comparison table (distance, pace, HR).
-    // ovDur / ovTss feed the compact "vs plan" line so it matches the table.
-    let compareRows: CompareRow[] | null = null;
-    let ovDur: WindowCmp | null = null;
-    let ovTss: WindowCmp | null = null;
-    if (isDone && completed) {
-      const planKm = session.distance_km != null ? Number(session.distance_km) : null;
-      const actKm  = completed.distanceKm ?? null;
-      const bounds = plannedPaceBounds(detailSteps);
-      const plannedMins = plannedSec > 0 ? plannedSec / 60 : parseDurationMins(session.estimated_duration);
-      const planPace = bounds
-        ? (bounds.fast === bounds.slow ? secToPace(bounds.fast) : `${secToPace(bounds.fast)}–${secToPace(bounds.slow)}`)
-        : (plannedMins && planKm ? secToPace((plannedMins * 60) / planKm) : '—');
-      const actMins  = completed.durationMins ?? parseDurationMins(completed.durationStr);
-      const actPaceSec = actMins != null && actKm ? (actMins * 60) / actKm : null;
-      // Pace gap shown as +0:04 (slower) / −0:04 (faster). In a race, faster
-      // than the window reads marine; for a planned run it's off-plan (ember).
-      const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace, isRace ? 'fast' : 'neg') : null;
-
-      // Distance — tick within ±5% of the planned distance, else the true signed gap from plan.
-      const dist = planKm != null && actKm != null ? distanceCompare(actKm, planKm) : null;
-
-      const hrBounds = plannedHrBounds(detailSteps);
-      const planHr   = hrBounds ? (hrBounds.lo === hrBounds.hi ? `${hrBounds.lo}` : `${hrBounds.lo}–${hrBounds.hi}`) : '—';
-      const hr = hrBounds && completed.avgHr != null ? rangeCompare(completed.avgHr, hrBounds.lo, hrBounds.hi, undefined, isRace ? 'fast' : 'neg') : null;
-
-      // Duration — window from the segment pace bounds.
-      const durBounds = plannedDurationBounds(detailSteps);
-      const actDurSec = actMins != null ? actMins * 60 : null;
-      const dur = durBounds && actDurSec != null ? rangeCompare(actDurSec, durBounds.lo, durBounds.hi, secToPace, isRace ? 'fast' : 'neg') : null;
-      const planDur = durBounds
-        ? (Math.round(durBounds.lo) === Math.round(durBounds.hi) ? secToClock(durBounds.lo) : `${secToClock(durBounds.lo)}–${secToClock(durBounds.hi)}`)
-        : (session.estimated_duration ?? '—');
-
-      // TSS — tick within ±10% of the planned estimate.
-      const planTss = session.estimated_tss ?? null;
-      const actTss  = completed.tss ?? null;
-      const tssB = planTss != null ? { lo: planTss * 0.9, hi: planTss * 1.1 } : null;
-      const tss  = tssB && actTss != null ? rangeCompare(actTss, tssB.lo, tssB.hi) : null;
-      ovDur = dur;
-      ovTss = tss;
-
-      compareRows = [
-        {
-          metric: 'Distance',
-          plan: planKm != null ? `${planKm} km` : '—',
-          actual: actKm != null ? `${actKm % 1 === 0 ? actKm : actKm.toFixed(1)} km` : '—',
-          delta: dist?.delta ?? null,
-          tone: dist?.tone ?? 'flat',
-        },
-        {
-          metric: 'Pace',
-          plan: planPace,
-          actual: actPaceSec != null ? secToPace(actPaceSec) : '—',
-          delta: pace?.delta ?? null,
-          tone: pace?.tone ?? 'flat',
-        },
-        {
-          metric: 'Avg HR',
-          plan: planHr,
-          actual: completed.avgHr != null ? `${completed.avgHr}` : '—',
-          delta: hr?.delta ?? null,
-          tone: hr?.tone ?? 'flat',
-        },
-        {
-          metric: 'Duration',
-          plan: planDur,
-          actual: actDurSec != null ? secToClock(actDurSec) : (completed.durationStr || '—'),
-          delta: dur?.delta ?? null,
-          tone: dur?.tone ?? 'flat',
-        },
-        {
-          metric: 'TSS',
-          plan: tssB ? `${Math.round(tssB.lo)}–${Math.round(tssB.hi)}` : '—',
-          actual: actTss != null ? `${actTss}` : '—',
-          delta: tss?.delta ?? null,
-          tone: tss?.tone ?? 'flat',
-        },
-      ];
-    }
-
-    // The graph (upcoming) / vs-plan (completed) slot, rendered at two sizes:
-    // a small one beneath the description on mobile, a larger one in its own
-    // centred column on desktop (see below).
-    const profileBars = buildProfileBars(
-      { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) },
-      thresholdPace, zones, segActuals,
-    );
-    const renderSlot = (size: 'xs' | 'sm') => (isDone && (ovTss || ovDur)) ? (
-      <DeltaBlock tss={ovTss} dur={ovDur} />
-    ) : (
-      <ProfileChart bars={profileBars} size={size}
-        color={INTENSITY[intensity]?.hex ?? '#17191e'} opacity={segActuals ? 0.9 : 0.6} />
-    );
-
+    // Running / Race — delegated to the shared RunRow (the same component the
+    // dashboard's "Tomorrow" block uses). Expansion stays parent-controlled so
+    // it survives the re-render after a match/unlink action.
     return withUnlink(
-      <div key={session.id}>
-        <div
-          className={`border-l-[3px] px-[16px] py-[12px] transition-colors cursor-pointer select-none ${isFocus ? 'bg-oxblood-soft/35' : ''} hover:bg-fog/15`}
-          style={{ borderLeftColor: INTENSITY[intensity]?.hex ?? '#17191e' }}
-          onClick={() => toggleExpanded(session.id)}
-          role="button"
-          tabIndex={0}
-          aria-expanded={isExpanded}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpanded(session.id); } }}
-        >
-          {/* Title + description on the left, time + TSS top-aligned with the
-              title on the right (so a 1-line ride leaves no empty space below).
-              The graph/vs-plan sits beside the description on desktop, beneath
-              it on mobile. */}
-          <div className="flex items-start justify-between gap-[14px]">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start gap-[7px] leading-tight">
-                {isNext && !isToday && (
-                  <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">
-                    Next up
-                  </span>
-                )}
-                {isRace && (
-                  <span className="font-mono text-[11px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0 mt-[1px]">Race</span>
-                )}
-                {isDone && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
-                <RunGlyph size={15} className="text-stone shrink-0 mt-[3px]" />
-                <span className="text-[16.5px] font-semibold text-ink flex-1 min-w-0">
-                  {session.name}
-                  {session.priority && <> <RaceBadge priority={session.priority} /></>}
-                  <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
-                    style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
-                </span>
-              </div>
-
-              <div className="mt-[7px]">
-                {(kmLabel || session.description) && (
-                  <div className="text-[14px] leading-snug text-stone">
-                    {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
-                    {kmLabel && session.description && ' · '}
-                    {session.description}
-                  </div>
-                )}
-                {session.race_slug && (
-                  <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
-                    className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">
-                    Race Guide →
-                  </Link>
-                )}
-                {/* Mobile: graph / vs-plan beneath the description (unchanged). */}
-                <div className="mt-[8px] sm:hidden">{renderSlot('xs')}</div>
-              </div>
-            </div>
-
-            {/* Desktop: graph / vs-plan in its own column, vertically centred so
-                it straddles the title + description, right beside the metrics. */}
-            <div className="hidden sm:flex items-center self-stretch shrink-0">{renderSlot('sm')}</div>
-
-            <MetricBlock
-              duration={displayDuration}
-              distanceKm={null}
-              tss={displayTss}
-              estimated={!isDone}
-            />
-          </div>
-        </div>
-
-        {isExpanded && (compareRows ? (
-          // Completed: whole-run summary, then the per-segment breakdown
-          // (each interval's planned target vs the actual result).
-          <>
-            <CompareTable rows={compareRows} />
-            <WorkoutDetail steps={detailSteps} isRace={isRace} />
-          </>
-        ) : (
-          <PlannedDetail steps={detailSteps} />
-        ))}
-      </div>
+      <RunRow
+        session={session}
+        zones={zones}
+        hrZones={hrZones}
+        thresholdPace={thresholdPace}
+        completed={completed ?? null}
+        today={isFocus}
+        next={isNext && !isToday}
+        done={isDone}
+        isExpanded={isExpanded}
+        onToggle={() => toggleExpanded(session.id)}
+      />
     );
   }
 

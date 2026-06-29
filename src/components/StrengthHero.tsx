@@ -20,7 +20,7 @@ function Stat({ v, u }: { v: React.ReactNode; u: string }) {
 }
 
 // Dashboard hero for a strength session — mirrors the run SessionHero: coloured
-// header (Today · Strength), short session name + descriptor, three stat boxes
+// header (the day label), short session name + descriptor, three stat boxes
 // (duration / exercises / sets), a "Session detail" accordion with the clean
 // exercise rows, and a CTA that loads the planned session.
 export default function StrengthHero({
@@ -50,7 +50,7 @@ export default function StrengthHero({
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Header bar — gold when planned, fern when completed */}
       <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: done ? FERN : GOLD, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label} · Strength</span>
+        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
         {done && (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
             ✓ Completed
