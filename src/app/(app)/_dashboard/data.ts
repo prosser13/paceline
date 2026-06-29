@@ -246,10 +246,29 @@ export async function loadDashboardData(): Promise<DashboardData> {
     list.push(s);
     byDate.set(s.scheduled_date, list);
   }
-  // Same-day ordering: strength leads on strength-priority plans (Dragon 50),
-  // otherwise the run/ride leads. Mirrors the plan page.
   const planId = (weekRow?.plan_id as number | null) ?? null;
-  const strengthFirst = planId ? await getPlanStrengthPriority(planId) : false;
+
+  // Same-day ordering: strength leads on strength-priority plans (Dragon 50),
+  // otherwise the run/ride leads. The flag only decides intra-day *display
+  // order*, and today's session *set* is order-independent — so the flag, the
+  // per-session completions, the weekly distance rollups and the phase weeks all
+  // resolve in ONE parallel wave (was: await the flag on its own, then a separate
+  // Tier 2 — two serial transatlantic round-trips, now collapsed into one).
+  const todayListRaw = (byDate.get(todayStr) ?? []).filter(s => s.status !== 'rest');
+  const [strengthFirst, todayCompletionList, weekData, planWeeks] = await Promise.all([
+    planId ? getPlanStrengthPriority(planId) : Promise.resolve(false),
+    Promise.all(todayListRaw.map(s => getCompletedForSession(s.id))),
+    weekRow?.date_from && weekRow?.date_to
+      ? Promise.all([
+          listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
+          listCompletedDistancesBetween(weekRow.date_from, weekRow.date_to),
+        ])
+      : Promise.resolve(null),
+    planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
+  ]);
+  // id → completion, so the lookups below survive the in-place sort that follows.
+  const completionById = new Map(todayListRaw.map((s, i) => [s.id, todayCompletionList[i]]));
+
   // Display order within a day: the sequence sessions are actually done in
   // (warm-up → run → stretch → core → strength), or strength-first on
   // strength-priority plans. STRENGTH and CORE share a tier.
@@ -367,24 +386,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
     ? new Date(raceRow.race_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     : null;
 
-  // ── Tier 2 ──
-  const [todayCompletions, weekData, planWeeks] = await Promise.all([
-    Promise.all(todaySessions.map(s => getCompletedForSession(s.id))),
-    weekRow?.date_from && weekRow?.date_to
-      ? Promise.all([
-          listSessionDistancesBetween(weekRow.date_from, weekRow.date_to),
-          listCompletedDistancesBetween(weekRow.date_from, weekRow.date_to),
-        ])
-      : Promise.resolve(null),
-    planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
-  ]);
-
   // Per-session completion: which of today's sessions are logged, plus the run's
   // rich completion (drives the run hero's pace/HR breakdown).
-  const todayDoneIds = todaySessions.filter((_, i) => todayCompletions[i]).map(s => s.id);
-  const cw = todaySession
-    ? todayCompletions[todaySessions.findIndex(s => s.id === todaySession.id)] ?? null
-    : null;
+  const todayDoneIds = todaySessions.filter(s => completionById.get(s.id)).map(s => s.id);
+  const cw = todaySession ? completionById.get(todaySession.id) ?? null : null;
 
   // FTP proxy = the top of the Threshold (Z4) power zone — drives ride TSS the
   // same way threshold pace drives run TSS. Updates if the zones are edited.
