@@ -8,6 +8,7 @@
 // directly pending its dedicated hardening pass.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { sessionTss, parseThresholdPace } from '@/lib/run-tss';
 
 // ── plan_sessions ────────────────────────────────────────────
 
@@ -170,7 +171,7 @@ export async function listCompletedStravaActivityIds(): Promise<number[]> {
 export async function listCompletedBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km')
+    .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, tss')
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -182,7 +183,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getMostRecentCompletedSession(beforeDate: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, strava_activity_id, plan_sessions!inner(*)')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, plan_sessions!inner(*)')
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
@@ -200,7 +201,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr')
+    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -212,7 +213,7 @@ export async function listCompletedForSessions(planSessionIds: string[]) {
   if (!planSessionIds.length) return [];
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr')
+    .select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
     .in('plan_session_id', planSessionIds);
   return data ?? [];
 }
@@ -231,7 +232,7 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
 export async function listAllCompleted() {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, strava_activity_id, merged_strava_ids');
+    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, merged_strava_ids');
   return data ?? [];
 }
 
@@ -311,4 +312,34 @@ export async function updateCompletedWorkout(
   patch: Record<string, any>,
 ): Promise<void> {
   await supabaseAdmin.from('completed_workouts').update(patch).eq('id', id);
+}
+
+// Recompute + store `tss` for every completion from the CURRENT threshold pace and
+// FTP (top of the Z4 power zone) — the single write path for the stored column.
+// Called after a sync (new actuals / backfilled NGP) and whenever threshold pace
+// or power zones change in Settings, so stored TSS can never go stale. Inputs are
+// read UNCACHED so it always reflects the just-committed state; only changed rows
+// are written.
+export async function recomputeAllCompletedTss(): Promise<void> {
+  const [{ data: cfg }, { data: pz }, { data: rows }] = await Promise.all([
+    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
+    supabaseAdmin.from('power_zones').select('zone_key, power_max'),
+    supabaseAdmin.from('completed_workouts')
+      .select('id, tss, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_power'),
+  ]);
+
+  const threshMinKm = parseThresholdPace((cfg?.threshold_pace_per_km as string | null) ?? '3:40');
+  const ftp = (pz ?? []).find(z => z.zone_key === 'Z4')?.power_max ?? null;
+
+  await Promise.all((rows ?? []).map(r => {
+    const mins  = r.actual_duration_mins != null ? Number(r.actual_duration_mins) : null;
+    const ngp   = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km) : null;
+    const pace  = r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
+    const power = r.actual_avg_power != null ? Number(r.actual_avg_power) : null;
+    const tss = sessionTss({ mins, runPace: ngp ?? pace, power }, threshMinKm, ftp);
+    const prev = r.tss != null ? Number(r.tss) : null;
+    return tss === prev
+      ? Promise.resolve()
+      : supabaseAdmin.from('completed_workouts').update({ tss }).eq('id', r.id);
+  }));
 }

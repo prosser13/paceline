@@ -6,6 +6,7 @@ import {
   insertCompletedWorkout, listCompletedMissingSegments, updateCompletedWorkout,
   listCompletedSessionIds,
   listCompletedStravaActivityIds,
+  recomputeAllCompletedTss,
 } from '@/data/plan-sessions';
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
@@ -410,6 +411,10 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       }
     }
   }
+
+  // Store TSS for new completions and any whose NGP was just backfilled — one
+  // pass over all rows from the current threshold/FTP (the single TSS write path).
+  if (matched > 0 || missing.length) await recomputeAllCompletedTss();
 
   await markStravaSynced();
 
