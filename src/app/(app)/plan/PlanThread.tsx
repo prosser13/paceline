@@ -8,7 +8,7 @@ import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap, NormStep } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, type CompareRow, type CompareTone,
+  INTENSITY, MetricBlock, WorkoutDetail, fmtHMMSS, sumSegmentSeconds, syntheticStructure, wholeRunActuals, CompareTable, rangeCompare, distanceCompare, type CompareRow, type CompareTone,
 } from '@/components/session-ui';
 
 type WindowCmp = { delta: string; tone: CompareTone };
@@ -420,8 +420,8 @@ export default function PlanThread({
       // than the window reads marine; for a planned run it's off-plan (ember).
       const pace = bounds && actPaceSec != null ? rangeCompare(actPaceSec, bounds.fast, bounds.slow, secToPace, isRace ? 'fast' : 'neg') : null;
 
-      // Distance — tick within ±2% of the planned distance, else the signed gap.
-      const dist = planKm != null && actKm != null ? rangeCompare(actKm, planKm * 0.98, planKm * 1.02, (n) => n.toFixed(1)) : null;
+      // Distance — tick within ±5% of the planned distance, else the true signed gap from plan.
+      const dist = planKm != null && actKm != null ? distanceCompare(actKm, planKm) : null;
 
       const hrBounds = plannedHrBounds(detailSteps);
       const planHr   = hrBounds ? (hrBounds.lo === hrBounds.hi ? `${hrBounds.lo}` : `${hrBounds.lo}–${hrBounds.hi}`) : '—';
