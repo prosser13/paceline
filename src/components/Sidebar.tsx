@@ -42,38 +42,40 @@ export default function Sidebar({
     return target !== null ? target === href : (pathname === '/plan' && planParam === slug);
   };
 
+  // Active row = near-black tile + cream text; the dot turns gold. Inactive rows
+  // carry a per-section colour dot so the nav reads at a glance.
   const topClass = (isActive: boolean) =>
-    `flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
-      isActive ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
+    `flex items-center gap-[10px] text-[15px] font-semibold px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
+      isActive ? 'bg-hero text-onhero' : 'text-ink hover:bg-fog/50'
     }`;
-  const dotClass = (isActive: boolean) =>
-    `w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-bone' : 'bg-fog'}`;
+  const dot = (isActive: boolean, color: string) =>
+    `w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? 'bg-strength' : color}`;
   const planClass = (isActive: boolean) =>
     `flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-[background-color,transform] active:scale-[0.98] ${
-      isActive ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+      isActive ? 'bg-strength/15 text-strength font-medium' : 'text-stone hover:bg-fog/40'
     }`;
 
   return (
     <aside className="w-[180px] bg-paper border-r border-fog hidden md:flex flex-col gap-1.5 p-[18px_14px] shrink-0 h-full">
-      {/* Brand */}
-      <div className="flex items-center gap-2 font-display font-semibold text-[19px] px-2 pb-4 text-ink">
-        <PacelineMark className="h-[15px] w-auto text-ink" />
+      {/* Brand — gold lead bar */}
+      <div className="flex items-center gap-2 font-display font-bold text-[19px] px-2 pb-4 text-ink">
+        <PacelineMark className="h-[15px] w-auto text-ink" lead="var(--color-strength)" />
         paceline
       </div>
 
       <Link href="/" onClick={go('/')} className={topClass(active('/'))}>
-        <span className={dotClass(active('/'))} />
+        <span className={dot(active('/'), 'bg-stone/50')} />
         Dashboard
       </Link>
 
       <Link href="/plan" onClick={go('/plan')} className={topClass(planParentActive)}>
-        <span className={dotClass(planParentActive)} />
+        <span className={dot(planParentActive, 'bg-ride')} />
         Plan
       </Link>
       <div className="ml-[18px] flex flex-col gap-1">
         {plans.map(p => (
           <Link key={p.slug} href={`/plan?plan=${p.slug}`} onClick={go(`/plan?plan=${p.slug}`)} className={planClass(planActive(p.slug))}>
-            <span className="w-[6px] h-[6px] rounded-[2px] bg-oxblood/60 flex-shrink-0" />
+            <span className="w-[6px] h-[6px] rounded-[2px] bg-strength/60 flex-shrink-0" />
             {p.label}
           </Link>
         ))}
@@ -82,7 +84,7 @@ export default function Sidebar({
             href="/plan/archive"
             onClick={go('/plan/archive')}
             className={`flex items-center gap-[8px] text-[13.5px] px-3 py-[6px] rounded-[8px] transition-[background-color,transform] active:scale-[0.98] ${
-              active('/plan/archive') ? 'bg-oxblood/10 text-oxblood font-medium' : 'text-stone hover:bg-fog/40'
+              active('/plan/archive') ? 'bg-strength/15 text-strength font-medium' : 'text-stone hover:bg-fog/40'
             }`}
           >
             <span className="w-[6px] h-[6px] rounded-[2px] bg-stone/50 flex-shrink-0" />
@@ -91,31 +93,19 @@ export default function Sidebar({
         )}
       </div>
 
-      <Link
-        href="/races"
-        onClick={go('/races')}
-        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
-          activePrefix('/races') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
-        }`}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activePrefix('/races') ? 'bg-bone' : 'bg-fog'}`} />
+      <Link href="/races" onClick={go('/races')} className={topClass(activePrefix('/races'))}>
+        <span className={dot(activePrefix('/races'), 'bg-race')} />
         Races
       </Link>
 
-      <Link
-        href="/strength"
-        onClick={go('/strength')}
-        className={`flex items-center gap-[9px] text-[16px] px-3 py-[9px] rounded-[10px] transition-[background-color,transform] active:scale-[0.98] ${
-          activePrefix('/strength') ? 'bg-oxblood text-bone' : 'text-ink hover:bg-fog/50'
-        }`}
-      >
-        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activePrefix('/strength') ? 'bg-bone' : 'bg-fog'}`} />
+      <Link href="/strength" onClick={go('/strength')} className={topClass(activePrefix('/strength'))}>
+        <span className={dot(activePrefix('/strength'), 'bg-strength')} />
         Strength
       </Link>
 
       <div className="mt-auto">
         <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
-          <span className={dotClass(active('/settings'))} />
+          <span className={dot(active('/settings'), 'bg-yoga')} />
           Settings
         </Link>
       </div>
