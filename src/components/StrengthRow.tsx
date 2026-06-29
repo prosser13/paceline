@@ -46,10 +46,10 @@ export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) 
 // A strength session row — compact (duration + focus), expandable to the
 // prescribed exercises + an optional note.
 export default function StrengthRow({
-  short, date, focus, duration, today, done, note, exercises = [], compact = false, title = 'Strength', next = false,
+  short, date, focus, duration, today, done, note, exercises = [], compact = false, title = 'Strength', next = false, emphasis = false,
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
-  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string; next?: boolean;
+  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string; next?: boolean; emphasis?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = exercises.length > 0;
@@ -57,7 +57,7 @@ export default function StrengthRow({
   return (
     <div>
       <div
-        className={`flex items-center gap-[14px] border-l-[3px] px-[16px] py-[12px] transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
+        className={`flex items-center gap-[14px] border-l-[3px] ${emphasis ? 'px-[18px] py-[15px]' : 'px-[16px] py-[12px]'} transition-colors ${today ? 'bg-oxblood-soft/35' : ''} ${hasDetail ? 'cursor-pointer select-none hover:bg-fog/15' : ''}`}
         style={{ borderLeftColor: GOLD }}
         onClick={hasDetail ? () => setOpen(o => !o) : undefined}
         role={hasDetail ? 'button' : undefined}
@@ -77,8 +77,8 @@ export default function StrengthRow({
               <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">Next up</span>
             )}
             {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
-            <Dumbbell size={15} className="text-stone shrink-0" />
-            <span className="text-[16.5px] font-semibold text-ink">{title}</span>
+            <Dumbbell size={emphasis ? 18 : 15} className="text-stone shrink-0" />
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink`}>{title}</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -89,7 +89,7 @@ export default function StrengthRow({
           {focus && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{focus}</div>}
         </div>
         <div className="shrink-0 text-right w-[78px]">
-          <div className="font-display font-semibold text-[19px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
+          <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[19px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
         </div>
       </div>
 

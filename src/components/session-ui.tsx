@@ -345,6 +345,17 @@ export function RestDayRow({ short, date }: { short: string; date: string }) {
   );
 }
 
+// ── Race badge (priority A/B/C) ──────────────────────────────
+// Shared by the plan page's week header + run row and the dashboard run row.
+const RACE_COLOR: Record<string, string> = { A: '#8c2b2b', B: '#b5790f', C: '#14617e' };
+
+export function RaceBadge({ priority }: { priority: string }) {
+  return (
+    <span className="font-mono text-[11px] font-bold text-bone rounded-[4px] px-[6px] py-[2px] shrink-0"
+      style={{ background: RACE_COLOR[priority] ?? '#8c2b2b' }}>{priority}</span>
+  );
+}
+
 // ── Metric block (time-led) ──────────────────────────────────
 
 const METRIC_SIZE = {
@@ -407,11 +418,49 @@ export function DetailRow({ label, sub, value, valueSub, valueColor, valueSubCol
   );
 }
 
+// Full pace window for a segment — "4:15–5:00/km" (or a single pace).
+function paceRange(s: { paceMin?: string; paceMax?: string }): string | null {
+  if (!s.paceMin) return null;
+  return s.paceMax && s.paceMax !== s.paceMin ? `${s.paceMin}–${s.paceMax}/km` : `${s.paceMin}/km`;
+}
+
+// Clean planned-segment list (the expanded "Session detail" for a run) — fits
+// narrow screens and shows the full pace window. Shared by the plan page's run
+// row and the dashboard's run row.
+export function PlannedDetail({ steps }: { steps: NormStep[] }) {
+  if (!steps.length) return null;
+  return (
+    <div className={DETAIL_WRAP}>
+      {steps.map((step, i) => {
+        if ('kind' in step && step.kind === 'repeat') {
+          const sub = step.steps[0];
+          const totalKm = step.steps.reduce((s, x) => s + (x.distanceKm || 0), 0) * step.count;
+          const subLabel = step.steps.map(s => s.label).join(' + ');
+          return <DetailRow key={i} label={`${step.count} × ${subLabel}`} sub={sub ? paceRange(sub) : null}
+            value={totalKm ? `${totalKm.toFixed(1)} km` : null} valueSub={sub?.zoneKey ?? null} />;
+        }
+        const seg = step;
+        const value = seg.distanceKm ? `${seg.distanceKm} km` : (seg.midSeconds ? fmtMMSS(seg.midSeconds) : null);
+        return <DetailRow key={i} label={seg.label} sub={paceRange(seg)} value={value} valueSub={seg.zoneKey ?? null} />;
+      })}
+    </div>
+  );
+}
+
 // Plan / actual / Δ comparison table for a COMPLETED session — shared by the
 // run and ride details so they read identically. `tone`: pos = better than
 // plan (green), neg = worse (ember), flat = neutral.
 export type CompareTone = 'pos' | 'neg' | 'flat' | 'fast';
 export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: CompareTone; }
+
+// "H:MM" / "M:SS" → total minutes, or null. Used by callers of buildRunCompare
+// to derive the actual minutes from a completed session's duration string.
+export function parseDurationMins(str: string | null | undefined): number | null {
+  if (!str) return null;
+  const parts = str.split(':').map(Number);
+  if (parts.length !== 2 || parts.some(isNaN)) return null;
+  return parts[0] * 60 + parts[1];
+}
 
 // Compare an actual value against a planned [lo, hi] window: in range → a tick;
 // otherwise the signed gap to the nearer bound. Used for pace / HR / power so
