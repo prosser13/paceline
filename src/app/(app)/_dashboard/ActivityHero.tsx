@@ -4,6 +4,7 @@
 
 import SessionHero from './SessionHero';
 import CyclingHero from '@/components/CyclingHero';
+import { resolveSport } from '@/lib/sports/registry';
 import type { DashboardData, PlanSession, CompletedToday } from './data';
 
 export default function ActivityHero({
@@ -14,7 +15,7 @@ export default function ActivityHero({
   completed: CompletedToday | null;
   d: DashboardData;
 }) {
-  return session.activity_type === 'cycling'
+  return resolveSport(session) === 'cycling'
     ? <CyclingHero label={label} session={session} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} />
     : <SessionHero label={label} session={session} thresholdPace={d.thresholdPace}
         zones={d.zones} hrZones={d.hrZones} completed={completed} />;

@@ -1,14 +1,11 @@
 // Compact, expandable session rows with NO per-row date column — the date is
-// owned by the parent (a day card). Used by the dashboard "Tomorrow" block. All
-// row rendering is delegated to the SHARED row components (StrengthRow / YogaRow
-// / CyclingRow / RunRow) so the dashboard and the plan page stay in lock-step —
-// a change to any row updates both surfaces. The dashboard passes `emphasis` for
-// its roomier sizing and renders the planned-only path (no completed data).
+// owned by the parent (a day card). Used by the dashboard "Tomorrow" block. Row
+// dispatch is delegated to the SHARED <SessionRow>, the same dispatcher the plan
+// page uses, so the two surfaces stay in lock-step. The dashboard passes
+// `emphasis` for its roomier sizing and renders the planned-only path (no
+// completed data).
 
-import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
-import YogaRow, { type YogaPose } from '@/components/YogaRow';
-import CyclingRow from '@/components/CyclingRow';
-import RunRow from '@/components/RunRow';
+import SessionRow from '@/components/SessionRow';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PlanSession } from './data';
@@ -33,19 +30,13 @@ export default function SessionRows({
   }
   return (
     <div className="divide-y divide-fog/50">
-      {sessions.filter(s => s.status !== 'rest').map(s =>
-        s.session_type === 'STRENGTH' || s.session_type === 'CORE'
-          ? <StrengthRow key={s.id} compact emphasis={emphasis}
-              title={s.session_type === 'CORE' ? 'Core' : 'Strength'}
-              focus={s.description ?? null} duration={s.estimated_duration ?? null} note={null}
-              exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} />
-          : s.session_type === 'YOGA'
-            ? <YogaRow key={s.id} compact emphasis={emphasis} focus={s.description ?? null} duration={s.estimated_duration ?? null}
-                poses={(s.structure as unknown as YogaPose[] | null) ?? []} />
-            : s.activity_type === 'cycling'
-              ? <CyclingRow key={s.id} session={s} powerZones={powerZones ?? {}} bikeHrZones={bikeHrZones ?? {}} compact emphasis={emphasis} />
-              : <RunRow key={s.id} session={s} thresholdPace={thresholdPace} zones={zones} hrZones={hrZones} emphasis={emphasis} />,
-      )}
+      {sessions.filter(s => s.status !== 'rest').map(s => (
+        <SessionRow
+          key={s.id}
+          session={s}
+          ctx={{ thresholdPace, zones, hrZones, powerZones: powerZones ?? {}, bikeHrZones: bikeHrZones ?? {}, emphasis }}
+        />
+      ))}
     </div>
   );
 }

@@ -4,10 +4,7 @@ import { useState, useTransition, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import { RaceBadge } from '@/components/session-ui';
-import RunRow from '@/components/RunRow';
-import StrengthRow, { type StrengthEx } from '@/components/StrengthRow';
-import YogaRow, { type YogaPose } from '@/components/YogaRow';
-import CyclingRow from '@/components/CyclingRow';
+import SessionRow from '@/components/SessionRow';
 import OffPlanRow, { type LinkTarget } from '@/components/OffPlanRow';
 import type { OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
@@ -217,70 +214,21 @@ export default function PlanThread({
         )
         : node;
 
-    if (session.session_type === 'STRENGTH' || session.session_type === 'CORE') {
-      return withUnlink(
-        <StrengthRow
-          key={session.id}
-          compact
-          title={session.session_type === 'CORE' ? 'Core' : 'Strength'}
-          focus={session.description ?? null}
-          duration={session.estimated_duration ?? null}
-          today={isFocus}
-          next={isNext && !isToday}
-          done={isDone}
-          note={null}
-          exercises={(session.structure as StrengthEx[] | null) ?? []}
-        />
-      );
-    }
-
-    if (session.session_type === 'YOGA') {
-      return withUnlink(
-        <YogaRow
-          key={session.id}
-          compact
-          focus={session.description ?? null}
-          duration={session.estimated_duration ?? null}
-          today={isFocus}
-          next={isNext && !isToday}
-          done={isDone}
-          note={session.rationale ?? null}
-          poses={(session.structure as YogaPose[] | null) ?? []}
-        />
-      );
-    }
-
-    if (session.activity_type === 'cycling') {
-      return withUnlink(
-        <CyclingRow
-          key={session.id}
-          compact
-          session={session}
-          powerZones={powerZones}
-          bikeHrZones={bikeHrZones}
-          today={isFocus}
-          next={isNext && !isToday}
-          done={isDone}
-          completed={isDone ? completed : null}
-        />
-      );
-    }
-
-    // Running / Race — delegated to the shared RunRow (the same component the
-    // dashboard's "Tomorrow" block uses). Expansion stays parent-controlled so
+    // Per-sport dispatch lives in the shared <SessionRow> (same dispatcher the
+    // dashboard "Tomorrow" block uses). Run expansion stays parent-controlled so
     // it survives the re-render after a match/unlink action.
     return withUnlink(
-      <RunRow
+      <SessionRow
         session={session}
-        zones={zones}
-        hrZones={hrZones}
-        thresholdPace={thresholdPace}
-        completed={completed ?? null}
-        today={isFocus}
-        next={isNext && !isToday}
-        done={isDone}
-        isExpanded={isExpanded}
-        onToggle={() => toggleExpanded(session.id)}
+        ctx={{
+          thresholdPace, zones, hrZones, powerZones, bikeHrZones,
+          completed: completed ?? null,
+          today: isFocus,
+          next: isNext && !isToday,
+          done: isDone,
+          isExpanded,
+          onToggle: () => toggleExpanded(session.id),
+        }}
       />
     );
   }
