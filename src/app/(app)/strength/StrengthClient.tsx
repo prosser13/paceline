@@ -43,6 +43,17 @@ function Chevron({ className = '' }: { className?: string }) {
   );
 }
 
+// Section label — the mockup's seclab (uppercase, muted), with an optional
+// normal-case suffix (e.g. "· optional · full-body mix").
+function SecLabel({ children, suffix, className = '' }: { children: React.ReactNode; suffix?: string; className?: string }) {
+  return (
+    <div className={`text-[11px] uppercase font-bold text-stone mb-[8px] ${className}`} style={{ letterSpacing: '.07em' }}>
+      {children}
+      {suffix && <span className="normal-case tracking-normal font-medium"> · {suffix}</span>}
+    </div>
+  );
+}
+
 export default function StrengthClient({ exercises, history }: { exercises: Exercise[]; history: HistoryItem[] }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
@@ -116,102 +127,91 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
 
   // ── Setup ────────────────────────────────────────────────────
   if (phase === 'setup') {
-    const focusSummary = groups.length
-      ? `Optional · ${groups.map(g => GROUP_LABEL[g]).join(', ')} selected`
-      : 'Optional · full-body mix';
+    const focusSuffix = groups.length ? groups.map(g => GROUP_LABEL[g]).join(', ') : 'full-body mix';
 
     return (
       <div>
-        <h1 className="font-display font-semibold text-[23px] leading-tight mb-1">Strength</h1>
-        <p className="text-stone text-[13.5px] mb-[14px]">Build a session, then work through it.</p>
+        <h1 className="font-display font-bold text-[26px] leading-tight mb-1">Strength</h1>
+        <p className="text-stone text-[13px] mb-[16px]">Build a session, then work through it.</p>
 
-        {/* Intensity */}
-        <div className="font-mono text-[10px] uppercase tracking-[.13em] text-stone mb-[9px]">Intensity</div>
-        <div className="grid grid-cols-2 gap-[9px] mb-4">
+        {/* Intent */}
+        <SecLabel>Intent</SecLabel>
+        <div className="grid grid-cols-2 gap-[8px] mb-4">
           {INTENTS.map(i => {
             const on = intent === i;
             return (
               <button key={i} type="button" onClick={() => setIntent(i)} aria-pressed={on}
-                className={`min-h-[74px] rounded-[14px] p-[12px] flex flex-col gap-[6px] text-left border transition-colors active:scale-[0.98] ${on ? 'border-oxblood bg-oxblood-soft' : 'border-fog bg-paper'}`}>
-                <span className={`w-[30px] h-[30px] rounded-[9px] flex items-center justify-center ${on ? 'bg-oxblood text-bone' : 'bg-bone text-oxblood'}`}>
-                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                className={`rounded-[12px] text-left border transition-colors active:scale-[0.98] ${on ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog'}`}
+                style={{ padding: '12px 14px' }}>
+                <span className="text-[14px] font-bold inline-flex items-center gap-[7px]">
+                  <svg className="w-[16px] h-[16px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d={INTENT_ICON[i]} />
                   </svg>
+                  {SESSION_INTENT_CONFIG[i].label}
                 </span>
-                <span className="text-[14.5px] font-semibold text-ink">{SESSION_INTENT_CONFIG[i].label}</span>
-                <span className="text-[11.5px] text-stone leading-tight">{SESSION_INTENT_CONFIG[i].description}</span>
+                <span className={`block text-[11px] leading-snug mt-[3px] ${on ? 'text-onhero/70' : 'text-stone'}`}>{SESSION_INTENT_CONFIG[i].description}</span>
               </button>
             );
           })}
         </div>
 
         {/* Duration */}
-        <div className="font-mono text-[10px] uppercase tracking-[.13em] text-stone mb-[9px]">Duration</div>
-        <div className="flex gap-[7px] mb-4">
+        <SecLabel>Duration</SecLabel>
+        <div className="flex gap-[8px] mb-4">
           {DURATIONS.map(d => {
             const on = duration === d;
             return (
               <button key={d} type="button" onClick={() => setDuration(d)} aria-pressed={on}
-                className={`flex-1 min-h-[48px] rounded-[11px] border flex items-center justify-center gap-[4px] text-[13.5px] font-medium whitespace-nowrap px-[6px] transition-colors ${on ? 'bg-oxblood border-oxblood text-bone' : 'bg-paper border-fog text-ink'}`}>
-                {DURATION_CONFIG[d].label}
-                <span className={`text-[11px] ${on ? 'text-bone/80' : 'text-stone'}`}>· {DURATION_CONFIG[d].minutes}m</span>
+                className={`flex-1 text-center rounded-[12px] border transition-colors ${on ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                style={{ padding: '12px' }}>
+                <div className="text-[14px] font-bold">{DURATION_CONFIG[d].label}</div>
+                <div className={`text-[11px] ${on ? 'text-onhero/70' : 'text-stone'}`}>{DURATION_CONFIG[d].minutes} min</div>
               </button>
             );
           })}
         </div>
 
-        {/* Focus */}
-        <details className="group border border-fog rounded-[15px] bg-paper overflow-hidden mb-3">
-          <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[10px] px-[15px] py-[11px] text-[14.5px] font-semibold text-ink group-open:border-b group-open:border-fog">
-            <span className="flex flex-col min-w-0">Focus<span className="text-[11.5px] font-normal text-stone">{focusSummary}</span></span>
-            <Chevron className="ml-auto w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" />
-          </summary>
-          <div className="px-[15px] pt-[6px] pb-[12px]">
-            <div className="flex flex-wrap gap-[8px]">
-              {MUSCLE_GROUPS.map(g => {
-                const on = groups.includes(g);
-                return (
-                  <button key={g} type="button" onClick={() => toggleGroup(g)} aria-pressed={on}
-                    className={`min-h-[48px] inline-flex items-center gap-[6px] px-[14px] rounded-[11px] border text-[14px] font-medium transition-colors ${on ? 'bg-oxblood border-oxblood text-bone' : 'bg-paper border-fog text-ink'}`}>
-                    <span className={`w-[7px] h-[7px] rounded-full ${on ? 'bg-bone' : 'bg-fog'}`} />
-                    {GROUP_LABEL[g]}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-stone text-[12px] mt-[8px]">Leave empty for a full-body mix.</p>
-          </div>
-        </details>
+        {/* Focus — inline tag pills */}
+        <SecLabel suffix={`optional · ${focusSuffix}`}>Focus</SecLabel>
+        <div className="flex flex-wrap gap-[7px]">
+          {MUSCLE_GROUPS.map(g => {
+            const on = groups.includes(g);
+            return (
+              <button key={g} type="button" onClick={() => toggleGroup(g)} aria-pressed={on}
+                className={`text-[12px] font-semibold rounded-[20px] border transition-colors ${on ? 'bg-strength text-white border-strength' : 'bg-paper border-fog text-ink'}`}
+                style={{ padding: '6px 12px' }}>
+                {GROUP_LABEL[g]}
+              </button>
+            );
+          })}
+        </div>
 
         <button type="button" onClick={build}
-          className="w-full min-h-[48px] rounded-[12px] bg-oxblood text-bone text-[15px] font-semibold hover:bg-oxblood-dark transition-colors active:scale-[0.985]">
-          Build my session →
+          className="w-full rounded-[24px] bg-strength text-white text-[14px] font-bold inline-flex items-center justify-center gap-[7px] hover:opacity-90 transition-opacity active:scale-[0.985]"
+          style={{ padding: '12px 18px', marginTop: '18px' }}>
+          <svg className="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
+          Build my session
         </button>
 
-        {/* History */}
+        {/* Recent sessions — visible */}
         {history.length > 0 && (
-          <details className="group border border-fog rounded-[15px] bg-paper overflow-hidden mt-4">
-            <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[10px] px-[15px] py-[11px] text-[14.5px] font-semibold text-ink group-open:border-b group-open:border-fog">
-              <span className="flex flex-col min-w-0">History<span className="text-[11.5px] font-normal text-stone">Recent sessions</span></span>
-              <Chevron className="ml-auto w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" />
-            </summary>
-            <div className="px-[15px] pb-[12px]">
-              <div className="flex flex-col">
-                {history.map(h => (
-                  <Link key={h.shortId} href={`/strength/session/${h.shortId}`}
-                    className="flex items-start gap-[12px] py-[11px] border-t border-fog/60 first:border-t-0">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[14.5px] font-medium text-ink leading-snug">{h.title}</div>
-                      <div className="text-[11.5px] text-stone mt-[1px]">{h.sub}</div>
-                    </div>
-                    <span className={`shrink-0 font-mono text-[11px] uppercase tracking-[.06em] pt-[1px] ${h.done ? 'text-fern' : 'text-stone'}`}>
-                      {h.done ? '✓ Done' : 'In progress'}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+          <>
+            <SecLabel className="mt-[24px]">Recent sessions</SecLabel>
+            <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '2px 16px' }}>
+              {history.map(h => (
+                <Link key={h.shortId} href={`/strength/session/${h.shortId}`}
+                  className="flex items-center gap-[12px] py-[11px] border-t border-fog/60 first:border-t-0 hover:opacity-80 transition-opacity">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-semibold text-ink leading-snug">{h.title}</div>
+                    <div className="text-[11px] text-stone mt-[1px]">{h.sub}</div>
+                  </div>
+                  <span className="shrink-0 text-[11px] uppercase font-bold tracking-[.06em]" style={{ color: h.done ? 'var(--color-ready)' : 'var(--color-stone)' }}>
+                    {h.done ? '✓ Done' : 'In progress'}
+                  </span>
+                </Link>
+              ))}
             </div>
-          </details>
+          </>
         )}
       </div>
     );
