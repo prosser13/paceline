@@ -38,7 +38,7 @@ export default async function RacesPage() {
             const date = plan?.race_date ?? guide.date ?? null;
             const days = date ? daysUntil(date) : null;
             const dateLong = date
-              ? new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' })
+              ? new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
               : 'Date TBC';
             const priorityColor = RACE_PRIORITY_COLOR[guide.priority] ?? RACE_PRIORITY_COLOR.A;
             return (
@@ -49,20 +49,20 @@ export default async function RacesPage() {
               >
                 <div className="px-[20px] py-[16px] flex items-start justify-between gap-4" style={{ background: priorityColor }}>
                   <div>
-                    <span className="font-mono text-[10px] tracking-[.16em] uppercase text-bone/60">{guide.priority}-Race</span>
-                    <h2 className="font-display font-semibold text-[20px] text-bone leading-tight mt-[2px]">{guide.eventName}</h2>
-                    <p className="font-mono text-[12px] text-bone/60 mt-[3px]">{guide.region}</p>
+                    <span className="font-mono text-[10px] tracking-[.16em] uppercase text-bone/80">{guide.priority}-Race</span>
+                    <h2 className="font-display font-bold text-[20px] text-bone leading-tight mt-[2px]">{guide.eventName}</h2>
+                    <p className="text-[12px] text-bone/80 mt-[3px]">{guide.region}</p>
                   </div>
                   {days != null && days >= 0 && (
                     <div className="text-right shrink-0">
-                      <div className="font-display font-semibold text-[28px] leading-none text-bone">{days}</div>
-                      <div className="font-mono text-[10px] tracking-[.1em] uppercase text-bone/50">days</div>
+                      <div className="font-display font-extrabold text-[28px] leading-none text-bone">{days}</div>
+                      <div className="font-mono text-[10px] tracking-[.1em] uppercase text-bone/80">days</div>
                     </div>
                   )}
                 </div>
                 <div className="px-[20px] py-[14px] flex items-center gap-[20px]">
                   <Stat label="Distance" value={`${guide.distanceKm} km`} />
-                  <Stat label="Ascent" value={`${guide.ascentM} m`} />
+                  <Stat label="Ascent" value={guide.ascentM ? `${guide.ascentM} m` : 'Flat'} />
                   <Stat label="Date" value={dateLong} />
                 </div>
               </Link>
