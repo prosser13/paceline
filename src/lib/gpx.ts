@@ -31,19 +31,26 @@ function haversineKm(a: GpxPoint, b: GpxPoint): number {
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-// Pull every <trkpt lat="" lon=""> (and its optional <ele>) via regex — robust
+// Pull every <trkpt> (lat/lon in either attribute order — some exporters, e.g.
+// Mapometer, write lon before lat) and its optional <ele> via regex — robust
 // enough for organiser-exported GPX without bringing in an XML parser.
 export function parseGpx(xml: string): ParsedGpx | null {
-  const ptRe = /<trkpt[^>]*\blat="([-\d.]+)"[^>]*\blon="([-\d.]+)"[^>]*>([\s\S]*?)<\/trkpt>|<trkpt[^>]*\blat="([-\d.]+)"[^>]*\blon="([-\d.]+)"[^>]*\/>/g;
+  const ptRe = /<trkpt\b([^>]*?)(?:\/>|>([\s\S]*?)<\/trkpt>)/g;
+  const latRe = /\blat="([-\d.]+)"/;
+  const lonRe = /\blon="([-\d.]+)"/;
   const eleRe = /<ele>([-\d.]+)<\/ele>/;
 
   const raw: { lat: number; lng: number; ele: number | null }[] = [];
   let m: RegExpExecArray | null;
   while ((m = ptRe.exec(xml)) !== null) {
-    const lat = parseFloat(m[1] ?? m[4]);
-    const lng = parseFloat(m[2] ?? m[5]);
+    const attrs = m[1] ?? '';
+    const latM = attrs.match(latRe);
+    const lonM = attrs.match(lonRe);
+    if (!latM || !lonM) continue;
+    const lat = parseFloat(latM[1]);
+    const lng = parseFloat(lonM[1]);
     if (Number.isNaN(lat) || Number.isNaN(lng)) continue;
-    const inner = m[3] ?? '';
+    const inner = m[2] ?? '';
     const eleM = inner.match(eleRe);
     raw.push({ lat, lng, ele: eleM ? parseFloat(eleM[1]) : null });
   }
