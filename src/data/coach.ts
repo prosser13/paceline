@@ -19,3 +19,32 @@ export async function getLatestCoachMessage(): Promise<CoachMessage | null> {
     .maybeSingle();
   return (data as CoachMessage | null) ?? null;
 }
+
+// The coach's rolling "athlete context" memory — a single-row table the evening
+// coach distils and rewrites each night via /api/coach-context, then reads on
+// every future review for trailing context.
+export interface CoachContext {
+  summary: string;
+  through_date: string | null;  // last day folded into the summary
+}
+
+export async function getCoachContext(): Promise<CoachContext> {
+  const { data } = await supabaseAdmin
+    .from('coach_context')
+    .select('summary, through_date')
+    .eq('id', 1)
+    .maybeSingle();
+  return {
+    summary: (data?.summary as string | undefined) ?? '',
+    through_date: (data?.through_date as string | null | undefined) ?? null,
+  };
+}
+
+export async function upsertCoachContext(summary: string, throughDate: string): Promise<void> {
+  await supabaseAdmin
+    .from('coach_context')
+    .upsert(
+      { id: 1, summary, through_date: throughDate, updated_at: new Date().toISOString() },
+      { onConflict: 'id' },
+    );
+}
