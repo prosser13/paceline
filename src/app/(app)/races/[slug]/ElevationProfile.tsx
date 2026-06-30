@@ -4,6 +4,7 @@
 // figures when no GPX is present.
 
 import { OXBLOOD, MARINE, FOG } from '@/lib/colors';
+import { CardTitle } from '@/components/dashboard-graphics';
 import type { ParsedGpx } from '@/lib/gpx';
 import type { RaceCheckpoint } from '@/data/races/types';
 
@@ -17,10 +18,14 @@ export default function ElevationProfile({
   parsed,
   checkpoints,
   totalKm: routeKm,
+  title,
+  ascentM,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
   totalKm: number;
+  title?: string;
+  ascentM?: number | null;
 }) {
   // Build (km, ele) samples either from the GPX or the checkpoint table.
   let samples: { km: number; ele: number }[];
@@ -51,6 +56,11 @@ export default function ElevationProfile({
 
   return (
     <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+      {title && (
+        <div className="px-[16px] pt-[14px]">
+          <CardTitle right={ascentM ? `${ascentM} m ↑` : undefined}>{title}</CardTitle>
+        </div>
+      )}
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Elevation profile">
         {/* baseline */}
         <line x1={PAD_L} y1={H - PAD_B} x2={W - 8} y2={H - PAD_B} stroke={FOG} strokeWidth={1} />

@@ -52,16 +52,16 @@ export default function MobileNav() {
         {activeIndex >= 0 && (
           <div
             aria-hidden
-            className="absolute top-[19px] h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-oxblood transition-[left] duration-[420ms] z-[3]"
+            className="absolute top-[19px] h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-strength transition-[left] duration-[420ms] z-[3]"
             style={{
               left: `${(activeIndex + 0.5) * 25}%`,
-              boxShadow: '0 0 0 4px var(--color-paper), 0 0 0 5px var(--color-oxblood)',
+              boxShadow: '0 0 0 4px var(--color-paper), 0 0 0 5px var(--color-strength)',
               transitionTimingFunction: 'cubic-bezier(.34,1.4,.5,1)',
             }}
           >
             <span
               className="absolute right-3 top-[5px] h-[3px] w-[26px] rounded-sm opacity-50"
-              style={{ background: 'linear-gradient(90deg, transparent, var(--color-oxblood))' }}
+              style={{ background: 'linear-gradient(90deg, transparent, var(--color-strength))' }}
             />
           </div>
         )}
@@ -76,14 +76,14 @@ export default function MobileNav() {
                 onClick={go(s.href)}
                 aria-current={isActive ? 'page' : undefined}
                 className={`flex min-h-[48px] flex-1 flex-col items-center gap-[13px] pt-[21px] text-xs font-semibold transition-colors active:scale-[0.97] ${
-                  isActive ? 'text-oxblood' : 'text-stone'
+                  isActive ? 'text-ink' : 'text-stone'
                 }`}
               >
                 <span
                   className={`relative z-[1] h-2.5 w-2.5 rounded-full transition-all ${
                     isActive ? 'bg-transparent' : 'bg-fog'
                   }`}
-                  style={isActive ? { boxShadow: '0 0 0 7px var(--color-oxblood-soft)' } : undefined}
+                  style={isActive ? { boxShadow: '0 0 0 7px var(--color-strength-soft)' } : undefined}
                   aria-hidden
                 />
                 {s.label}

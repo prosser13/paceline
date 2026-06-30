@@ -1,8 +1,7 @@
 // Race-day weather. Shows the live Open-Meteo forecast when within the 16-day
 // window, otherwise the curated seasonal note.
 
-import { CardHeader, cardClass } from '@/components/dashboard-graphics';
-import { MARINE } from '@/lib/colors';
+import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 import { weatherLabel, type RaceForecast } from '@/lib/weather';
 
 export default function WeatherPanel({
@@ -16,8 +15,8 @@ export default function WeatherPanel({
 }) {
   return (
     <div className={cardClass}>
-      <CardHeader accent={MARINE} right={raceDateLabel ?? undefined}>Race-day weather</CardHeader>
       <div className="px-[18px] py-[15px]">
+        <CardTitle right={raceDateLabel ?? undefined}>Race-day weather</CardTitle>
         {forecast ? (
           <>
             <div className="flex items-baseline gap-[10px] mb-[4px]">

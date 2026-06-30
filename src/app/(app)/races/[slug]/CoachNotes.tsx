@@ -1,16 +1,16 @@
 // Coaching / strategy notes — the briefing a coach would give for this course.
 
-import { CardHeader, cardClass } from '@/components/dashboard-graphics';
-import { AMBER } from '@/lib/colors';
+import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 
 export default function CoachNotes({ notes }: { notes: { heading: string; body: string }[] }) {
   return (
     <div className={cardClass}>
-      <CardHeader accent={AMBER}>Coach&apos;s notes</CardHeader>
-      <div className="px-[18px] py-[15px] flex flex-col gap-[16px]">
+      <div className="px-[18px] py-[15px]">
+        <CardTitle>Coach&apos;s notes</CardTitle>
+        <div className="flex flex-col gap-[16px]">
         {notes.map((n, i) => (
           <div key={i} className="flex gap-[12px]">
-            <span className="font-display font-semibold text-[15px] text-amber-dark shrink-0 w-[20px] tabular-nums">
+            <span className="font-display font-bold text-[16px] text-strength shrink-0 w-[18px] tabular-nums">
               {i + 1}
             </span>
             <div>
@@ -19,6 +19,7 @@ export default function CoachNotes({ notes }: { notes: { heading: string; body: 
             </div>
           </div>
         ))}
+        </div>
       </div>
     </div>
   );

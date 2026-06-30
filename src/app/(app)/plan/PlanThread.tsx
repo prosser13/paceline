@@ -11,6 +11,9 @@ import { activityKind } from '@/lib/activity-types';
 import { unlinkSession, removePromotedSession, unmergeActivity } from './match-actions';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
+import { fmtRange } from '@/lib/dates';
+import { resolveSport } from '@/lib/sports/registry';
+import { RUN, RIDE, STRENGTH, YOGA, RACE } from '@/lib/colors';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -59,7 +62,7 @@ interface CompletedData {
 // ── Constants / helpers ────────────────────────────────────────
 
 const PHASE_HEX: Record<string, string> = {
-  Base: '#14617e', Build: '#dfa01c', Peak: '#c75b33', Taper: '#4f7a52',
+  Base: '#2f6f9e', Build: '#b07d12', Peak: '#d2691e', Taper: '#2f8f7a',
 };
 
 function resolveStatus(
@@ -74,10 +77,38 @@ function resolveStatus(
   return 'planned';
 }
 
+// Unified range formatter (drops the repeated month: "29 Jun – 5 Jul").
 function fmtDateRange(from: string, to: string) {
-  const f = new Date(from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${f} – ${t}`;
+  return fmtRange(from, to);
+}
+
+// estimated_duration is stored as "H:MM" ("0:44" = 44 min, "1:08" = 68 min).
+function durHM(str?: string | null): number {
+  if (!str) return 0;
+  const p = str.split(':').map(Number);
+  if (p.some(n => Number.isNaN(n))) return 0;
+  if (p.length === 2) return p[0] * 60 + p[1];
+  if (p.length === 3) return p[0] * 60 + p[1] + p[2] / 60;
+  return 0;
+}
+
+// Sport accent for a session (week-summary mini-bars).
+function sportColor(s: PlanSession): string {
+  if (s.session_type === 'RACE') return RACE;
+  const sp = resolveSport(s);
+  return sp === 'cycling' ? RIDE : sp === 'strength' ? STRENGTH : sp === 'yoga' ? YOGA : RUN;
+}
+
+// Enumerate the ISO dates in [from, to] (local components, no UTC shift).
+function eachDay(from: string, to: string): string[] {
+  const out: string[] = [];
+  const d = new Date(from + 'T00:00:00');
+  const end = new Date(to + 'T00:00:00');
+  while (d <= end) {
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }
 
 // ── Sub-components ─────────────────────────────────────────────
@@ -187,6 +218,28 @@ export default function PlanThread({
   const currentAndFuture  = weeks.filter(w => w.date_to >= todayStr);
   const currentWeekNum    = weeks.find(w => w.date_from <= todayStr && w.date_to >= todayStr)?.week_number ?? null;
 
+  // Total planned hours for a week (jump-bar pill label).
+  const weekHoursOf = (wn: number) => {
+    let m = 0;
+    for (const s of byWeek[wn] ?? []) {
+      if (resolveStatus(s, todayStr, completedMap) === 'rest') continue;
+      m += completedMap[s.id]?.durationMins ?? durHM(s.estimated_duration);
+    }
+    return m / 60;
+  };
+
+  // Jump-bar click: reveal past weeks if needed, then open + scroll to the card.
+  const jumpTo = (w: PlanWeek) => {
+    const reveal = w.date_to < todayStr && !showPast;
+    if (reveal) setShowPast(true);
+    const open = () => {
+      const el = document.getElementById(`plan-week-${w.week_number}`) as HTMLDetailsElement | null;
+      if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+    if (reveal) requestAnimationFrame(() => requestAnimationFrame(open));
+    else open();
+  };
+
   function renderSessionRow(session: PlanSession) {
     const status    = resolveStatus(session, todayStr, completedMap);
     const isRest    = status === 'rest';
@@ -233,13 +286,26 @@ export default function PlanThread({
     );
   }
 
-  function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean) {
+  function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean, isFirst = false) {
     const isToday    = dateStr === todayStr;
     const isTomorrow = dateStr === tomorrowStr;
     const d          = new Date(dateStr + 'T00:00:00');
     const weekday    = d.toLocaleDateString('en-GB', { weekday: 'short' });
     const dateLabel  = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const dim        = dimPast && !isToday;
+
+    // Day totals for the subtle day header ("1.2h · 14 km · 85 TSS", or "rest day").
+    const nonRest = daySessions.filter(s => resolveStatus(s, todayStr, completedMap) !== 'rest');
+    let dM = 0, dKm = 0, dTss = 0;
+    for (const s of nonRest) {
+      const c = completedMap[s.id];
+      dM += c?.durationMins ?? durHM(s.estimated_duration);
+      dKm += Number(s.distance_km) || 0;
+      dTss += c?.tss ?? s.estimated_tss ?? 0;
+    }
+    const dayTotals = (nonRest.length === 0 && offPlan.length === 0)
+      ? 'rest day'
+      : [dM > 0 ? `${(dM / 60).toFixed(1)}h` : null, dKm > 0 ? `${Math.round(dKm)} km` : null, dTss > 0 ? `${dTss} TSS` : null].filter(Boolean).join(' · ');
 
     // If an extra activity was done this day, drop any "rest" filler — the day
     // wasn't a rest day. Planned (non-rest) sessions still render above the extras.
@@ -290,19 +356,14 @@ export default function PlanThread({
 
     return (
       <div key={dateStr} id={isToday ? 'plan-today' : undefined} className={`scroll-mt-[16px] ${dim ? 'opacity-55' : ''}`}>
-        <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] font-semibold ${
-          isToday    ? 'bg-oxblood text-bone rounded-[8px] px-[12px] py-[8px]'
-          : isTomorrow ? 'bg-marine text-bone rounded-[8px] px-[12px] py-[8px]'
-          : 'text-ink'
-        }`}>
-          <span className="text-[16px]">{weekday}</span>
-          <span className={`font-normal text-[15px] ${isToday || isTomorrow ? 'text-bone/75' : 'text-stone'}`}>{dateLabel}</span>
-          {isToday && (
-            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Today</span>
-          )}
-          {isTomorrow && (
-            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Tomorrow</span>
-          )}
+        <div className={`flex items-baseline justify-between gap-3 ${isFirst ? '' : 'border-t border-fog'}`}
+          style={{ margin: isFirst ? '2px 0 6px' : '12px 0 6px', paddingTop: isFirst ? '2px' : '10px' }}>
+          <span className="text-[12px] font-bold text-ink">
+            {weekday} {dateLabel}
+            {isToday && <span className="text-run font-bold ml-[6px]">· Today</span>}
+            {isTomorrow && <span className="text-ride font-bold ml-[6px]">· Tomorrow</span>}
+          </span>
+          <span className="text-[11px] font-semibold text-stone">{dayTotals}</span>
         </div>
         {sessions.map(s => sessionNode(s))}
         {offPlan.map(a => (
@@ -320,15 +381,18 @@ export default function PlanThread({
     // Open the next week too, so the upcoming days are visible without a click.
     const isNext    = currentWeekNum != null && week.week_number === currentWeekNum + 1;
 
-    let weekTss = 0, weekTssEstimated = false, weekKm = 0;
+    let weekTss = 0, weekTssEstimated = false, weekKm = 0, weekMins = 0, weekCount = 0;
     for (const sess of sessions) {
       const st = resolveStatus(sess, todayStr, completedMap);
       if (st === 'rest') continue;
+      weekCount += 1;
       const c = completedMap[sess.id];
       if (c?.tss != null) weekTss += c.tss;
       else { weekTss += sess.estimated_tss ?? 0; if (st !== 'done') weekTssEstimated = true; }
       weekKm += Number(sess.distance_km) || 0;
+      weekMins += c?.durationMins ?? durHM(sess.estimated_duration);
     }
+    const weekHours = weekMins / 60;
 
     const byDate: Record<string, PlanSession[]> = {};
     for (const s of sessions) (byDate[s.scheduled_date] ??= []).push(s);
@@ -338,27 +402,74 @@ export default function PlanThread({
     const offPlanDates = Object.keys(offPlanByDate).filter(dt => dt >= week.date_from && dt <= week.date_to);
     const dates = Array.from(new Set([...Object.keys(byDate), ...offPlanDates])).sort();
 
+    // Per-day minutes (for the summary mini-bars), across all 7 days of the week.
+    const weekDays = eachDay(week.date_from, week.date_to);
+    const dayMins: Record<string, number> = {};
+    for (const s of sessions) {
+      if (resolveStatus(s, todayStr, completedMap) === 'rest') continue;
+      dayMins[s.scheduled_date] = (dayMins[s.scheduled_date] ?? 0) + (completedMap[s.id]?.durationMins ?? durHM(s.estimated_duration));
+    }
+    const maxDayMins = Math.max(1, ...weekDays.map(d => dayMins[d] ?? 0));
+
     const hex = PHASE_HEX[week.phase] ?? '#8a857a';
     const weekRace = sessions.find(s => s.session_type === 'RACE' && s.priority)?.priority ?? null;
+    const tot: [string, string][] = [
+      [weekHours.toFixed(1), 'h'],
+      [`${Math.round(weekKm)}`, 'km'],
+      [`${weekTssEstimated ? '~' : ''}${weekTss}`, 'TSS'],
+      [`${weekCount}`, 'sess'],
+    ];
     return (
-      <details key={week.week_number} className="group border-t border-fog" open={isCurrent || isNext}>
-        <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer min-h-[48px] flex items-center gap-[11px] py-[12px] px-[2px]">
-          <span className="w-[4px] self-stretch rounded-[2px] min-h-[34px] shrink-0" style={{ background: hex }} aria-hidden="true" />
-          <span className="flex-1 min-w-0 flex flex-col">
-            <span className="text-[15.5px] font-semibold text-ink leading-tight">Week {week.week_number} · {week.phase}</span>
-            <span className="font-mono text-[11.5px] text-stone mt-[1px]">
-              {fmtDateRange(week.date_from, week.date_to)}{weekKm > 0 ? ` · ${weekKm.toFixed(0)} km` : ''} · {weekTssEstimated ? '~' : ''}{weekTss} TSS
-            </span>
-          </span>
-          {isCurrent && (
-            <span className="font-mono text-[9.5px] tracking-[.09em] uppercase text-oxblood font-semibold shrink-0">Now</span>
-          )}
-          {weekRace && <RaceBadge priority={weekRace} />}
-          <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+      <details
+        key={week.week_number}
+        id={`plan-week-${week.week_number}`}
+        className="group border border-fog rounded-[14px] bg-paper overflow-hidden mb-[9px]"
+        style={{ borderLeft: `6px solid ${hex}`, ...(isCurrent ? { boxShadow: '0 0 0 1px var(--color-hero)' } : {}), ...(dimPast ? { opacity: 0.9 } : {}) }}
+        open={isCurrent || isNext}
+      >
+        <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer" style={{ padding: '14px 16px' }}>
+          <div className="flex items-center gap-[8px]" style={{ marginBottom: '3px' }}>
+            <span className="font-display font-bold text-[18px] leading-none">Week {week.week_number}</span>
+            <span className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: hex }}>{week.phase}</span>
+            {isCurrent && <span className="text-[10px] font-bold rounded-[20px] bg-hero text-onhero" style={{ padding: '2px 8px' }}>THIS WEEK</span>}
+            <span className="text-[12px] font-semibold text-stone">· {fmtDateRange(week.date_from, week.date_to)}</span>
+            {weekRace && <RaceBadge priority={weekRace} />}
+            <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+          </div>
+          {week.purpose && <div className="text-[12px] font-semibold text-stone" style={{ marginBottom: '11px' }}>{week.purpose}</div>}
+          <div className="flex items-end gap-[18px]">
+            <div className="flex shrink-0 gap-[16px]">
+              {tot.map(([v, u]) => (
+                <div key={u}>
+                  <b className="font-display font-bold text-[18px]">{v}</b>
+                  <span className="text-[11px] font-semibold text-stone"> {u}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-[5px] ml-auto" style={{ flex: 1, maxWidth: '300px' }}>
+              {weekDays.map(date => {
+                const mins = dayMins[date] ?? 0;
+                const dd = new Date(date + 'T00:00:00');
+                const letter = ['M', 'T', 'W', 'T', 'F', 'S', 'S'][(dd.getDay() + 6) % 7];
+                const segs = (byDate[date] ?? []).filter(s => resolveStatus(s, todayStr, completedMap) !== 'rest');
+                return (
+                  <div key={date} className="flex-1 text-center">
+                    <div className="flex flex-col justify-end gap-[1px] overflow-hidden" style={{ height: '46px' }}>
+                      {segs.map(s => {
+                        const sm = completedMap[s.id]?.durationMins ?? durHM(s.estimated_duration);
+                        return <div key={s.id} className="rounded-[2px]" style={{ height: `${Math.max(3, Math.round((sm / maxDayMins) * 46))}px`, background: sportColor(s) }} />;
+                      })}
+                    </div>
+                    <div className="text-[9px] font-bold mt-[3px] text-ink">{mins > 0 ? `${(mins / 60).toFixed(1)}h` : '·'}</div>
+                    <div className="text-[8px] font-bold" style={{ color: '#8a857c' }}>{letter}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </summary>
-        <div className="pb-[10px]">
-          {week.purpose && <p className="text-[12.5px] italic text-stone mt-[4px] mb-[2px] px-[2px]">{week.purpose}</p>}
-          {dates.map(date => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast))}
+        <div style={{ padding: '2px 16px 14px' }}>
+          {dates.map((date, i) => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast, i === 0))}
         </div>
       </details>
     );
@@ -366,7 +477,7 @@ export default function PlanThread({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-[2px]">
+      <div className="flex items-center justify-between gap-3 mb-[8px]">
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone">Weeks</span>
         {pastWeeks.length > 0 && (
           <button
@@ -377,6 +488,27 @@ export default function PlanThread({
             {showPast ? 'Hide earlier ▼' : 'Earlier weeks ▲'}
           </button>
         )}
+      </div>
+
+      {/* Jump bar — one pill per week (number + planned hours); current week dark. */}
+      <div className="flex gap-[5px] mb-[16px]">
+        {weeks.map(w => {
+          const now = w.date_from <= todayStr && w.date_to >= todayStr;
+          const phaseHex = PHASE_HEX[w.phase] ?? '#8a857a';
+          return (
+            <button
+              key={w.week_number}
+              type="button"
+              onClick={() => jumpTo(w)}
+              className="flex-1 text-center rounded-[9px] border cursor-pointer transition-colors hover:border-stone/50"
+              style={{ padding: '7px 2px', background: now ? 'var(--color-hero)' : 'var(--color-paper)', borderColor: now ? 'var(--color-hero)' : 'var(--color-fog)', color: now ? 'var(--color-onhero)' : 'var(--color-ink)' }}
+              aria-label={`Jump to week ${w.week_number}`}
+            >
+              <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: now ? '#ecb73c' : phaseHex }}>W{w.week_number}</div>
+              <div className="text-[10px] font-bold mt-[2px]">{weekHoursOf(w.week_number).toFixed(0)}h</div>
+            </button>
+          );
+        })}
       </div>
 
       {showPast && pastWeeks.map(w => renderWeekSection(w, true))}

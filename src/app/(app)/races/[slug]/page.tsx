@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { WeeklyBars, FitnessChart, type WeekDay } from '@/components/dashboard-graphics';
+import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
@@ -90,9 +90,6 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
       ...(isRaceWeek && km > 0 ? { raceKm } : {}),
     };
   });
-  const doneTotal = runningDone.reduce((s, d) => s + d.km, 0);
-  const plannedTotal = planWeeks.reduce((s, w) => s + (w.planned_volume_km ?? 0), 0);
-
   // Fitness/fatigue projection across the plan, up to race day.
   //  • Plan already underway → seed from real intervals.icu values and show the
   //    history-then-projection from today.
@@ -169,28 +166,27 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         <div className="rounded-[18px] overflow-hidden border border-fog mt-[10px]">
           <div className="px-[22px] py-[20px] flex items-start justify-between gap-6" style={{ background: RACE_PRIORITY_COLOR[guide.priority] ?? RACE_PRIORITY_COLOR.A }}>
             <div>
-              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/50">{guide.priority}-Race · Guide</span>
-              <h1 className="font-display font-semibold text-[30px] text-bone leading-tight mt-[2px]">{guide.eventName}</h1>
-              <p className="font-mono text-[13px] text-bone/60 mt-[5px]">{guide.region}</p>
-              {raceDateLong && <p className="font-mono text-[13px] text-bone/60 mt-[2px]">{raceDateLong}</p>}
+              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/80">{guide.priority}-Race · Guide</span>
+              <h1 className="font-display font-extrabold text-[30px] text-bone leading-[1.05] mt-[2px]">{guide.eventName}</h1>
+              <p className="text-[13px] text-bone/85 mt-[5px]">{guide.region}{raceDateLong ? ` · ${raceDateLong}` : ''}</p>
             </div>
             {daysToGo != null && daysToGo >= 0 && (
               <div className="text-right shrink-0">
-                <div className="font-display font-semibold text-[44px] leading-none text-bone">{daysToGo}</div>
-                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-bone/50">days to go</div>
+                <div className="font-display font-extrabold text-[44px] leading-none text-bone">{daysToGo}</div>
+                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-bone/80">days to go</div>
               </div>
             )}
           </div>
           <div className="bg-paper grid grid-cols-2 sm:grid-cols-4 divide-x divide-fog">
             {[
               { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
-              { label: 'Ascent', value: `${guide.ascentM} m` },
-              { label: 'Target time', value: targetTimeDisplay },
-              { label: 'Target pace', value: targetPace ? `${targetPace}/km` : '—' },
+              { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
+              { label: 'Target', value: targetTimeDisplay },
+              { label: 'Pace', value: targetPace ? `${targetPace}/km` : '—' },
             ].map(({ label, value }) => (
-              <div key={label} className="px-[18px] py-[14px]">
-                <div className="font-mono text-[12px] tracking-[.1em] uppercase text-stone">{label}</div>
-                <div className="font-display font-semibold text-[20px] mt-[4px]">{value}</div>
+              <div key={label} className="px-[16px] py-[13px]">
+                <div className="font-mono text-[11px] tracking-[.06em] uppercase text-stone">{label}</div>
+                <div className="font-display font-bold text-[20px] mt-[4px]">{value}</div>
               </div>
             ))}
           </div>
@@ -199,13 +195,12 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         <p className="text-[15px] text-ink leading-relaxed mt-[18px]">{guide.summary}</p>
 
         {/* ── Course ── */}
-        <SectionLabel>Course</SectionLabel>
-        <div className="grid lg:grid-cols-2 gap-[14px]">
-          <RouteMap parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
+        <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
+          <RouteMap title="Course" parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
           <div className="flex flex-col gap-[14px]">
-            <ElevationProfile parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
+            <ElevationProfile title="Elevation" ascentM={guide.ascentM} parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
             <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[15px]">
-              <p className="font-mono text-[10px] uppercase tracking-[.1em] text-stone mb-[8px]">Terrain</p>
+              <CardTitle>Terrain</CardTitle>
               <ul className="flex flex-col gap-[5px]">
                 {guide.terrain.map((t, i) => (
                   <li key={i} className="text-[13px] text-ink leading-snug flex gap-[7px]">
@@ -218,17 +213,14 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         </div>
 
         {/* ── Targets & readiness ── */}
-        <SectionLabel>Targets &amp; readiness</SectionLabel>
-        <div className="grid lg:grid-cols-2 gap-[14px]">
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-            <div className="bg-oxblood/90 px-[18px] py-[10px]">
-              <span className="font-mono text-[12px] uppercase tracking-[.14em] text-bone leading-none">Goal tiers</span>
-            </div>
-            <div className="divide-y divide-fog">
+        <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
+          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden flex flex-col h-full">
+            <div className="px-[18px] pt-[15px]"><CardTitle>Goal tiers</CardTitle></div>
+            <div className="flex flex-col flex-1 divide-y divide-fog border-t border-fog">
               {guide.goalTiers.map(t => (
-                <div key={t.label} className="flex items-baseline gap-[14px] px-[18px] py-[12px]">
-                  <span className="font-display font-semibold text-[18px] text-oxblood w-[20px]">{t.label}</span>
-                  <span className="font-display font-semibold text-[18px] text-ink w-[64px] tabular-nums">{formatTargetTime(t.time)}</span>
+                <div key={t.label} className="flex flex-1 items-center gap-[14px] px-[18px] py-[14px]">
+                  <span className="font-display font-bold text-[20px] text-oxblood w-[20px]">{t.label}</span>
+                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{formatTargetTime(t.time)}</span>
                   <span className="text-[13px] text-stone leading-snug">{t.note}</span>
                 </div>
               ))}
@@ -255,55 +247,61 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           )}
         </div>
 
-        {/* ── Weather ── */}
-        <SectionLabel>Weather</SectionLabel>
-        <WeatherPanel forecast={forecast} seasonal={guide.seasonalWeather} raceDateLabel={raceDateShort} />
+        {/* titles now live inside each card (top-left); sections just need spacing */}
+        <div className="mt-[24px]">
+          <WeatherPanel forecast={forecast} seasonal={guide.seasonalWeather} raceDateLabel={raceDateShort} />
+        </div>
+        <div className="mt-[24px]">
+          <CoachNotes notes={guide.coachNotes} />
+        </div>
+        <div className="mt-[24px]">
+          <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
+        </div>
+        <div className="mt-[24px]">
+          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
+        </div>
+        <div className="mt-[24px]">
+          <KitChecklist
+            slug={guide.slug}
+            intro={guide.kitNote}
+            wear={guide.kitWear}
+            carry={guide.kitCarry}
+            dropBag={guide.kitDropBag}
+            nightBefore={guide.nightBefore}
+          />
+        </div>
 
-        {/* ── Coach's notes ── */}
-        <SectionLabel>Coaching</SectionLabel>
-        <CoachNotes notes={guide.coachNotes} />
-
-        {/* ── Pacing ── */}
-        <SectionLabel>Pacing plan</SectionLabel>
-        <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
-
-        {/* ── Fuel ── */}
-        <SectionLabel>Nutrition &amp; hydration</SectionLabel>
-        <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
-
-        {/* ── Kit ── */}
-        <SectionLabel>Equipment</SectionLabel>
-        <KitChecklist
-          slug={guide.slug}
-          intro={guide.kitNote}
-          wear={guide.kitWear}
-          carry={guide.kitCarry}
-          dropBag={guide.kitDropBag}
-          nightBefore={guide.nightBefore}
-        />
-
-        {/* weekly running volume across the plan (reuses dashboard graphic) */}
-        {weekBars.length > 0 && (
-          <>
-            <SectionLabel>Weekly running volume</SectionLabel>
-            <WeeklyBars
-              headerLabel="Weekly running volume"
-              days={weekBars}
-              weekDoneKm={doneTotal}
-              weekPlannedKm={plannedTotal}
-              weekToGoKm={Math.max(0, Math.round(plannedTotal - doneTotal))}
-              daysToRace={daysToGo}
-              raceName={plan?.name ?? guide.eventName}
-            />
-          </>
-        )}
+        {/* weekly running volume across the plan — build → taper → race */}
+        {weekBars.length > 0 && (() => {
+          const maxKm = Math.max(...weekBars.map(w => w.km), 1);
+          return (
+              <div className="border border-fog rounded-[14px] bg-paper mt-[24px]" style={{ padding: '14px 16px' }}>
+                <CardTitle>Weekly running volume</CardTitle>
+                <div className="flex items-end gap-[8px]" style={{ height: '54px' }}>
+                  {weekBars.map((w, i) => {
+                    const isRace = (w.raceKm ?? 0) > 0;
+                    const h = w.km <= 0 ? 4 : Math.max(6, Math.round((w.km / maxKm) * 50));
+                    return (
+                      <div key={i} className="flex-1 rounded-[3px]"
+                        style={{ height: `${h}px`, background: isRace ? 'var(--color-race)' : 'var(--color-run)', opacity: isRace || w.state === 'today' ? 1 : 0.5, ...(w.state === 'today' ? { outline: '2px solid var(--color-hero)', outlineOffset: '1px' } : {}) }} />
+                    );
+                  })}
+                </div>
+                <div className="flex gap-[8px] mt-[5px]">
+                  {weekBars.map((w, i) => {
+                    const isRace = (w.raceKm ?? 0) > 0;
+                    return (
+                      <span key={i} className="flex-1 text-center text-[9px] font-bold"
+                        style={{ color: isRace ? 'var(--color-race)' : w.state === 'today' ? 'var(--color-strength)' : 'var(--color-stone)' }}>
+                        {w.state === 'today' ? `${w.label}·now` : isRace ? 'race' : w.label === '1' ? 'W1' : w.label}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+          );
+        })()}
       </div>
     </>
-  );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px] mt-[28px]">{children}</p>
   );
 }

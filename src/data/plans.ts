@@ -34,6 +34,8 @@ export interface RacePlanRow {
 export interface NextRace {
   name: string | null;
   race_date: string | null;
+  target_time: string | null;
+  slug: string | null;
 }
 
 // ── plans ────────────────────────────────────────────────────
@@ -84,7 +86,7 @@ export const getNextRace = unstable_cache(
   async (fromDate: string): Promise<NextRace | null> => {
     const { data } = await supabaseAdmin
       .from('plans')
-      .select('name, race_date')
+      .select('name, race_date, target_time, slug')
       .eq('kind', 'race')
       .gte('race_date', fromDate)
       .order('race_date', { ascending: true })

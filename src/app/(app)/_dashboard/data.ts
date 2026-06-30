@@ -11,8 +11,11 @@ import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeH
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
   listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
+  listCompletedTssBetween,
 } from '@/data/plan-sessions';
+import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
 import { activityKind } from '@/lib/activity-types';
 import { resolveSport, sportSpec } from '@/lib/sports/registry';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
@@ -86,6 +89,9 @@ export interface DashboardData {
   hasPlanWeek: boolean;
   weekLabel: string;
   weekPurpose: string | null;
+  weekNumber: number | null;   // current week number within the plan
+  weeksTotal: number | null;   // total weeks in the plan (for "week 5 of 7")
+  weekPhase: string | null;    // current phase name (Base/Build/Peak/Taper)
 
   phaseSegments: PhaseSeg[];
   todayPct: number | null;
@@ -94,6 +100,11 @@ export interface DashboardData {
   daysToRace: number | null;
   raceName: string | null;
   raceDateStr: string | null;
+  raceTargetTime: string | null;
+  raceDistanceKm: number | null;   // goal race distance, from its /races/<slug> guide
+
+  // Next-race card: nearest upcoming RACE session (incl. tune-ups), with its A/B/C priority.
+  nextRace: { name: string; daysTo: number | null; dateStr: string | null; priority: string | null; km: number | null } | null;
 
   weekPlannedKm: number | null;
   weekDoneKm: number;
@@ -110,6 +121,8 @@ export interface DashboardData {
   recentSession: PlanSession | null;
   recentCompleted: CompletedToday | null;
   recentLabel: string | null;
+
+  coachMessage: CoachMessage | null;   // latest 9pm evening-review message
 }
 
 function addDays(date: Date, n: number): Date {
@@ -145,6 +158,9 @@ function fmtShort(iso: string): string {
 function fmtDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
+function fmtWeekdayDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+}
 
 // Long-weekday + date label for the agenda spine (e.g. "Thursday" / "26 Jun").
 export function formatSpineDay(iso: string): { weekday: string; date: string } {
@@ -177,6 +193,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     raceRow,
     offPlanRaw,
     recentCompletedRaw,
+    coachMessage,
   ] = await Promise.all([
     getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -190,6 +207,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getNextRace(todayStr),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
     getMostRecentCompletedSession(todayStr),
+    getLatestCoachMessage(),
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
@@ -322,9 +340,28 @@ export async function loadDashboardData(): Promise<DashboardData> {
     daysToRace = Math.ceil((new Date(raceRow.race_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
   }
   const raceName = (raceRow?.name as string | null) ?? null;
-  const raceDateStr = raceRow?.race_date
-    ? new Date(raceRow.race_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    : null;
+  const raceDateStr = raceRow?.race_date ? fmtWeekdayDate(raceRow.race_date) : null;
+  // Goal race distance comes from its curated /races/<slug> guide (not the plan row).
+  const raceDistanceKm = raceRow?.slug ? (getRaceGuide(raceRow.slug)?.distanceKm ?? null) : null;
+
+  // Next-race card — the nearest upcoming RACE session in the window (e.g. a
+  // tune-up), with its A/B/C priority; falls back to the goal race if none.
+  const raceSessions = (all as Array<PlanSession & { priority?: string | null }>)
+    .filter(s => s.session_type === 'RACE' && s.scheduled_date >= todayStr)
+    .sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
+  const nrs = raceSessions[0] ?? null;
+  let nextRace: DashboardData['nextRace'] = null;
+  if (nrs) {
+    nextRace = {
+      name: nrs.name,
+      daysTo: Math.ceil((new Date(nrs.scheduled_date + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000),
+      dateStr: fmtWeekdayDate(nrs.scheduled_date),
+      priority: nrs.priority ?? null,
+      km: nrs.distance_km ?? null,
+    };
+  } else if (raceName) {
+    nextRace = { name: raceName, daysTo: daysToRace, dateStr: raceDateStr, priority: null, km: null };
+  }
 
   // Per-session completion: which of today's sessions are logged, plus the run's
   // rich completion (drives the run hero's pace/HR breakdown).
@@ -353,13 +390,19 @@ export async function loadDashboardData(): Promise<DashboardData> {
   let weekDays: WeekDay[] = [];
   if (weekData && weekRow?.date_from && weekRow?.date_to) {
     const [weekSessions, weekCompleted] = weekData;
-    weekPlannedKm = Math.round((weekSessions ?? []).reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
+    // "Running volume" = RUNS only. Rides carry distance_km too, so summing every
+    // session double-counts cycling and the number looks wrong — filter to
+    // run/run-race sessions (same predicate as the done side below).
+    const isRunSession = (s: { session_type?: string | null; activity_type?: string | null }) =>
+      sportSpec(s).countsToWeeklyVolume;
+    const runSessions = (weekSessions ?? []).filter(isRunSession);
+    weekPlannedKm = Math.round(runSessions.reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
 
     const plannedByDate = new Map<string, number>();
     const raceKmByDate = new Map<string, number>();
-    for (const s of weekSessions ?? []) {
+    for (const s of runSessions) {
       plannedByDate.set(s.scheduled_date, (plannedByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
-      // Race days (any race type) get their distance flagged so the bar splits.
+      // Race days get their distance flagged so the bar splits.
       if (s.session_type === 'RACE') {
         raceKmByDate.set(s.scheduled_date, (raceKmByDate.get(s.scheduled_date) ?? 0) + (Number(s.distance_km) || 0));
       }
@@ -437,12 +480,16 @@ export async function loadDashboardData(): Promise<DashboardData> {
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
     hasPlanWeek: !!weekRow,
     weekLabel, weekPurpose,
+    weekNumber: (weekRow?.week_number as number | null) ?? null,
+    weeksTotal: (planWeeks?.length as number | undefined) ?? null,
+    weekPhase: (weekRow?.phase as string | null) ?? null,
     phaseSegments, todayPct, ringPct,
-    daysToRace, raceName, raceDateStr,
+    daysToRace, raceName, raceDateStr, raceTargetTime: (raceRow?.target_time as string | null) ?? null, raceDistanceKm, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
+    coachMessage,
   };
 }
 
@@ -455,4 +502,58 @@ export async function loadDashboardData(): Promise<DashboardData> {
 export const loadWellness = cache(async () => {
   const w = await getWellnessCached();
   return { fitnessForm: w.form, fitnessHistory: w.history };
+});
+
+// Per-week plan series (planned TSS + longest planned run) for the Weekly-load
+// and Longest-run trend cards. Its own cached read behind <Suspense> so the
+// whole-plan session fetch can't block the dashboard body. Planned values only —
+// the plan's prescribed trajectory.
+export interface WeekSeriesPoint {
+  weekNumber: number;
+  phase: string;
+  plannedTss: number;
+  doneTss: number;        // actual logged TSS for the week (0 for future weeks)
+  longestRunKm: number;
+  isCurrent: boolean;
+  isPast: boolean;        // week entirely before today
+  isRace: boolean;
+}
+export const loadWeeklyPlanSeries = cache(async (): Promise<WeekSeriesPoint[]> => {
+  const today = isoDate(new Date());
+  const weekRow = await getCurrentWeek(today);
+  const planId = (weekRow?.plan_id as number | null) ?? null;
+  if (!planId) return [];
+  const weeks = (await listPlanPhaseWeeks(planId)) as { phase: string; date_from: string; date_to: string; week_number: number }[];
+  if (!weeks.length) return [];
+  const start = weeks[0].date_from, end = weeks[weeks.length - 1].date_to;
+  const [sessions, completedTss] = await Promise.all([
+    listSessionsBetween(start, end) as Promise<PlanSession[]>,
+    listCompletedTssBetween(start, today),
+  ]);
+  // Actual TSS logged per date (all sports — weekly load is total training stress).
+  const doneByDate = new Map<string, number>();
+  for (const c of completedTss) {
+    if (c.completed_date && c.tss != null) {
+      doneByDate.set(c.completed_date, (doneByDate.get(c.completed_date) ?? 0) + Number(c.tss));
+    }
+  }
+  return weeks.map(w => {
+    const inWeek = sessions.filter(s => s.scheduled_date >= w.date_from && s.scheduled_date <= w.date_to);
+    const plannedTss = inWeek.reduce((sum, s) => sum + (s.estimated_tss ?? 0), 0);
+    let doneTss = 0;
+    for (const [date, tss] of doneByDate) if (date >= w.date_from && date <= w.date_to) doneTss += tss;
+    const runKms = inWeek
+      .filter(s => resolveSport(s) === 'run' || s.session_type === 'RACE')
+      .map(s => Number(s.distance_km) || 0);
+    return {
+      weekNumber: w.week_number,
+      phase: w.phase,
+      plannedTss: Math.round(plannedTss),
+      doneTss: Math.round(doneTss),
+      longestRunKm: runKms.length ? Math.max(...runKms) : 0,
+      isCurrent: w.date_from <= today && w.date_to >= today,
+      isPast: w.date_to < today,
+      isRace: inWeek.some(s => s.session_type === 'RACE'),
+    };
+  });
 });

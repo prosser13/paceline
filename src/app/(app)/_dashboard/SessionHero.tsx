@@ -1,46 +1,24 @@
-// Extracted from src/app/page.tsx so the redesign prototypes can reuse the run
-// hero verbatim. Server component.
+// Run hero for the dashboard Today agenda + Recently-completed card. Server
+// component. Matches the dashboard mockup: a dark hero whose summary shows the
+// headline metric, zone/pace chips and time/TSS stats; the expandable detail (a
+// light panel) keeps the intensity-profile graph, the planned-vs-actual
+// comparison (when done), the segment breakdown and the "Adjust today" chips.
 
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, MetricBlock, StatBox, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
+  INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
 } from '@/components/session-ui';
-import CollapsibleSession from '../CollapsibleSession';
 import { RunGlyph } from '@/components/glyphs';
-import { OXBLOOD, MARINE, FERN, BONE } from '@/lib/colors';
+import { RUN, RUN_B, READY } from '@/lib/colors';
 import type { PlanSession, CompletedToday } from './data';
 
-const HERO_ACCENT: Record<string, { rail: string; solid: string }> = {
-  oxblood: { rail: 'border-l-oxblood', solid: OXBLOOD },
-  marine:  { rail: 'border-l-marine',  solid: MARINE },
-  fern:    { rail: 'border-l-fern',    solid: FERN },
-};
-
-// Run name + descriptor — identical across the done / not-done layouts. The
-// optional km prefix leads the description (upcoming runs, where distance no
-// longer sits in the right-hand metric stack).
-function HeroTitle({ session, kmPrefix }: { session: PlanSession; kmPrefix?: string | null }) {
-  return (
-    <div className="min-w-0">
-      <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-        <RunGlyph size={24} className="shrink-0 text-ink" />{session.name}
-      </h3>
-      {(kmPrefix || session.description) && (
-        <div className="text-[15px] text-stone">
-          {kmPrefix && <span className="font-semibold text-ink">{kmPrefix}</span>}
-          {kmPrefix && session.description && ' · '}
-          {session.description}
-        </div>
-      )}
-    </div>
-  );
-}
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function SessionHero({
-  label, session, thresholdPace, zones, hrZones, completed, accentKey, showAdjust = true,
+  label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false,
 }: {
   label: string;
   session: PlanSession;
@@ -50,6 +28,7 @@ export default function SessionHero({
   completed: CompletedToday | null;
   accentKey?: 'oxblood' | 'marine' | 'fern';
   showAdjust?: boolean;
+  light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   const { segActuals, segHr } = wholeRunActuals(
@@ -60,113 +39,114 @@ export default function SessionHero({
     completed?.segmentActuals ?? null,
     completed?.segmentHr ?? null,
   );
-  const steps     = normalizeStructure(
+  const steps = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
-    zones,
-    segActuals,
-    hrZones,
-    segHr,
+    zones, segActuals, hrZones, segHr,
   );
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
   const profileSession = { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) };
-  const isDone     = !!completed;
-  const accent     = HERO_ACCENT[accentKey ?? (isDone ? 'fern' : label === 'Today' ? 'oxblood' : 'marine')];
+  const isDone = !!completed;
 
   const displayDuration = completed?.durationStr ? completed.durationStr : plannedDur;
   const displayTss      = completed?.tss != null ? completed.tss : session.estimated_tss ?? null;
-
   const distPlanned = session.distance_km != null ? Number(session.distance_km) : null;
   const distActual  = completed?.distanceKm ?? null;
   const tssActual   = completed?.tss ?? null;
   const isRace      = session.session_type === 'RACE';
 
-  // Shared completed-run comparison (Distance/Pace/HR/Duration/TSS, tick-in-window).
   const compare = isDone ? buildRunCompare(steps, {
     planKm: distPlanned, actKm: distActual, actMins: completed?.mins ?? null,
     estimatedDuration: session.estimated_duration ?? null, avgHr: completed?.avgHr ?? null,
     planTss: session.estimated_tss ?? null, actTss: tssActual, isRace,
   }) : null;
-  const cmp = (m: string) => compare?.rows.find(r => r.metric === m) ?? null;
-  // Upcoming: distance leads the description instead of the right metric stack.
-  const planKmLabel = distPlanned != null ? `${distPlanned % 1 === 0 ? distPlanned : distPlanned.toFixed(1)} km` : null;
+
+  // Headline metric: distance leads for a run (mockup); duration as a fallback.
+  const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
+  const big = isDone
+    ? (distActual != null ? kmStr(distActual) : completed?.durationStr ?? '—')
+    : (distPlanned != null ? kmStr(distPlanned) : displayDuration ?? '—');
+
+  const paceLabel = session.target_pace
+    ? `${session.target_pace}${session.target_pace_end ? `–${session.target_pace_end}` : ''}/km`
+    : null;
+  const chips = [cap(intensity), paceLabel].filter(Boolean) as string[];
+
+  const stats = isDone
+    ? [{ v: compare?.pace.actual ?? '—', l: 'pace' }, { v: tssActual != null ? `${tssActual}` : '—', l: 'TSS' }]
+    : [{ v: displayDuration ?? '—', l: 'time' }, { v: displayTss != null ? `${displayTss}` : '—', l: 'TSS' }];
+
+  // Today's hero is the dark focal tile; Recently-completed renders on a light card.
+  const accent = light ? RUN : RUN_B;
 
   return (
-    <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: accent.solid, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
-        <div className="flex items-center gap-[12px] font-mono text-[13px]">
-          {isDone && (
-            <span className="flex items-center gap-[7px]">
-              ✓ Completed
-              <svg width="13" height="13" viewBox="0 0 24 24" fill={BONE} role="img" aria-label="Strava">
-                <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-              </svg>
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className={`px-[18px] pt-[18px] sm:px-[26px] sm:pt-[22px] ${isDone ? 'pb-[12px] sm:pb-[14px]' : 'pb-[18px] sm:pb-[26px]'}`}>
-      {isDone ? (
-        <>
-          {/* Mobile: title + description full width, graph underneath (like the
-              prototype). Desktop: graph sits inline to the right. */}
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
-            <HeroTitle session={session} />
-            <ProfileChart
-              bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
-              size="lg"
-              color={INTENSITY[intensity]?.hex ?? '#17191e'}
-              opacity={segActuals ? 0.9 : 0.6}
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-[9px] mt-[16px] pt-[14px] border-t border-fog">
-            <StatBox value={distActual != null ? distActual.toFixed(1) : '—'} label="km" delta={cmp('Distance')?.delta ?? null} tone={cmp('Distance')?.tone} />
-            <StatBox value={compare?.pace.actual ?? '—'} label="Pace" delta={compare?.pace.cmp?.delta ?? null} tone={compare?.pace.cmp?.tone} />
-            <StatBox value={tssActual != null ? `${tssActual}` : '—'} label="TSS" delta={cmp('TSS')?.delta ?? null} tone={cmp('TSS')?.tone} />
-          </div>
-        </>
-      ) : (
-        // Mobile: title + km-led description full width, then graph + metrics
-        // beneath (so the wide graph never collides with the title). Desktop:
-        // graph + metrics inline on the right, top-aligned with the title.
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-[12px] sm:gap-6">
-          <HeroTitle session={session} kmPrefix={planKmLabel} />
-          <div className="flex items-start gap-4 shrink-0">
-            <ProfileChart
-              bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
-              size="lg"
-              color={INTENSITY[intensity]?.hex ?? '#17191e'}
-              opacity={segActuals ? 0.9 : 0.6}
-            />
-            <MetricBlock duration={displayDuration} distanceKm={null} tss={displayTss} estimated size="lg" />
+    <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
+      <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer" style={{ padding: '22px 24px' }}>
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: accent }}>
+            <RunGlyph size={15} className="" /> Run · {cap(intensity)}
+          </span>
+          <div className="flex items-center gap-2">
+            {isDone && <span className="text-[12px] font-bold" style={{ color: READY }}>✓ Completed</span>}
+            <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>
         </div>
-      )}
-
-      {session.rationale && (
-        <p className={`text-[12px] leading-snug mt-[12px] border-l-[3px] pl-[14px] text-ink ${accent.rail}`}>
-          {session.rationale}
-        </p>
-      )}
-
-      <CollapsibleSession steps={steps} defaultOpen={!isDone} compareRows={compare?.rows} isRace={isRace} />
-
-      {!isDone && showAdjust && label === 'Today' && (
-        <div className="mt-[18px]">
-          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[9px]">Adjust today</p>
-          <div className="flex flex-wrap gap-2">
-            {['Short on time', 'Legs feel flat', "Can't today"].map(chip => (
-              <button key={chip}
-                className="border border-fog bg-bone rounded-full px-[14px] py-[7px] text-[15px] text-ink cursor-pointer hover:border-stone transition-colors">
-                {chip}
-              </button>
+        <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
+          <div className="min-w-0">
+            <div className="font-display font-bold" style={{ fontSize: '54px', lineHeight: .96 }}>{big}</div>
+            {chips.length > 0 && (
+              <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
+                {chips.map(c => (
+                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex shrink-0" style={{ gap: '22px', textAlign: 'right' }}>
+            {stats.map((s, i) => (
+              <div key={i}>
+                <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
+                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
+              </div>
             ))}
           </div>
         </div>
-      )}
+      </summary>
+
+      {/* Detail — light panel so the profile graph / breakdown / comparison read cleanly. */}
+      <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
+        {isDone && compare && compare.rows.length > 0 && (
+          <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
+          {session.rationale && (
+            <p className="text-[13px] leading-snug border-l-[3px] pl-[14px] text-ink order-2 sm:order-1" style={{ borderColor: RUN }}>
+              <span className="font-bold" style={{ color: RUN }}>Why · </span>{session.rationale}
+            </p>
+          )}
+          <div className="order-1 sm:order-2 shrink-0">
+            <ProfileChart
+              bars={buildProfileBars(profileSession, thresholdPace, zones, segActuals)}
+              size="lg"
+              color={INTENSITY[intensity]?.hex ?? '#17191e'}
+              opacity={segActuals ? 0.9 : 0.6}
+            />
+          </div>
+        </div>
+        {steps.length > 0 && (
+          <div className="mt-[14px]"><WorkoutDetail steps={steps} variant="card" isRace={isRace} /></div>
+        )}
+        {!isDone && showAdjust && label === 'Today' && (
+          <div className="mt-[16px]">
+            <p className="text-[11px] font-bold tracking-[.06em] uppercase text-stone mb-[9px]">Adjust today</p>
+            <div className="flex flex-wrap gap-2">
+              {['Short on time', 'Legs feel flat', "Can't today"].map(chip => (
+                <span key={chip} className="border border-fog bg-bone rounded-full px-[14px] py-[7px] text-[14px] text-ink">{chip}</span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </details>
   );
 }

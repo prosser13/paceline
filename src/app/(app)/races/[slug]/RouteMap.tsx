@@ -4,6 +4,7 @@
 // project's SVG-first, dependency-light styling.
 
 import { OXBLOOD, MARINE, FERN, FOG } from '@/lib/colors';
+import { CardTitle } from '@/components/dashboard-graphics';
 import { buildProjection, type ParsedGpx } from '@/lib/gpx';
 import type { RaceCheckpoint } from '@/data/races/types';
 
@@ -14,17 +15,20 @@ export default function RouteMap({
   parsed,
   checkpoints,
   totalKm: routeKm,
+  title,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
   totalKm: number;
+  title?: string;
 }) {
   if (!parsed) {
     return (
-      <div className="flex items-center justify-center border border-dashed border-fog rounded-[14px] bg-paper h-[260px] text-center px-6">
-        <p className="text-stone text-[14px]">
-          Course map appears here once the GPX route is added.
-        </p>
+      <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '14px 16px' }}>
+        {title && <CardTitle>{title}</CardTitle>}
+        <div className="flex items-center justify-center border border-dashed border-fog rounded-[10px] h-[210px] text-center px-6">
+          <p className="text-stone text-[14px]">Course map appears here once the GPX route is added.</p>
+        </div>
       </div>
     );
   }
@@ -51,6 +55,7 @@ export default function RouteMap({
 
   return (
     <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+      {title && <div className="px-[16px] pt-[14px]"><CardTitle>{title}</CardTitle></div>}
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Course map">
         {/* route casing + line */}
         <polyline points={polyline} fill="none" stroke={FOG} strokeWidth={6}
