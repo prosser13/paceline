@@ -337,9 +337,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     daysToRace = Math.ceil((new Date(raceRow.race_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
   }
   const raceName = (raceRow?.name as string | null) ?? null;
-  const raceDateStr = raceRow?.race_date
-    ? new Date(raceRow.race_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-    : null;
+  const raceDateStr = raceRow?.race_date ? fmtWeekdayDate(raceRow.race_date) : null;
 
   // Next-race card — the nearest upcoming RACE session in the window (e.g. a
   // tune-up), with its A/B/C priority; falls back to the goal race if none.

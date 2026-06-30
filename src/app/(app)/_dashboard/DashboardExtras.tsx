@@ -22,6 +22,10 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
             dateStr={d.raceDateStr}
             targetTime={d.raceTargetTime}
             progressPct={d.todayPct}
+            weekNumber={d.weekNumber}
+            weeksTotal={d.weeksTotal}
+            weekPhase={d.weekPhase}
+            tuneUpName={d.nextRace && d.nextRace.name !== d.raceName ? d.nextRace.name : null}
           />
           <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue · last 6 weeks" bodyHeight={138} />}>
             <FitnessChartAsync />
