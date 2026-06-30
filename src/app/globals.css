@@ -13,6 +13,15 @@
   font-display: swap;
 }
 
+/* Lora renders a ~0.6em space inside this Next app (reproduces in clean/incognito
+   browsers and only here — the identical woff2 renders a normal 0.26em on a plain
+   static page; cause not pinned down). Pull the display font's word gaps back to
+   ~0.26em so headings/numerals don't show ~2× spacing. Scoped to the display
+   utility only — body text (Inter) is unaffected. */
+.font-display {
+  word-spacing: -0.34em;
+}
+
 @theme {
   /* ── Foundation (neutrals) ──────────────────── */
   --color-ink:    #17150f;   /* primary text */
