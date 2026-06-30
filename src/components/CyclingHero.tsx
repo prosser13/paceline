@@ -30,7 +30,7 @@ function parseDurMins(str: string | null | undefined): number | null {
 // (duration headline, descriptor chip, power/TSS stats); light expandable detail
 // with the colour-coded profile graph, plan-vs-actual table and segment targets.
 export default function CyclingHero({
-  label, session, powerZones, bikeHrZones, completed = null,
+  label, session, powerZones, bikeHrZones, completed = null, light = false,
 }: {
   label: string;
   session: {
@@ -42,6 +42,7 @@ export default function CyclingHero({
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
   completed?: CyclingCompleted | null;
+  light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
 }) {
   const isDone = !!completed;
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -73,16 +74,19 @@ export default function CyclingHero({
         ...(distPlanned != null ? [{ v: kmStr(distPlanned), l: 'km' }] : []),
       ];
 
+  // Today's hero is the dark focal tile; Recently-completed renders on a light card.
+  const accent = light ? RIDE : RIDE_B;
+
   return (
-    <details open={!isDone} className="group rounded-[18px] overflow-hidden mb-[18px] bg-hero text-onhero">
+    <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
       <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer" style={{ padding: '22px 24px' }}>
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: RIDE_B }}>
+          <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: accent }}>
             <BikeGlyph size={15} /> Ride
           </span>
           <div className="flex items-center gap-2">
             {isDone && <span className="text-[12px] font-bold" style={{ color: READY }}>✓ Completed</span>}
-            <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={RIDE_B} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>
         </div>
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
@@ -91,7 +95,7 @@ export default function CyclingHero({
             {chips.length > 0 && (
               <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
                 {chips.map(c => (
-                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${RIDE_B}`, color: RIDE_B, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
+                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
                 ))}
               </div>
             )}
@@ -100,14 +104,14 @@ export default function CyclingHero({
             {stats.map((s, i) => (
               <div key={i}>
                 <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
-                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: RIDE_B }}>{s.l}</div>
+                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
               </div>
             ))}
           </div>
         </div>
       </summary>
 
-      <div className="bg-paper text-ink" style={{ padding: '16px 24px 20px' }}>
+      <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
         {compare && compare.rows.length > 0 && (
           <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
         )}

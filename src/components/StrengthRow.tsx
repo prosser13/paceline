@@ -33,7 +33,7 @@ export function StrengthDetailTable({ exercises, weightCol = false }: { exercise
             <div key={i} className="grid items-center py-[8px] border-t border-fog/60 first:border-t-0 text-[13px]" style={{ gridTemplateColumns: '1fr 74px 96px' }}>
               <span className="font-medium text-ink min-w-0 truncate">{ex.name}</span>
               <span className="text-left font-semibold text-ink tabular-nums">{ex.sets} × {repsStr(ex)}</span>
-              <span className="text-right font-semibold tabular-nums" style={{ color: GOLD }}>{weighted ? `${ex.weight} kg` : 'bodyweight'}</span>
+              <span className="text-right font-semibold tabular-nums" style={{ color: GOLD }}>{weighted ? `${ex.weight} kg` : 'bw'}</span>
             </div>
           );
         })}

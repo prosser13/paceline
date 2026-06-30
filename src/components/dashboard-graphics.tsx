@@ -270,12 +270,14 @@ export function WeeklyBars({
     <TrendCard title="Running volume" note={note} noteColor={BUILD_C}>
       <div className="flex items-end gap-[7px] mt-[10px]" style={{ height: '58px' }}>
         {days.map((d, i) => {
+          // No run that day → no bar (keep the column slot for day-label alignment).
+          if (d.km <= 0) return <div key={i} className="flex-1" />;
           const isRace = (d.raceKm ?? 0) > 0;
-          const h = d.state === 'rest' || d.km <= 0 ? 5 : Math.max(8, Math.round((d.km / maxKm) * 52));
+          const h = Math.max(8, Math.round((d.km / maxKm) * 52));
           const color = isRace ? RACE_C : RUN_C;
           const faint = d.state === 'plan';
           return (
-            <div key={i} className="flex-1 rounded-[3px]" style={{ height: `${h}px`, background: color, opacity: d.state === 'rest' ? 0.3 : faint ? 0.45 : 1 }} />
+            <div key={i} className="flex-1 rounded-[3px]" style={{ height: `${h}px`, background: color, opacity: faint ? 0.45 : 1 }} />
           );
         })}
       </div>

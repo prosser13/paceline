@@ -18,7 +18,7 @@ import type { PlanSession, CompletedToday } from './data';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function SessionHero({
-  label, session, thresholdPace, zones, hrZones, completed, showAdjust = true,
+  label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false,
 }: {
   label: string;
   session: PlanSession;
@@ -28,6 +28,7 @@ export default function SessionHero({
   completed: CompletedToday | null;
   accentKey?: 'oxblood' | 'marine' | 'fern';
   showAdjust?: boolean;
+  light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   const { segActuals, segHr } = wholeRunActuals(
@@ -75,16 +76,19 @@ export default function SessionHero({
     ? [{ v: compare?.pace.actual ?? '—', l: 'pace' }, { v: tssActual != null ? `${tssActual}` : '—', l: 'TSS' }]
     : [{ v: displayDuration ?? '—', l: 'time' }, { v: displayTss != null ? `${displayTss}` : '—', l: 'TSS' }];
 
+  // Today's hero is the dark focal tile; Recently-completed renders on a light card.
+  const accent = light ? RUN : RUN_B;
+
   return (
-    <details open={!isDone} className="group rounded-[18px] overflow-hidden mb-[18px] bg-hero text-onhero">
+    <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
       <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer" style={{ padding: '22px 24px' }}>
         <div className="flex items-center justify-between">
-          <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: RUN_B }}>
+          <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: accent }}>
             <RunGlyph size={15} className="" /> Run · {cap(intensity)}
           </span>
           <div className="flex items-center gap-2">
             {isDone && <span className="text-[12px] font-bold" style={{ color: READY }}>✓ Completed</span>}
-            <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={RUN_B} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>
         </div>
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
@@ -93,7 +97,7 @@ export default function SessionHero({
             {chips.length > 0 && (
               <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
                 {chips.map(c => (
-                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${RUN_B}`, color: RUN_B, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
+                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
                 ))}
               </div>
             )}
@@ -102,7 +106,7 @@ export default function SessionHero({
             {stats.map((s, i) => (
               <div key={i}>
                 <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
-                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: RUN_B }}>{s.l}</div>
+                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
               </div>
             ))}
           </div>
@@ -110,7 +114,7 @@ export default function SessionHero({
       </summary>
 
       {/* Detail — light panel so the profile graph / breakdown / comparison read cleanly. */}
-      <div className="bg-paper text-ink" style={{ padding: '16px 24px 20px' }}>
+      <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
         {isDone && compare && compare.rows.length > 0 && (
           <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
         )}

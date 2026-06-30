@@ -86,7 +86,7 @@ export default async function DashboardBody() {
       {d.recentSession && (
         <>
           <SecLabel>Recently completed</SecLabel>
-          <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} />
+          <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} light />
         </>
       )}
 
