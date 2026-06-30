@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
-import { Lora, Inter } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
-// Display headings + big numerals use Lora (serif); body, labels and metrics use Inter.
-const lora = Lora({
-  subsets: ['latin'],
-  variable: '--font-lora',
-  weight: ['500', '600', '700'],
-});
+// Body, labels and metrics use Inter (self-hosted via next/font). The display
+// serif (Lora) is self-hosted under the UNIQUE family name "PacelineSerif" via a
+// hand-written @font-face in globals.css — see the note there. (next/font names
+// Lora "lora", which CSS-case-insensitively collides with a system "Lora" that
+// has a broken ~0.6em space glyph on some machines.)
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -25,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${lora.variable} ${inter.variable} h-full`}
+      className={`${inter.variable} h-full`}
     >
       <body className="h-full">
         {children}
