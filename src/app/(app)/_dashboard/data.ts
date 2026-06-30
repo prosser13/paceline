@@ -492,3 +492,40 @@ export const loadWellness = cache(async () => {
   const w = await getWellnessCached();
   return { fitnessForm: w.form, fitnessHistory: w.history };
 });
+
+// Per-week plan series (planned TSS + longest planned run) for the Weekly-load
+// and Longest-run trend cards. Its own cached read behind <Suspense> so the
+// whole-plan session fetch can't block the dashboard body. Planned values only —
+// the plan's prescribed trajectory.
+export interface WeekSeriesPoint {
+  weekNumber: number;
+  phase: string;
+  plannedTss: number;
+  longestRunKm: number;
+  isCurrent: boolean;
+  isRace: boolean;
+}
+export const loadWeeklyPlanSeries = cache(async (): Promise<WeekSeriesPoint[]> => {
+  const today = isoDate(new Date());
+  const weekRow = await getCurrentWeek(today);
+  const planId = (weekRow?.plan_id as number | null) ?? null;
+  if (!planId) return [];
+  const weeks = (await listPlanPhaseWeeks(planId)) as { phase: string; date_from: string; date_to: string; week_number: number }[];
+  if (!weeks.length) return [];
+  const sessions = (await listSessionsBetween(weeks[0].date_from, weeks[weeks.length - 1].date_to)) as PlanSession[];
+  return weeks.map(w => {
+    const inWeek = sessions.filter(s => s.scheduled_date >= w.date_from && s.scheduled_date <= w.date_to);
+    const plannedTss = inWeek.reduce((sum, s) => sum + (s.estimated_tss ?? 0), 0);
+    const runKms = inWeek
+      .filter(s => resolveSport(s) === 'run' || s.session_type === 'RACE')
+      .map(s => Number(s.distance_km) || 0);
+    return {
+      weekNumber: w.week_number,
+      phase: w.phase,
+      plannedTss: Math.round(plannedTss),
+      longestRunKm: runKms.length ? Math.max(...runKms) : 0,
+      isCurrent: w.date_from <= today && w.date_to >= today,
+      isRace: inWeek.some(s => s.session_type === 'RACE'),
+    };
+  });
+});

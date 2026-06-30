@@ -7,6 +7,8 @@ import OffPlanRow from '@/components/OffPlanRow';
 import FitnessChartAsync from './FitnessChartAsync';
 import SeasonGoalCard from './SeasonGoalCard';
 import AcwrTile from './AcwrTile';
+import WeeklyLoadCard from './WeeklyLoadCard';
+import LongestRunCard from './LongestRunCard';
 import { fmtDate } from '@/lib/dates';
 import type { DashboardData } from './data';
 
@@ -36,6 +38,15 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
         <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue" bodyHeight={120} />}>
           <FitnessChartAsync />
         </Suspense>
+        <Suspense fallback={<CardSkeleton header="Weekly load" bodyHeight={120} />}>
+          <WeeklyLoadCard raceName={d.raceName} />
+        </Suspense>
+        <Suspense fallback={<CardSkeleton header="Load balance" bodyHeight={120} />}>
+          <AcwrTile />
+        </Suspense>
+        <Suspense fallback={<CardSkeleton header="Longest run / week" bodyHeight={120} />}>
+          <LongestRunCard raceName={d.raceName} />
+        </Suspense>
         <WeeklyBars
           headerLabel={d.weekLabel}
           days={d.weekDays}
@@ -45,9 +56,6 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           daysToRace={d.daysToRace}
           raceName={d.raceName}
         />
-        <Suspense fallback={<CardSkeleton header="Load balance" bodyHeight={120} />}>
-          <AcwrTile />
-        </Suspense>
       </div>
 
       {d.offPlanRecent.length > 0 && (
