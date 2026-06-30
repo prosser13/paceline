@@ -1,5 +1,4 @@
 import type { CoachMessage } from '@/data/coach';
-import { fmtDate } from '@/lib/dates';
 
 // Collapsible "From your coach" card — the latest 9pm evening-review message.
 // body_md is light markdown (paragraphs + **bold**); rendered without a lib.
@@ -19,8 +18,13 @@ function renderBody(md: string) {
 }
 
 export default function CoachCard({ msg }: { msg: CoachMessage }) {
+  const time = (() => {
+    try {
+      return new Date(msg.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase().replace(' ', '');
+    } catch { return null; }
+  })();
   return (
-    <details className="border border-fog rounded-[14px] bg-paper px-[18px] py-[15px] [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden group">
+    <details className="border border-fog rounded-[16px] bg-paper [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden group" style={{ padding: '16px 19px', marginBottom: '4px' }}>
       <summary className="cursor-pointer flex items-start justify-between gap-3">
         <div className="flex gap-3 items-start min-w-0">
           <span className="w-[34px] h-[34px] rounded-full bg-hero text-onhero flex items-center justify-center shrink-0" aria-hidden="true">
@@ -29,7 +33,7 @@ export default function CoachCard({ msg }: { msg: CoachMessage }) {
             </svg>
           </span>
           <div className="min-w-0">
-            <div className="font-mono text-[11px] uppercase tracking-[.07em] font-bold text-ride">From your coach · {fmtDate(msg.for_date, 'short')}</div>
+            <div className="text-[11px] uppercase font-bold text-ride" style={{ letterSpacing: '.06em' }}>Evening review{time ? ` · ${time}` : ''}</div>
             <div className="font-display font-bold text-[16px] mt-[2px] leading-snug">{msg.headline}</div>
           </div>
         </div>

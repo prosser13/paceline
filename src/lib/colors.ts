@@ -22,6 +22,22 @@ export const HARD     = '#d2691e';   // quality / VO2
 export const RACE     = '#b3271e';
 export const READY    = '#2e9e6b';
 
+// Lighter "B" sport variants — for use ON the dark hero tile / week-strip today
+// cell, where the base sport colour is too dark to read.
+export const RUN_B      = '#e7634a';
+export const RIDE_B     = '#6aa3e0';
+export const STRENGTH_B = '#ecb73c';
+export const YOGA_B     = '#43bd9e';
+export const WARN       = '#c1881a';   // ACWR "slightly high"
+export const FATIGUE    = '#d98a3d';   // fatigue (ATL) trend line
+
+// Soft pill styling for the A/B/C race-priority badge (light tint + dark text).
+export const RACE_PRIORITY_BADGE: Record<string, { bg: string; fg: string }> = {
+  A: { bg: '#f3d3cf', fg: '#8a221b' },
+  B: { bg: '#f6e6c4', fg: '#7a5300' },
+  C: { bg: '#d6e3ef', fg: '#27506e' },
+};
+
 // ── Phases ─────────────────────────────────────
 export const PHASE_COLOR: Record<string, string> = {
   Base:  '#2f6f9e',

@@ -1,128 +1,103 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { PhaseTimeline, CardSkeleton } from '@/components/dashboard-graphics';
+import { CardSkeleton } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
+import PhaseCard from './PhaseCard';
 import NextRaceCard from './NextRaceCard';
 import ReadinessTile from './ReadinessTile';
 import CoachCard from './CoachCard';
 import { fmtDate } from '@/lib/dates';
-import { OXBLOOD, BONE } from '@/lib/colors';
+
+// Shared section label — the mockup's `.seclab` (13px, uppercase, 700).
+function SecLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[13px] uppercase font-bold" style={{ letterSpacing: '.06em', margin: '24px 0 12px' }}>
+      {children}
+    </div>
+  );
+}
 
 // The data-dependent dashboard body. Split out of page.tsx so it can sit behind
 // a <Suspense> boundary: the AppShell + skeleton stream at the shell's TTFB,
-// then this streams in once loadDashboardData() (~15 queries) resolves, instead
-// of the whole page blocking on them. Cuts the "element render delay" that was
-// dominating LCP.
+// then this streams in once loadDashboardData() resolves. Layout follows the
+// approved mockup: greeting → metric strip → week strip → coach → today →
+// tomorrow → trends → last-7, single-column flow (grids collapse on mobile).
 export default async function DashboardBody() {
   const d = await loadDashboardData();
   const noSessions = d.windowDays.every(x => x.sessions.length === 0);
 
   return (
-    <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[1040px]">
+    <div className="mx-auto max-w-[1040px]" style={{ padding: '24px 26px 56px' }}>
 
       {/* Date + greeting + settings */}
-      <div className="flex items-start justify-between gap-3 mb-4">
+      <div className="flex items-start justify-between gap-3" style={{ marginBottom: '18px' }}>
         <div className="min-w-0">
-          <div className="font-mono text-[11px] uppercase tracking-[.08em] font-bold text-stone">{fmtDate(d.todayStr, 'short')}</div>
-          <h2 className="font-display font-bold text-[26px] leading-tight mt-[2px]">{d.greeting}{d.firstName ? `, ${d.firstName}` : ''}</h2>
+          <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>{fmtDate(d.todayStr, 'short')}</div>
+          <h2 className="font-display font-bold text-[38px] leading-[1.05]" style={{ letterSpacing: '-.01em' }}>{d.greeting}{d.firstName ? `, ${d.firstName}` : ''}</h2>
         </div>
-        <Link
-          href="/settings"
-          aria-label="Settings"
-          className="shrink-0 w-[44px] h-[44px] rounded-[12px] border border-fog bg-paper flex items-center justify-center text-stone hover:bg-fog/40 active:scale-95 transition-[background-color,transform]"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <Link href="/settings" aria-label="Settings" className="shrink-0 text-ink/80 hover:text-ink active:scale-95 transition-[color,transform] mt-[6px]">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </Link>
       </div>
 
-      {/*
-        On mobile the dashboard leads with today's agenda; the plan/form context
-        row and the week strip drop below it (flex `order`). On md+ the natural
-        reading order is restored: context row → week strip → agenda → extras.
-      */}
-      <div className="flex flex-col">
-
-        {/* Metric strip — fast-changing context: plan/phase · next race · readiness.
-            Stacks on mobile, 2-up on sm, 3-up on md+. */}
-        <div className="order-2 md:order-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-[1.25fr_1fr_1.1fr] gap-[14px] mb-5">
-          {d.hasPlanWeek ? (
-            <PhaseTimeline
-              headerLabel={d.weekLabel}
-              purpose={d.weekPurpose}
-              segments={d.phaseSegments}
-              todayPct={d.todayPct}
-              daysToRace={d.daysToRace}
-              raceName={d.raceName}
-              raceDateStr={d.raceDateStr}
-            />
-          ) : (
-            <div className="flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper">
-              <div className="px-[18px] py-[10px]" style={{ background: OXBLOOD, color: BONE }}>
-                <span className="font-mono text-[12px] uppercase tracking-[.14em] leading-none">Plan</span>
-              </div>
-              <div className="flex flex-col gap-2 px-[18px] py-[15px] flex-1">
-                <p className="text-[15.5px] text-stone m-0">Plan starts 17 Aug 2026 · Pfitz 12/70</p>
-                <span className="font-mono text-[13px] text-stone mt-auto">Marathon — 8 Nov 2026</span>
-              </div>
+      {/* Metric strip — phase · next race · readiness. 1-col on mobile, 3-up md+. */}
+      <div className="grid grid-cols-1 md:grid-cols-[1.25fr_1fr_1.2fr] gap-[12px]" style={{ marginBottom: '12px' }}>
+        {d.hasPlanWeek
+          ? <PhaseCard phase={d.weekPhase} weekNumber={d.weekNumber} weeksTotal={d.weeksTotal}
+              purpose={d.weekPurpose} segments={d.phaseSegments} todayPct={d.todayPct} />
+          : (
+            <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '15px 17px' }}>
+              <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>Plan</div>
+              <p className="text-[15px] text-stone mt-2 mb-auto">No active training block.</p>
             </div>
           )}
 
-          {d.nextRace
-            ? <NextRaceCard {...d.nextRace} />
-            : <NextRaceCard name="No race scheduled" daysTo={null} dateStr={null} priority={null} />}
+        {d.nextRace
+          ? <NextRaceCard {...d.nextRace} />
+          : <NextRaceCard name="No race scheduled" daysTo={null} dateStr={null} priority={null} />}
 
-          <Suspense fallback={<CardSkeleton header="Readiness" bodyHeight={96} />}>
-            <ReadinessTile />
-          </Suspense>
-        </div>
-
-        {/* From your coach — the 9pm evening review. Under the metric strip on
-            desktop; below today on mobile. */}
-        {d.coachMessage && (
-          <div className="order-4 md:order-2 mt-3 mb-1">
-            <CoachCard msg={d.coachMessage} />
-          </div>
-        )}
-
-        {/* Week strip */}
-        <div className="order-3 md:order-4">
-          <WeekStrip days={d.windowDays} weekLabel={d.weekLabel} todayDone={!!d.todayCompleted} />
-        </div>
-
-        {/* Redesigned agenda (Option A) — the spine, leading on mobile; on
-            desktop it follows the coach card. */}
-        <div className="order-1 md:order-3">
-          <AgendaA d={d} />
-        </div>
-
-        {/* Recently completed — latest finished run/ride before today, rendered
-            by the SAME hero as Today (one card to maintain). */}
-        {d.recentSession && (
-          <div className="order-5 md:order-5">
-            <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px]">Recently completed</div>
-            <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} />
-          </div>
-        )}
-
-        {/* Lower panels */}
-        <div className="order-6 md:order-6 mt-2"><DashboardExtras d={d} /></div>
+        <Suspense fallback={<CardSkeleton header="Readiness" bodyHeight={96} />}>
+          <ReadinessTile />
+        </Suspense>
       </div>
+
+      {/* Week strip */}
+      <WeekStrip days={d.windowDays} />
+
+      {/* From your coach */}
+      {d.coachMessage && (
+        <>
+          <SecLabel>From your coach</SecLabel>
+          <CoachCard msg={d.coachMessage} />
+        </>
+      )}
+
+      {/* Today + Tomorrow (own section labels) */}
+      <AgendaA d={d} />
+
+      {/* Recently completed — latest finished run/ride before today */}
+      {d.recentSession && (
+        <>
+          <SecLabel>Recently completed</SecLabel>
+          <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} />
+        </>
+      )}
+
+      {/* Trends + last 7 */}
+      <DashboardExtras d={d} />
 
       {/* Empty state */}
       {noSessions && (
         <div className="text-center py-16">
           <p className="text-stone mb-4">No sessions loaded yet.</p>
-          <a
-            href="/admin/sessions/new"
-            className="bg-oxblood text-bone text-[15.5px] font-medium px-4 py-2.5 rounded-[10px] hover:bg-oxblood-dark transition-colors"
-          >
+          <a href="/admin/sessions/new" className="bg-run text-white text-[15.5px] font-medium px-4 py-2.5 rounded-[10px] hover:opacity-90 transition-opacity">
             Add first session
           </a>
         </div>

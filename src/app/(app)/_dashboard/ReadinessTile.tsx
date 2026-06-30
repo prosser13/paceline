@@ -13,8 +13,8 @@ export default async function ReadinessTile() {
   const off = Math.round(C * (1 - (r ? r.score / 100 : 0)));
 
   return (
-    <div className="rounded-[14px] px-[16px] py-[14px] h-full flex flex-col bg-hero text-onhero">
-      <div className="flex items-center gap-3">
+    <div className="rounded-[16px] h-full flex flex-col bg-hero text-onhero" style={{ padding: '14px 16px' }}>
+      <div className="flex items-center" style={{ gap: '13px' }}>
         <svg viewBox="0 0 54 54" className="w-[52px] h-[52px] shrink-0" aria-hidden="true">
           <circle cx="27" cy="27" r="22" fill="none" stroke="rgba(255,255,255,.18)" strokeWidth="6" />
           {r && (
@@ -27,7 +27,7 @@ export default async function ReadinessTile() {
         </svg>
         <div className="min-w-0">
           <div className="font-display font-bold text-[22px] leading-none" style={{ color: '#43bd9e' }}>{r?.band ?? '—'}</div>
-          <div className="font-mono text-[11px] uppercase tracking-[.06em] mt-[3px]" style={{ color: 'rgba(243,241,234,.7)' }}>
+          <div className="text-[11px] uppercase font-bold mt-[2px]" style={{ letterSpacing: '.06em', color: 'rgba(243,241,234,.7)' }}>
             {r ? `Readiness ${r.score}` : 'Readiness'}
           </div>
         </div>

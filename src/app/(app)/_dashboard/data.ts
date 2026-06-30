@@ -87,6 +87,9 @@ export interface DashboardData {
   hasPlanWeek: boolean;
   weekLabel: string;
   weekPurpose: string | null;
+  weekNumber: number | null;   // current week number within the plan
+  weeksTotal: number | null;   // total weeks in the plan (for "week 5 of 7")
+  weekPhase: string | null;    // current phase name (Base/Build/Peak/Taper)
 
   phaseSegments: PhaseSeg[];
   todayPct: number | null;
@@ -151,6 +154,9 @@ function fmtShort(iso: string): string {
 }
 function fmtDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+function fmtWeekdayDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 // Long-weekday + date label for the agenda spine (e.g. "Thursday" / "26 Jun").
@@ -346,7 +352,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     nextRace = {
       name: nrs.name,
       daysTo: Math.ceil((new Date(nrs.scheduled_date + 'T00:00:00').getTime() - new Date(todayStr + 'T00:00:00').getTime()) / 86400000),
-      dateStr: fmtDate(nrs.scheduled_date),
+      dateStr: fmtWeekdayDate(nrs.scheduled_date),
       priority: nrs.priority ?? null,
       km: nrs.distance_km ?? null,
     };
@@ -465,6 +471,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
     hasPlanWeek: !!weekRow,
     weekLabel, weekPurpose,
+    weekNumber: (weekRow?.week_number as number | null) ?? null,
+    weeksTotal: (planWeeks?.length as number | undefined) ?? null,
+    weekPhase: (weekRow?.phase as string | null) ?? null,
     phaseSegments, todayPct, ringPct,
     daysToRace, raceName, raceDateStr, raceTargetTime: (raceRow?.target_time as string | null) ?? null, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
