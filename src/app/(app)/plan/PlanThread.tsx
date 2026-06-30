@@ -286,13 +286,26 @@ export default function PlanThread({
     );
   }
 
-  function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean) {
+  function renderDay(dateStr: string, daySessions: PlanSession[], offPlan: OffPlanActivity[], dimPast: boolean, isFirst = false) {
     const isToday    = dateStr === todayStr;
     const isTomorrow = dateStr === tomorrowStr;
     const d          = new Date(dateStr + 'T00:00:00');
     const weekday    = d.toLocaleDateString('en-GB', { weekday: 'short' });
     const dateLabel  = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
     const dim        = dimPast && !isToday;
+
+    // Day totals for the subtle day header ("1.2h · 14 km · 85 TSS", or "rest day").
+    const nonRest = daySessions.filter(s => resolveStatus(s, todayStr, completedMap) !== 'rest');
+    let dM = 0, dKm = 0, dTss = 0;
+    for (const s of nonRest) {
+      const c = completedMap[s.id];
+      dM += c?.durationMins ?? durHM(s.estimated_duration);
+      dKm += Number(s.distance_km) || 0;
+      dTss += c?.tss ?? s.estimated_tss ?? 0;
+    }
+    const dayTotals = (nonRest.length === 0 && offPlan.length === 0)
+      ? 'rest day'
+      : [dM > 0 ? `${(dM / 60).toFixed(1)}h` : null, dKm > 0 ? `${Math.round(dKm)} km` : null, dTss > 0 ? `${dTss} TSS` : null].filter(Boolean).join(' · ');
 
     // If an extra activity was done this day, drop any "rest" filler — the day
     // wasn't a rest day. Planned (non-rest) sessions still render above the extras.
@@ -343,19 +356,14 @@ export default function PlanThread({
 
     return (
       <div key={dateStr} id={isToday ? 'plan-today' : undefined} className={`scroll-mt-[16px] ${dim ? 'opacity-55' : ''}`}>
-        <div className={`flex items-center gap-[8px] mt-[16px] mb-[7px] font-semibold ${
-          isToday    ? 'bg-oxblood text-bone rounded-[8px] px-[12px] py-[8px]'
-          : isTomorrow ? 'bg-marine text-bone rounded-[8px] px-[12px] py-[8px]'
-          : 'text-ink'
-        }`}>
-          <span className="text-[16px]">{weekday}</span>
-          <span className={`font-normal text-[15px] ${isToday || isTomorrow ? 'text-bone/75' : 'text-stone'}`}>{dateLabel}</span>
-          {isToday && (
-            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Today</span>
-          )}
-          {isTomorrow && (
-            <span className="ml-auto font-mono text-[10px] tracking-[.08em] uppercase text-bone/90">Tomorrow</span>
-          )}
+        <div className={`flex items-baseline justify-between gap-3 ${isFirst ? '' : 'border-t border-fog'}`}
+          style={{ margin: isFirst ? '2px 0 6px' : '12px 0 6px', paddingTop: isFirst ? '2px' : '10px' }}>
+          <span className="text-[12px] font-bold text-ink">
+            {weekday} {dateLabel}
+            {isToday && <span className="text-run font-bold ml-[6px]">· Today</span>}
+            {isTomorrow && <span className="text-ride font-bold ml-[6px]">· Tomorrow</span>}
+          </span>
+          <span className="text-[11px] font-semibold text-stone">{dayTotals}</span>
         </div>
         {sessions.map(s => sessionNode(s))}
         {offPlan.map(a => (
@@ -461,7 +469,7 @@ export default function PlanThread({
           </div>
         </summary>
         <div style={{ padding: '2px 16px 14px' }}>
-          {dates.map(date => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast))}
+          {dates.map((date, i) => renderDay(date, byDate[date] ?? [], offPlanByDate[date] ?? [], dimPast, i === 0))}
         </div>
       </details>
     );
