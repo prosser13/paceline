@@ -43,6 +43,17 @@ export function CardHeader({ accent, children, right }: { accent: string; childr
 
 export const cardClass = 'flex flex-col border border-fog rounded-[14px] overflow-hidden bg-paper';
 
+// Inline card title (top-left, ink) — the dashboard trend-card heading style.
+// Used in place of the old coloured CardHeader bar on the race-detail cards.
+export function CardTitle({ children, right }: { children: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 mb-[10px]">
+      <span className="font-display font-bold text-[16px]">{children}</span>
+      {right != null && right !== '' && <span className="text-[12px] font-bold text-stone">{right}</span>}
+    </div>
+  );
+}
+
 // Loading placeholder for a wellness card while its intervals.icu-backed data
 // streams in. Renders the real header instantly (no data needed) and a pulsing
 // body sized to the loaded card so the swap doesn't shift layout.

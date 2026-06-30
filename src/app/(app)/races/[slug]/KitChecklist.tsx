@@ -5,8 +5,7 @@
 // works as a real pre-race checklist with no backend.
 
 import { useEffect, useState } from 'react';
-import { CardHeader, cardClass } from '@/components/dashboard-graphics';
-import { OXBLOOD } from '@/lib/colors';
+import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 import type { KitItem } from '@/data/races/types';
 
 export default function KitChecklist({
@@ -56,10 +55,8 @@ export default function KitChecklist({
 
   return (
     <div className={cardClass}>
-      <CardHeader accent={OXBLOOD} right={hydrated ? `${packed}/${kitKeys.length} ready` : undefined}>
-        Race kit
-      </CardHeader>
       <div className="px-[18px] py-[15px]">
+        <CardTitle right={hydrated ? `${packed}/${kitKeys.length} ready` : undefined}>Race kit</CardTitle>
         {intro && (
           <p className="font-mono text-[11px] text-stone mb-[14px] leading-relaxed">{intro}</p>
         )}

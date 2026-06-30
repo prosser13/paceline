@@ -1,8 +1,7 @@
 // Nutrition & hydration — hourly targets (fluid flexes with the forecast), what
 // to eat before the start, and a clear checkpoint-by-checkpoint fuelling plan.
 
-import { CardHeader, cardClass } from '@/components/dashboard-graphics';
-import { FERN } from '@/lib/colors';
+import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 import type { FuelPlan as FuelPlanData } from '@/data/races/types';
 
 export interface FuelStop {
@@ -27,8 +26,8 @@ export default function FuelPlan({
 }) {
   return (
     <div className={cardClass}>
-      <CardHeader accent={FERN}>Nutrition &amp; hydration</CardHeader>
       <div className="px-[18px] py-[15px]">
+        <CardTitle>Nutrition &amp; hydration</CardTitle>
         <div className="grid grid-cols-3 gap-[10px]">
           <Target label="Carbs" value={`${fuel.carbsPerHourG[0]}–${fuel.carbsPerHourG[1]}`} unit="g/hr" />
           <Target label="Fluid" value={`${fluidRange[0]}–${fluidRange[1]}`} unit="ml/hr" />

@@ -4,7 +4,7 @@ import { readFile } from 'fs/promises';
 import path from 'path';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { FitnessChart, type WeekDay } from '@/components/dashboard-graphics';
+import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
@@ -195,13 +195,12 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         <p className="text-[15px] text-ink leading-relaxed mt-[18px]">{guide.summary}</p>
 
         {/* ── Course ── */}
-        <SectionLabel color="var(--color-ride)">Course</SectionLabel>
-        <div className="grid lg:grid-cols-2 gap-[14px]">
-          <RouteMap parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
+        <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
+          <RouteMap title="Course" parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
           <div className="flex flex-col gap-[14px]">
-            <ElevationProfile parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
+            <ElevationProfile title="Elevation" ascentM={guide.ascentM} parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
             <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[15px]">
-              <p className="font-mono text-[10px] uppercase tracking-[.1em] text-stone mb-[8px]">Terrain</p>
+              <CardTitle>Terrain</CardTitle>
               <ul className="flex flex-col gap-[5px]">
                 {guide.terrain.map((t, i) => (
                   <li key={i} className="text-[13px] text-ink leading-snug flex gap-[7px]">
@@ -214,13 +213,10 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         </div>
 
         {/* ── Targets & readiness ── */}
-        <SectionLabel color="var(--color-race)">Targets &amp; readiness</SectionLabel>
-        <div className="grid lg:grid-cols-2 gap-[14px]">
+        <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
           <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-            <div className="bg-oxblood/90 px-[18px] py-[10px]">
-              <span className="font-mono text-[12px] uppercase tracking-[.14em] text-bone leading-none">Goal tiers</span>
-            </div>
-            <div className="divide-y divide-fog">
+            <div className="px-[18px] pt-[15px]"><CardTitle>Goal tiers</CardTitle></div>
+            <div className="divide-y divide-fog border-t border-fog">
               {guide.goalTiers.map(t => (
                 <div key={t.label} className="flex items-baseline gap-[14px] px-[18px] py-[12px]">
                   <span className="font-display font-semibold text-[18px] text-oxblood w-[20px]">{t.label}</span>
@@ -251,40 +247,36 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           )}
         </div>
 
-        {/* ── Weather ── */}
-        <SectionLabel color="var(--color-ride)">Race-day weather</SectionLabel>
-        <WeatherPanel forecast={forecast} seasonal={guide.seasonalWeather} raceDateLabel={raceDateShort} />
-
-        {/* ── Coach's notes ── */}
-        <SectionLabel color="var(--color-strength)">Coach&apos;s notes</SectionLabel>
-        <CoachNotes notes={guide.coachNotes} />
-
-        {/* ── Pacing ── */}
-        <SectionLabel color="var(--color-race)">Pacing plan</SectionLabel>
-        <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
-
-        {/* ── Fuel ── */}
-        <SectionLabel color="var(--color-yoga)">Nutrition &amp; hydration</SectionLabel>
-        <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
-
-        {/* ── Kit ── */}
-        <SectionLabel>Race kit</SectionLabel>
-        <KitChecklist
-          slug={guide.slug}
-          intro={guide.kitNote}
-          wear={guide.kitWear}
-          carry={guide.kitCarry}
-          dropBag={guide.kitDropBag}
-          nightBefore={guide.nightBefore}
-        />
+        {/* titles now live inside each card (top-left); sections just need spacing */}
+        <div className="mt-[24px]">
+          <WeatherPanel forecast={forecast} seasonal={guide.seasonalWeather} raceDateLabel={raceDateShort} />
+        </div>
+        <div className="mt-[24px]">
+          <CoachNotes notes={guide.coachNotes} />
+        </div>
+        <div className="mt-[24px]">
+          <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
+        </div>
+        <div className="mt-[24px]">
+          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
+        </div>
+        <div className="mt-[24px]">
+          <KitChecklist
+            slug={guide.slug}
+            intro={guide.kitNote}
+            wear={guide.kitWear}
+            carry={guide.kitCarry}
+            dropBag={guide.kitDropBag}
+            nightBefore={guide.nightBefore}
+          />
+        </div>
 
         {/* weekly running volume across the plan — build → taper → race */}
         {weekBars.length > 0 && (() => {
           const maxKm = Math.max(...weekBars.map(w => w.km), 1);
           return (
-            <>
-              <SectionLabel color="var(--color-strength)">Weekly running volume</SectionLabel>
-              <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '14px 16px' }}>
+              <div className="border border-fog rounded-[14px] bg-paper mt-[24px]" style={{ padding: '14px 16px' }}>
+                <CardTitle>Weekly running volume</CardTitle>
                 <div className="flex items-end gap-[8px]" style={{ height: '54px' }}>
                   {weekBars.map((w, i) => {
                     const isRace = (w.raceKm ?? 0) > 0;
@@ -307,16 +299,9 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
                   })}
                 </div>
               </div>
-            </>
           );
         })()}
       </div>
     </>
-  );
-}
-
-function SectionLabel({ children, color }: { children: React.ReactNode; color?: string }) {
-  return (
-    <p className="text-[11px] uppercase font-bold mb-[10px] mt-[24px]" style={{ letterSpacing: '.07em', color: color ?? 'var(--color-ink)' }}>{children}</p>
   );
 }
