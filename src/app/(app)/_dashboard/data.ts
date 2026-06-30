@@ -13,6 +13,7 @@ import {
   listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
 } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
+import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
 import { activityKind } from '@/lib/activity-types';
 import { resolveSport, sportSpec } from '@/lib/sports/registry';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
@@ -114,6 +115,8 @@ export interface DashboardData {
   recentSession: PlanSession | null;
   recentCompleted: CompletedToday | null;
   recentLabel: string | null;
+
+  coachMessage: CoachMessage | null;   // latest 9pm evening-review message
 }
 
 function addDays(date: Date, n: number): Date {
@@ -181,6 +184,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     raceRow,
     offPlanRaw,
     recentCompletedRaw,
+    coachMessage,
   ] = await Promise.all([
     getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -194,6 +198,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getNextRace(todayStr),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
     getMostRecentCompletedSession(todayStr),
+    getLatestCoachMessage(),
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
@@ -466,6 +471,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
+    coachMessage,
   };
 }
 

@@ -8,6 +8,7 @@ import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
 import NextRaceCard from './NextRaceCard';
 import ReadinessTile from './ReadinessTile';
+import CoachCard from './CoachCard';
 import { fmtDate } from '@/lib/dates';
 import { OXBLOOD, BONE } from '@/lib/colors';
 
@@ -82,29 +83,36 @@ export default async function DashboardBody() {
           </Suspense>
         </div>
 
-        {/* Week strip — below today on mobile; on desktop it drops to sit just
-            above "recently completed". */}
-        <div className="order-3 md:order-3">
+        {/* From your coach — the 9pm evening review. Under the metric strip on
+            desktop; below today on mobile. */}
+        {d.coachMessage && (
+          <div className="order-4 md:order-2 mt-3 mb-1">
+            <CoachCard msg={d.coachMessage} />
+          </div>
+        )}
+
+        {/* Week strip */}
+        <div className="order-3 md:order-4">
           <WeekStrip days={d.windowDays} weekLabel={d.weekLabel} todayDone={!!d.todayCompleted} />
         </div>
 
         {/* Redesigned agenda (Option A) — the spine, leading on mobile; on
-            desktop it follows the context row. */}
-        <div className="order-1 md:order-2">
+            desktop it follows the coach card. */}
+        <div className="order-1 md:order-3">
           <AgendaA d={d} />
         </div>
 
         {/* Recently completed — latest finished run/ride before today, rendered
             by the SAME hero as Today (one card to maintain). */}
         {d.recentSession && (
-          <div className="order-4 md:order-4">
+          <div className="order-5 md:order-5">
             <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px]">Recently completed</div>
             <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} />
           </div>
         )}
 
         {/* Lower panels */}
-        <div className="order-5 md:order-5 mt-2"><DashboardExtras d={d} /></div>
+        <div className="order-6 md:order-6 mt-2"><DashboardExtras d={d} /></div>
       </div>
 
       {/* Empty state */}
