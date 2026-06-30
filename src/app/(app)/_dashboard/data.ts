@@ -94,6 +94,7 @@ export interface DashboardData {
   daysToRace: number | null;
   raceName: string | null;
   raceDateStr: string | null;
+  raceTargetTime: string | null;
 
   // Next-race card: nearest upcoming RACE session (incl. tune-ups), with its A/B/C priority.
   nextRace: { name: string; daysTo: number | null; dateStr: string | null; priority: string | null; km: number | null } | null;
@@ -460,7 +461,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     hasPlanWeek: !!weekRow,
     weekLabel, weekPurpose,
     phaseSegments, todayPct, ringPct,
-    daysToRace, raceName, raceDateStr, nextRace,
+    daysToRace, raceName, raceDateStr, raceTargetTime: (raceRow?.target_time as string | null) ?? null, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
