@@ -214,13 +214,13 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
         {/* ── Targets & readiness ── */}
         <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden flex flex-col h-full">
             <div className="px-[18px] pt-[15px]"><CardTitle>Goal tiers</CardTitle></div>
-            <div className="divide-y divide-fog border-t border-fog">
+            <div className="flex flex-col flex-1 divide-y divide-fog border-t border-fog">
               {guide.goalTiers.map(t => (
-                <div key={t.label} className="flex items-baseline gap-[14px] px-[18px] py-[12px]">
-                  <span className="font-display font-semibold text-[18px] text-oxblood w-[20px]">{t.label}</span>
-                  <span className="font-display font-semibold text-[18px] text-ink w-[64px] tabular-nums">{formatTargetTime(t.time)}</span>
+                <div key={t.label} className="flex flex-1 items-center gap-[14px] px-[18px] py-[14px]">
+                  <span className="font-display font-bold text-[20px] text-oxblood w-[20px]">{t.label}</span>
+                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{formatTargetTime(t.time)}</span>
                   <span className="text-[13px] text-stone leading-snug">{t.note}</span>
                 </div>
               ))}
