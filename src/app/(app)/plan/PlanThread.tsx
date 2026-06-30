@@ -218,6 +218,28 @@ export default function PlanThread({
   const currentAndFuture  = weeks.filter(w => w.date_to >= todayStr);
   const currentWeekNum    = weeks.find(w => w.date_from <= todayStr && w.date_to >= todayStr)?.week_number ?? null;
 
+  // Total planned hours for a week (jump-bar pill label).
+  const weekHoursOf = (wn: number) => {
+    let m = 0;
+    for (const s of byWeek[wn] ?? []) {
+      if (resolveStatus(s, todayStr, completedMap) === 'rest') continue;
+      m += completedMap[s.id]?.durationMins ?? durHM(s.estimated_duration);
+    }
+    return m / 60;
+  };
+
+  // Jump-bar click: reveal past weeks if needed, then open + scroll to the card.
+  const jumpTo = (w: PlanWeek) => {
+    const reveal = w.date_to < todayStr && !showPast;
+    if (reveal) setShowPast(true);
+    const open = () => {
+      const el = document.getElementById(`plan-week-${w.week_number}`) as HTMLDetailsElement | null;
+      if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    };
+    if (reveal) requestAnimationFrame(() => requestAnimationFrame(open));
+    else open();
+  };
+
   function renderSessionRow(session: PlanSession) {
     const status    = resolveStatus(session, todayStr, completedMap);
     const isRest    = status === 'rest';
@@ -392,6 +414,7 @@ export default function PlanThread({
     return (
       <details
         key={week.week_number}
+        id={`plan-week-${week.week_number}`}
         className="group border border-fog rounded-[14px] bg-paper overflow-hidden mb-[9px]"
         style={{ borderLeft: `6px solid ${hex}`, ...(isCurrent ? { boxShadow: '0 0 0 1px var(--color-hero)' } : {}), ...(dimPast ? { opacity: 0.9 } : {}) }}
         open={isCurrent || isNext}
@@ -446,7 +469,7 @@ export default function PlanThread({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-[2px]">
+      <div className="flex items-center justify-between gap-3 mb-[8px]">
         <span className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone">Weeks</span>
         {pastWeeks.length > 0 && (
           <button
@@ -457,6 +480,27 @@ export default function PlanThread({
             {showPast ? 'Hide earlier ▼' : 'Earlier weeks ▲'}
           </button>
         )}
+      </div>
+
+      {/* Jump bar — one pill per week (number + planned hours); current week dark. */}
+      <div className="flex gap-[5px] mb-[16px]">
+        {weeks.map(w => {
+          const now = w.date_from <= todayStr && w.date_to >= todayStr;
+          const phaseHex = PHASE_HEX[w.phase] ?? '#8a857a';
+          return (
+            <button
+              key={w.week_number}
+              type="button"
+              onClick={() => jumpTo(w)}
+              className="flex-1 text-center rounded-[9px] border cursor-pointer transition-colors hover:border-stone/50"
+              style={{ padding: '7px 2px', background: now ? 'var(--color-hero)' : 'var(--color-paper)', borderColor: now ? 'var(--color-hero)' : 'var(--color-fog)', color: now ? 'var(--color-onhero)' : 'var(--color-ink)' }}
+              aria-label={`Jump to week ${w.week_number}`}
+            >
+              <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: now ? '#ecb73c' : phaseHex }}>W{w.week_number}</div>
+              <div className="text-[10px] font-bold mt-[2px]">{weekHoursOf(w.week_number).toFixed(0)}h</div>
+            </button>
+          );
+        })}
       </div>
 
       {showPast && pastWeeks.map(w => renderWeekSection(w, true))}
