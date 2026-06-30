@@ -6,6 +6,7 @@
 // strip's tap-to-scroll still lands on the right day.
 
 import { Fragment } from 'react';
+import { intraDayOrder } from '@/lib/session-order';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import ActivityHero from './ActivityHero';
 import TomorrowCard from './TomorrowCard';
@@ -80,7 +81,13 @@ export default function AgendaA({ d }: { d: DashboardData }) {
       <section id={`spine-${d.windowDays[1].iso}`} style={{ scrollMarginTop: '14px' }}>
         <SectionLabel>Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}</SectionLabel>
         {(() => {
-          const tmrw = d.windowDays[1].sessions.filter(s => s.status !== 'rest');
+          // Tomorrow reads chronologically with strength LAST (warm-up → run →
+          // stretch → core → strength), regardless of the plan's strength-first
+          // intra-day flag used elsewhere.
+          const tmrw = d.windowDays[1].sessions
+            .filter(s => s.status !== 'rest')
+            .slice()
+            .sort((a, b) => intraDayOrder(a) - intraDayOrder(b));
           if (tmrw.length === 0) {
             return (
               <div className="border border-dashed border-fog rounded-[16px] bg-paper px-[22px] py-[16px] text-stone text-[15px] mb-[18px]">
