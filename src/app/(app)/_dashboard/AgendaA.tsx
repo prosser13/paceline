@@ -8,7 +8,7 @@
 import { Fragment } from 'react';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import ActivityHero from './ActivityHero';
-import SessionRows from './SessionRows';
+import TomorrowCard from './TomorrowCard';
 import StrengthHero from '@/components/StrengthHero';
 import YogaHero from '@/components/YogaHero';
 import OffPlanRow from '@/components/OffPlanRow';
@@ -17,7 +17,7 @@ import { type YogaPose } from '@/components/YogaRow';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-[11px] font-semibold uppercase tracking-[.13em] text-stone mb-[9px] mt-[22px] first:mt-0">
+    <div className="text-[13px] uppercase font-bold first:mt-0" style={{ letterSpacing: '.06em', margin: '24px 0 12px' }}>
       {children}
     </div>
   );
@@ -76,17 +76,27 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         )}
       </section>
 
-      {/* Tomorrow */}
+      {/* Tomorrow — 2-up cards (mockup), one per session. */}
       <section id={`spine-${d.windowDays[1].iso}`} style={{ scrollMarginTop: '14px' }}>
-        <div className="font-display font-semibold text-[18px] text-marine mt-[22px] mb-[10px]">
-          Tomorrow
-          <span className="font-mono text-[12.5px] font-normal text-marine/70 ml-[6px]">{formatSpineDay(d.windowDays[1].iso).date}</span>
-        </div>
-        <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
-          <SessionRows sessions={d.windowDays[1].sessions} thresholdPace={d.thresholdPace}
-            zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones}
-            restLabel="Rest day — recover" emphasis />
-        </div>
+        <SectionLabel>Tomorrow · {formatSpineDay(d.windowDays[1].iso).date}</SectionLabel>
+        {(() => {
+          const tmrw = d.windowDays[1].sessions.filter(s => s.status !== 'rest');
+          if (tmrw.length === 0) {
+            return (
+              <div className="border border-dashed border-fog rounded-[16px] bg-paper px-[22px] py-[16px] text-stone text-[15px] mb-[18px]">
+                Rest day — recover.
+              </div>
+            );
+          }
+          return (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mb-[18px]">
+              {tmrw.map(s => (
+                <TomorrowCard key={s.id} session={s} thresholdPace={d.thresholdPace}
+                  zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+              ))}
+            </div>
+          );
+        })()}
       </section>
 
     </div>
