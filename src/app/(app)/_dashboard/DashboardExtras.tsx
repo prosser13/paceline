@@ -10,71 +10,76 @@ import AcwrTile from './AcwrTile';
 import { fmtDate } from '@/lib/dates';
 import type { DashboardData } from './data';
 
+function SecLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-[13px] uppercase font-bold" style={{ letterSpacing: '.06em', margin: '24px 0 12px' }}>{children}</div>
+  );
+}
+
 export default function DashboardExtras({ d }: { d: DashboardData }) {
+  const last7Hours = d.last7.h + d.last7.m / 60;
   return (
     <>
-      <div className="mb-6 mt-2">
-        <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">Trends &amp; insights</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[14px]">
-          <SeasonGoalCard
-            name={d.raceName ?? 'No race scheduled'}
-            daysTo={d.daysToRace}
-            dateStr={d.raceDateStr}
-            targetTime={d.raceTargetTime}
-            progressPct={d.todayPct}
-            weekNumber={d.weekNumber}
-            weeksTotal={d.weeksTotal}
-            weekPhase={d.weekPhase}
-            tuneUpName={d.nextRace && d.nextRace.name !== d.raceName ? d.nextRace.name : null}
-          />
-          <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue · last 6 weeks" bodyHeight={138} />}>
-            <FitnessChartAsync />
-          </Suspense>
-          <WeeklyBars
-            headerLabel={d.weekLabel}
-            days={d.weekDays}
-            weekDoneKm={d.weekDoneKm}
-            weekPlannedKm={d.weekPlannedKm}
-            weekToGoKm={d.weekToGoKm}
-            daysToRace={d.daysToRace}
-            raceName={d.raceName}
-          />
-          <Suspense fallback={<CardSkeleton header="Load balance" bodyHeight={120} />}>
-            <AcwrTile />
-          </Suspense>
-        </div>
+      <SecLabel>Trends &amp; insights</SecLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+        <SeasonGoalCard
+          name={d.raceName ?? 'No race scheduled'}
+          daysTo={d.daysToRace}
+          dateStr={d.raceDateStr}
+          targetTime={d.raceTargetTime}
+          progressPct={d.todayPct}
+          weekNumber={d.weekNumber}
+          weeksTotal={d.weeksTotal}
+          weekPhase={d.weekPhase}
+          tuneUpName={d.nextRace && d.nextRace.name !== d.raceName ? d.nextRace.name : null}
+        />
+        <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue" bodyHeight={120} />}>
+          <FitnessChartAsync />
+        </Suspense>
+        <WeeklyBars
+          headerLabel={d.weekLabel}
+          days={d.weekDays}
+          weekDoneKm={d.weekDoneKm}
+          weekPlannedKm={d.weekPlannedKm}
+          weekToGoKm={d.weekToGoKm}
+          daysToRace={d.daysToRace}
+          raceName={d.raceName}
+        />
+        <Suspense fallback={<CardSkeleton header="Load balance" bodyHeight={120} />}>
+          <AcwrTile />
+        </Suspense>
       </div>
 
       {d.offPlanRecent.length > 0 && (
-        <div className="mb-6">
-          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">Extras · not in plan</p>
-          <div className="border border-fog rounded-[14px] bg-paper overflow-hidden divide-y divide-fog/50">
+        <>
+          <SecLabel>Extras · not in plan</SecLabel>
+          <div className="border border-fog rounded-[16px] bg-paper overflow-hidden divide-y divide-fog/50">
             {d.offPlanRecent.map(a => (
               <OffPlanRow key={a.id} activity={a} dateLabel={fmtDate(a.date)} />
             ))}
           </div>
-        </div>
+        </>
       )}
 
       {d.last7.sessions > 0 && (
-        <div>
-          <p className="font-mono text-[13px] tracking-[.12em] uppercase text-stone mb-[10px]">Last 7 days</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-[10px]">
+        <>
+          <SecLabel>Last 7 days</SecLabel>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-[12px]">
             {[
-              { k: 'Distance',      v: `${d.last7.totalKm.toFixed(1)}`, unit: 'km' },
-              { k: 'Sessions',      v: `${d.last7.sessions}`,           unit: 'done' },
-              { k: 'Time',          v: `${d.last7.h}:${String(d.last7.m).padStart(2, '0')}`, unit: 'h:m' },
-              { k: 'Training load', v: d.last7.totalTss > 0 ? `${d.last7.totalTss}` : '—', unit: 'TSS' },
+              { k: 'Distance', v: d.last7.totalKm.toFixed(1), unit: ' km' },
+              { k: 'Sessions', v: `${d.last7.sessions}`,       unit: '' },
+              { k: 'Time',     v: last7Hours.toFixed(1),       unit: ' h' },
+              { k: 'Load',     v: d.last7.totalTss > 0 ? `${d.last7.totalTss}` : '—', unit: ' TSS' },
             ].map(({ k, v, unit }) => (
-              <div key={k} className="border border-fog rounded-[12px] bg-paper p-[13px_15px]">
-                <div className="font-mono text-[12px] tracking-[.06em] uppercase text-stone">{k}</div>
-                <div className="font-display font-bold text-[22px] mt-[5px]">
-                  {v} <small className="font-sans font-normal text-[13px] text-stone">{unit}</small>
+              <div key={k} className="border border-fog rounded-[16px] bg-paper" style={{ padding: '14px 17px' }}>
+                <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>{k}</div>
+                <div className="font-display font-bold text-[27px] mt-[3px]">
+                  {v}<small className="font-sans font-semibold text-[13px] text-stone">{unit}</small>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
     </>
   );

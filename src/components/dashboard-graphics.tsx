@@ -11,8 +11,26 @@ const FERN = '#3f8f6a';
 const MARINE = '#2f6f9e';
 const EMBER = '#d2691e';
 const FOG = '#d8d3c9';
-const AMBER = '#caa23a';
 const INK = '#17150f';
+const FATIGUE = '#d98a3d';
+const RUN_C = '#c4452c';
+const RACE_C = '#b3271e';
+const BUILD_C = '#b07d12';
+
+// Borderless mockup trend-card shell: title row (Lora label + coloured right
+// note) over the chart body. Replaces the old coloured CardHeader for the
+// dashboard trends grid.
+function TrendCard({ title, note, noteColor, children }: { title: string; note?: string; noteColor?: string; children: React.ReactNode }) {
+  return (
+    <div className="border border-fog rounded-[16px] bg-paper" style={{ padding: '16px 18px' }}>
+      <div className="flex items-center justify-between">
+        <span className="font-display font-bold text-[16px]">{title}</span>
+        {note && <span className="text-[12px] font-bold" style={{ color: noteColor }}>{note}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
 
 export function CardHeader({ accent, children, right }: { accent: string; children: React.ReactNode; right?: React.ReactNode }) {
   return (
@@ -235,7 +253,7 @@ export interface WeekDay {
 }
 
 export function WeeklyBars({
-  headerLabel, days, weekDoneKm, weekPlannedKm, weekToGoKm, daysToRace, raceName,
+  days, weekPlannedKm,
 }: {
   headerLabel: string;
   days: WeekDay[];
@@ -246,72 +264,32 @@ export function WeeklyBars({
   raceName: string | null;
 }) {
   const maxKm = Math.max(...days.map(d => d.km), 1);
-  const toGo = weekPlannedKm != null ? weekToGoKm : null;
-  const hasRace = days.some(d => (d.raceKm ?? 0) > 0);
+  const note = weekPlannedKm != null ? `${weekPlannedKm} km this week` : undefined;
 
   return (
-    <div className={cardClass}>
-      <CardHeader accent={OXBLOOD} right={daysToRace != null && daysToRace >= 0 && raceName ? `${daysToRace} d → ${raceName}` : undefined}>
-        {headerLabel}
-      </CardHeader>
-      <div className="flex flex-col flex-1 px-[18px] py-[15px]">
-        <div className="flex items-end gap-[8px] h-[66px]">
-          {days.map((d, i) => {
-            const h = d.state === 'rest' || d.km <= 0 ? 4 : Math.max(6, Math.round((d.km / maxKm) * 60));
-            const bg = d.state === 'plan' || d.state === 'rest' ? FOG : OXBLOOD;
-            const outline = d.state === 'today' ? { outline: `2px solid ${AMBER}`, outlineOffset: '1px' } : {};
-            const raceKm = Math.min(d.raceKm ?? 0, d.km);
-            if (raceKm > 0 && d.km > 0) {
-              // Split bar: race distance as a marine cap above the week's other km.
-              const raceH = Math.max(3, Math.round((raceKm / d.km) * h));
-              const baseH = Math.max(0, h - raceH);
-              return (
-                <div key={i} className="flex-1 flex flex-col justify-end">
-                  <div className="rounded-[4px] overflow-hidden flex flex-col" style={{ height: `${h}px`, ...outline }}>
-                    <div style={{ height: `${raceH}px`, background: MARINE }} />
-                    <div style={{ height: `${baseH}px`, background: bg }} />
-                  </div>
-                </div>
-              );
-            }
-            return (
-              <div key={i} className="flex-1 flex flex-col justify-end">
-                <div className="rounded-[4px]" style={{ height: `${h}px`, background: bg, ...outline }} />
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex gap-[8px] mt-[6px]">
-          {days.map((d, i) => (
-            <span
-              key={i}
-              className="flex-1 text-center font-mono text-[10px] uppercase tracking-[.1em]"
-              style={{ color: d.state === 'today' ? AMBER : '#5b5852' }}
-            >
-              {d.label}
-            </span>
-          ))}
-        </div>
-        <div className="flex gap-[14px] mt-[12px]">
-          <span className="font-mono text-[11px] text-stone flex items-center">
-            <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: OXBLOOD }} />
-            {Math.round(weekDoneKm)} done
-          </span>
-          {toGo != null && (
-            <span className="font-mono text-[11px] text-stone flex items-center">
-              <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: FOG }} />
-              {toGo} planned
-            </span>
-          )}
-          {hasRace && (
-            <span className="font-mono text-[11px] text-stone flex items-center">
-              <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: MARINE }} />
-              race day
-            </span>
-          )}
-        </div>
+    <TrendCard title="Running volume" note={note} noteColor={BUILD_C}>
+      <div className="flex items-end gap-[7px] mt-[10px]" style={{ height: '58px' }}>
+        {days.map((d, i) => {
+          const isRace = (d.raceKm ?? 0) > 0;
+          const h = d.state === 'rest' || d.km <= 0 ? 5 : Math.max(8, Math.round((d.km / maxKm) * 52));
+          const color = isRace ? RACE_C : RUN_C;
+          const faint = d.state === 'plan';
+          return (
+            <div key={i} className="flex-1 rounded-[3px]" style={{ height: `${h}px`, background: color, opacity: d.state === 'rest' ? 0.3 : faint ? 0.45 : 1 }} />
+          );
+        })}
       </div>
-    </div>
+      <div className="flex gap-[7px] mt-[5px]">
+        {days.map((d, i) => (
+          <span key={i} className="flex-1 text-center text-[9px] font-semibold" style={{ color: (d.raceKm ?? 0) > 0 ? RACE_C : d.state === 'today' ? BUILD_C : INK }}>
+            {d.label}
+          </span>
+        ))}
+      </div>
+      <div className="text-[12px] font-semibold mt-[6px]">
+        Solid = done · faint = planned · <span style={{ color: RACE_C }}>deep red = race</span>.
+      </div>
+    </TrendCard>
   );
 }
 
@@ -325,59 +303,43 @@ export function FitnessChart({
   fitness: number | null;
   fatigue: number | null;
 }) {
+  const bandWord = form != null ? formBand(form).label.split(' ')[0].toLowerCase() : null;
   return (
-    <div className={cardClass}>
-      <CardHeader accent={FERN}>Fitness &amp; fatigue · last 6 weeks</CardHeader>
-      <div className="flex flex-col flex-1 px-[18px] py-[15px]">
-        {history && history.length > 1 ? (
-          (() => {
-            const vals = history.flatMap(p => [p.ctl, p.atl]);
-            const min = Math.min(...vals);
-            const max = Math.max(...vals);
-            const span = max - min || 1;
-            const n = history.length;
-            const X0 = 6, X1 = 234, Y0 = 18, Y1 = 78;
-            const sx = (i: number) => X0 + (i / (n - 1)) * (X1 - X0);
-            const sy = (v: number) => Y1 - ((v - min) / span) * (Y1 - Y0);
-            const ctlPts = history.map((p, i) => `${sx(i).toFixed(1)},${sy(p.ctl).toFixed(1)}`).join(' ');
-            const atlPts = history.map((p, i) => `${sx(i).toFixed(1)},${sy(p.atl).toFixed(1)}`).join(' ');
-            const lastCtlY = sy(history[n - 1].ctl);
-            const lastAtlY = sy(history[n - 1].atl);
-            return (
-              <>
-                <div className="flex items-baseline gap-[8px] mb-[8px]">
-                  <span className="font-display font-semibold text-[26px] leading-none" style={{ color: form != null && form >= -30 && form < -10 ? FERN : INK }}>
-                    {form != null ? `${form > 0 ? '+' : ''}${form}` : '—'}
-                  </span>
-                  <span className="font-mono text-[12px] text-stone">form today</span>
-                </div>
-                <svg viewBox="0 0 240 92" width="100%" height="92" preserveAspectRatio="none" aria-hidden="true">
-                  <line x1="0" y1="78" x2="240" y2="78" stroke={FOG} strokeWidth="1" />
-                  <polyline points={ctlPts} fill="none" stroke={MARINE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <polyline points={atlPts} fill="none" stroke={EMBER} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <line x1="234" y1={lastCtlY} x2="234" y2={lastAtlY} stroke={INK} strokeWidth="1.5" strokeDasharray="2 2" />
-                  <circle cx="234" cy={lastCtlY} r="3" fill={MARINE} />
-                  <circle cx="234" cy={lastAtlY} r="3" fill={EMBER} />
-                </svg>
-                <div className="flex gap-[16px] mt-[6px]">
-                  <span className="font-mono text-[11px] text-stone flex items-center">
-                    <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: MARINE }} />
-                    Fitness {fitness ?? '—'}
-                  </span>
-                  <span className="font-mono text-[11px] text-stone flex items-center">
-                    <i className="inline-block w-[8px] h-[8px] rounded-[2px] mr-[5px]" style={{ background: EMBER }} />
-                    Fatigue {fatigue ?? '—'}
-                  </span>
-                </div>
-              </>
-            );
-          })()
-        ) : (
-          <p className="text-[14px] text-stone py-[14px]">
-            Connect intervals.icu in Settings to see your fitness &amp; fatigue trend.
-          </p>
-        )}
-      </div>
-    </div>
+    <TrendCard title="Fitness &amp; fatigue" note="6 weeks" noteColor={MARINE}>
+      {history && history.length > 1 ? (
+        (() => {
+          const vals = history.flatMap(p => [p.ctl, p.atl]);
+          const min = Math.min(...vals);
+          const max = Math.max(...vals);
+          const span = max - min || 1;
+          const n = history.length;
+          const X0 = 4, X1 = 256, Y0 = 8, Y1 = 60;
+          const sx = (i: number) => X0 + (i / (n - 1)) * (X1 - X0);
+          const sy = (v: number) => Y1 - ((v - min) / span) * (Y1 - Y0);
+          const ctlPts = history.map((p, i) => `${sx(i).toFixed(1)},${sy(p.ctl).toFixed(1)}`).join(' ');
+          const atlPts = history.map((p, i) => `${sx(i).toFixed(1)},${sy(p.atl).toFixed(1)}`).join(' ');
+          return (
+            <>
+              <svg viewBox="0 0 260 66" width="100%" height="60" className="mt-[8px]" preserveAspectRatio="none" aria-hidden="true">
+                <polyline points={ctlPts} fill="none" stroke={INK} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={atlPts} fill="none" stroke={FATIGUE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <div className="text-[12px] font-bold mt-[2px]">
+                <span style={{ color: INK }}>● Fitness {fitness ?? '—'}</span>
+                &nbsp;&nbsp;
+                <span style={{ color: FATIGUE }}>● Fatigue {fatigue ?? '—'}</span>
+                {form != null && (
+                  <>&nbsp;&nbsp;Form {form > 0 ? '+' : ''}{form} <span className="font-medium">({bandWord})</span></>
+                )}
+              </div>
+            </>
+          );
+        })()
+      ) : (
+        <p className="text-[13px] text-stone py-[14px]">
+          Connect intervals.icu in Settings to see your fitness &amp; fatigue trend.
+        </p>
+      )}
+    </TrendCard>
   );
 }
