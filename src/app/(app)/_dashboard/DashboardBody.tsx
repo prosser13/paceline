@@ -10,6 +10,7 @@ import PhaseCard from './PhaseCard';
 import NextRaceCard from './NextRaceCard';
 import ReadinessTile from './ReadinessTile';
 import CoachCard from './CoachCard';
+import DailyNoteCard from './DailyNoteCard';
 import { fmtDate } from '@/lib/dates';
 
 // Shared section label — the mockup's `.seclab` (13px, uppercase, 700).
@@ -81,6 +82,10 @@ export default async function DashboardBody() {
 
       {/* Today + Tomorrow (own section labels) */}
       <AgendaA d={d} />
+
+      {/* Daily note — athlete's free-text context for tonight's coach review */}
+      <SecLabel>Daily note</SecLabel>
+      <DailyNoteCard initialNote={d.dailyNote} />
 
       {/* Recently completed — latest finished run/ride before today */}
       {d.recentSession && (
