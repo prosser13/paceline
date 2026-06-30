@@ -11,6 +11,7 @@ import { activityKind } from '@/lib/activity-types';
 import { unlinkSession, removePromotedSession, unmergeActivity } from './match-actions';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SessionStatus } from '@/components/StatusMark';
+import { fmtRange } from '@/lib/dates';
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -74,10 +75,9 @@ function resolveStatus(
   return 'planned';
 }
 
+// Unified range formatter (drops the repeated month: "29 Jun – 5 Jul").
 function fmtDateRange(from: string, to: string) {
-  const f = new Date(from + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  const t = new Date(to   + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return `${f} – ${t}`;
+  return fmtRange(from, to);
 }
 
 // ── Sub-components ─────────────────────────────────────────────
