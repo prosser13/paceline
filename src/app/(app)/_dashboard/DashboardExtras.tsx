@@ -75,15 +75,15 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           <SecLabel>Last 7 days</SecLabel>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-[12px]">
             {[
-              { k: 'Distance', v: d.last7.totalKm.toFixed(1), unit: ' km' },
+              { k: 'Distance', v: d.last7.totalKm.toFixed(1), unit: 'km' },
               { k: 'Sessions', v: `${d.last7.sessions}`,       unit: '' },
-              { k: 'Time',     v: last7Hours.toFixed(1),       unit: ' h' },
-              { k: 'Load',     v: d.last7.totalTss > 0 ? `${d.last7.totalTss}` : '—', unit: ' TSS' },
+              { k: 'Time',     v: last7Hours.toFixed(1),       unit: 'h' },
+              { k: 'Load',     v: d.last7.totalTss > 0 ? `${d.last7.totalTss}` : '—', unit: 'TSS' },
             ].map(({ k, v, unit }) => (
-              <div key={k} className="border border-fog rounded-[16px] bg-paper" style={{ padding: '14px 17px' }}>
+              <div key={k} className="border border-fog rounded-[16px] bg-paper" style={{ padding: '14px 16px' }}>
                 <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>{k}</div>
-                <div className="font-display font-bold text-[27px] mt-[3px]">
-                  {v}<small className="font-sans font-semibold text-[13px] text-stone">{unit}</small>
+                <div className="font-display font-bold text-[24px] mt-[3px] whitespace-nowrap leading-none">
+                  {v}{unit && <small className="font-sans font-semibold text-[12px] text-stone ml-[4px]">{unit}</small>}
                 </div>
               </div>
             ))}
