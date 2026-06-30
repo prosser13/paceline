@@ -35,7 +35,7 @@ export default async function LongestRunCard({ raceName }: { raceName: string | 
         ))}
       </div>
       <div className="text-[12px] font-semibold mt-[6px]">
-        Longest run builds, then tapers into the <span style={{ color: RACE }}>race</span>.
+        Longest run builds, then tapers into the race.
       </div>
     </div>
   );

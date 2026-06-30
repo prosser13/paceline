@@ -21,7 +21,25 @@ export const repsStr = (ex: StrengthEx) => (ex.reps_type === 'secs' ? `${ex.reps
 // the run's WorkoutDetail rows. Shared by the dashboard StrengthHero, the
 // tomorrow/future SessionRows, and the plan StrengthRow; each caller supplies
 // its own padding wrapper.
-export function StrengthDetailTable({ exercises }: { exercises: StrengthEx[] }) {
+export function StrengthDetailTable({ exercises, weightCol = false }: { exercises: StrengthEx[]; weightCol?: boolean }) {
+  // weightCol (dashboard today hero): a 3-column row — name · sets×reps · weight
+  // (in the strength accent), no muscle group — matching the design mockup.
+  if (weightCol) {
+    return (
+      <div className="flex flex-col">
+        {exercises.map((ex, i) => {
+          const weighted = ex.weight != null && Number(ex.weight) > 0;
+          return (
+            <div key={i} className="grid items-center py-[8px] border-t border-fog/60 first:border-t-0 text-[13px]" style={{ gridTemplateColumns: '1fr 74px 96px' }}>
+              <span className="font-medium text-ink min-w-0 truncate">{ex.name}</span>
+              <span className="text-left font-semibold text-ink tabular-nums">{ex.sets} × {repsStr(ex)}</span>
+              <span className="text-right font-semibold tabular-nums" style={{ color: GOLD }}>{weighted ? `${ex.weight} kg` : 'bodyweight'}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col">
       {exercises.map((ex, i) => {

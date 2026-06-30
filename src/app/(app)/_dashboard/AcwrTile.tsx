@@ -21,7 +21,7 @@ export default async function AcwrTile() {
     :               { label: 'ramping fast', color: 'var(--color-run)' };
 
   return (
-    <div className="border border-fog rounded-[14px] bg-paper px-[16px] py-[14px]">
+    <div className="border border-fog rounded-[16px] bg-paper" style={{ padding: '16px 18px' }}>
       <div className="flex items-center justify-between">
         <span className="font-display font-bold text-[16px]">Load balance</span>
         <span className="font-mono text-[11px] uppercase tracking-[.06em] font-bold text-stone">ACWR</span>
@@ -40,7 +40,7 @@ export default async function AcwrTile() {
         <span className="absolute" style={{ left: `${bandLeft + bandWidth}%`, transform: 'translateX(-50%)', color: 'var(--color-ready)' }}>1.3</span>
         <span className="absolute right-0">1.8</span>
       </div>
-      <div className="text-[12px] font-semibold text-stone mt-[7px]">7-day load ÷ 4-week average — <span style={{ color: 'var(--color-ready)' }}>green = sweet spot</span>.</div>
+      <div className="text-[12px] font-semibold mt-[7px]">7-day load ÷ 4-week average; the green band is the sweet spot.</div>
     </div>
   );
 }

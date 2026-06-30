@@ -30,7 +30,8 @@ export default function PhaseCard({
     <div className="border border-fog rounded-[16px] bg-paper" style={{ padding: '15px 17px' }}>
       <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{eyebrow}</div>
       <div className="font-display font-bold text-[18px]" style={{ margin: '5px 0 16px' }}>
-        {purpose ?? 'Training block'}
+        {/* Trim any "— <race>" tail so the purpose stays on one line. */}
+        {(purpose ?? 'Training block').split(/\s*[—–]\s*/)[0]}
       </div>
       <div className="relative" style={{ marginBottom: '13px' }}>
         <div className="flex overflow-hidden" style={{ height: '9px', borderRadius: '5px' }}>

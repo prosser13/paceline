@@ -29,9 +29,20 @@ export async function listSessionsBetween(from: string, to: string) {
 export async function listSessionDistancesBetween(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('scheduled_date, distance_km, session_type')
+    .select('scheduled_date, distance_km, session_type, activity_type')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to);
+  return data ?? [];
+}
+
+// Completed-workout TSS keyed by date within [from, to] — for the weekly-load
+// trend (done vs planned). Uses the stored `tss` column.
+export async function listCompletedTssBetween(from: string, to: string) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, tss')
+    .gte('completed_date', from)
+    .lte('completed_date', to);
   return data ?? [];
 }
 

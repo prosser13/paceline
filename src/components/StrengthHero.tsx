@@ -66,7 +66,7 @@ export default function StrengthHero({
 
       {open && (
         <div className="border-t border-fog mt-[14px] pt-[12px]">
-          <StrengthDetailTable exercises={exercises} />
+          <StrengthDetailTable exercises={exercises} weightCol />
         </div>
       )}
     </div>

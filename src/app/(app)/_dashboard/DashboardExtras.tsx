@@ -28,6 +28,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           name={d.raceName ?? 'No race scheduled'}
           daysTo={d.daysToRace}
           dateStr={d.raceDateStr}
+          distanceKm={d.raceDistanceKm}
           targetTime={d.raceTargetTime}
           progressPct={d.todayPct}
           weekNumber={d.weekNumber}

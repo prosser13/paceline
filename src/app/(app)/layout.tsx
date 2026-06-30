@@ -43,10 +43,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </header>
         {/* overflow-anchor:none — when an accordion expands, keep the user's
             scroll position and push content down instead of letting the browser
-            anchor to a lower element (which yanked the view upward). */}
-        {/* zoom:0.9 — uniform 10% reduction of all page content (fonts, spacing,
-            cards) in one place; reflows layout, unlike transform: scale. */}
-        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0 [overflow-anchor:none]" style={{ zoom: 0.9 }}>
+            anchor to a lower element (which yanked the view upward).
+            No zoom: pages render at the same scale as the design mockups (a prior
+            zoom:0.9 made everything ~10% smaller than the mockups). */}
+        <main className="flex-1 overflow-y-auto pb-[84px] md:pb-0 [overflow-anchor:none]">
           {children}
         </main>
       </div>

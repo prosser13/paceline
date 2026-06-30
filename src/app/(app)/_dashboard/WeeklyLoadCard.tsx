@@ -8,7 +8,7 @@ const BUILD = '#b07d12';
 export default async function WeeklyLoadCard({ raceName }: { raceName: string | null }) {
   const series = await loadWeeklyPlanSeries();
   if (series.length < 2) return null;
-  const max = Math.max(...series.map(s => s.plannedTss), 1);
+  const max = Math.max(...series.flatMap(s => [s.plannedTss, s.doneTss]), 1);
   const current = series.find(s => s.isCurrent);
 
   return (
@@ -19,11 +19,14 @@ export default async function WeeklyLoadCard({ raceName }: { raceName: string | 
       </div>
       <div className="flex items-end gap-[8px] mt-[10px]" style={{ height: '58px' }}>
         {series.map(w => {
-          const h = Math.max(6, Math.round((w.plannedTss / max) * 52));
           const color = PHASE_COLOR[w.phase] ?? '#8a857a';
+          const ph = Math.max(4, Math.round((w.plannedTss / max) * 52));        // planned (faint)
+          const dh = w.doneTss > 0 ? Math.max(4, Math.round((w.doneTss / max) * 52)) : 0; // done (solid)
           return (
-            <div key={w.weekNumber} className="flex-1 rounded-[3px]"
-              style={{ height: `${h}px`, background: color, ...(w.isCurrent ? { outline: `2px solid ${color}`, outlineOffset: '1px' } : {}) }} />
+            <div key={w.weekNumber} className="relative flex-1 rounded-[3px]" style={{ height: '58px', ...(w.isCurrent ? { outline: `2px solid ${color}`, outlineOffset: '1px' } : {}) }}>
+              <div className="absolute bottom-0 left-0 right-0 rounded-[3px]" style={{ height: `${ph}px`, background: color, opacity: 0.28 }} />
+              {dh > 0 && <div className="absolute bottom-0 left-0 right-0 rounded-[3px]" style={{ height: `${dh}px`, background: color }} />}
+            </div>
           );
         })}
       </div>
@@ -36,7 +39,7 @@ export default async function WeeklyLoadCard({ raceName }: { raceName: string | 
         ))}
       </div>
       <div className="text-[12px] font-semibold mt-[6px]">
-        Phase-coloured planned load.{current ? ` ${current.plannedTss} TSS planned this week.` : ''}
+        Solid = done · faint = planned.{current ? ` ${current.doneTss}/${current.plannedTss} TSS this week.` : ''}
       </div>
     </div>
   );

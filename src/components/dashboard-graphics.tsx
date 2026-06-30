@@ -287,7 +287,7 @@ export function WeeklyBars({
         ))}
       </div>
       <div className="text-[12px] font-semibold mt-[6px]">
-        Solid = done · faint = planned · <span style={{ color: RACE_C }}>deep red = race</span>.
+        Solid = done · faint = planned · deep red = race.
       </div>
     </TrendCard>
   );
@@ -324,10 +324,10 @@ export function FitnessChart({
                 <polyline points={ctlPts} fill="none" stroke={INK} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline points={atlPts} fill="none" stroke={FATIGUE} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <div className="text-[12px] font-bold mt-[2px]">
-                <span style={{ color: INK }}>● Fitness {fitness ?? '—'}</span>
+              <div className="text-[12px] font-semibold mt-[2px]">
+                <span style={{ color: INK }}>●</span> Fitness {fitness ?? '—'}
                 &nbsp;&nbsp;
-                <span style={{ color: FATIGUE }}>● Fatigue {fatigue ?? '—'}</span>
+                <span style={{ color: FATIGUE }}>●</span> Fatigue {fatigue ?? '—'}
                 {form != null && (
                   <>&nbsp;&nbsp;Form {form > 0 ? '+' : ''}{form} <span className="font-medium">({bandWord})</span></>
                 )}
