@@ -99,177 +99,99 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[720px]">
-        <h1 className="font-display font-semibold text-[24px] mb-6">Settings</h1>
+      <div className="px-[26px] py-[22px] max-w-[760px]">
+        <h1 className="font-display font-bold text-[26px] mb-5">Settings</h1>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Zones</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone">
-              Sessions are built from zones, so the targets shown across your plan are derived
-              from these windows — editing a zone updates every session. Running uses
-              <span className="text-ink font-medium"> pace</span> and
-              <span className="text-ink font-medium"> heart-rate</span> zones; cycling uses
-              <span className="text-ink font-medium"> power</span> and
-              <span className="text-ink font-medium"> bike heart-rate</span> zones.
-            </p>
-          </div>
-        </section>
+        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Autonomy"
+          subtitle="How much latitude the coach has when it adapts your plan, and the guardrails it must stay within. Changes are picked up on the next coaching review.">
+          <CoachingClient
+            initialAutonomy={coachAutonomy}
+            initialMaxRamp={coachMaxRamp}
+            initialMinRest={coachMinRest}
+            initialProtectA={coachProtectA}
+            initialNotes={coachNotes}
+          />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Target times</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Goal finish time for each A-race. The target pace is derived from the time and
-              distance, and drives the goal-pace segments in that plan&apos;s sessions.
-            </p>
-            {targetTimePlans.length
-              ? <TargetTimesClient plans={targetTimePlans} />
-              : <p className="text-[14px] text-stone/70">No races yet.</p>}
-          </div>
-        </section>
+        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Constraints"
+          subtitle="Hard limits the coach must respect — recurring days off, travel blackouts, or a free-text rule it should always work around.">
+          <ConstraintsClient initialConstraints={constraintInputs} />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Plan · strength priority</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              How a day with both a run and a lift is ordered. <span className="text-ink font-medium">Strength
-              first</span> leads the day with the lift (suited to ultra/strength blocks);
-              <span className="text-ink font-medium"> run first</span> puts the run ahead and the lift last.
-            </p>
-            {planPrefs.length
-              ? <PlanPrefsClient plans={planPrefs} />
-              : <p className="text-[14px] text-stone/70">No plans yet.</p>}
-          </div>
-        </section>
+        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
+          subtitle="Every change the coach (or you) makes to the plan, newest first — what changed, when, and why. Revert to undo one.">
+          <ChangeLogClient entries={adjustments} />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · constraints</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Hard limits on when you can train. The coach reads these every time it reviews
-              your plan and works around them — recurring days off, travel blackouts, or a
-              free-text rule it should always respect.
-            </p>
-            <ConstraintsClient initialConstraints={constraintInputs} />
-          </div>
-        </section>
+        <SettingsCard cat="Plan" color="var(--color-race)" title="Target times"
+          subtitle="Goal finish time for each A-race. Target pace is derived from the time and distance, and drives the goal-pace segments in that plan's sessions.">
+          {targetTimePlans.length
+            ? <TargetTimesClient plans={targetTimePlans} />
+            : <p className="text-[14px] text-stone/70">No races yet.</p>}
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · autonomy</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              How much latitude the coach has when it adapts your plan, and the guardrails it
-              must stay within. Changes are picked up on the next coaching review.
-            </p>
-            <CoachingClient
-              initialAutonomy={coachAutonomy}
-              initialMaxRamp={coachMaxRamp}
-              initialMinRest={coachMinRest}
-              initialProtectA={coachProtectA}
-              initialNotes={coachNotes}
-            />
-          </div>
-        </section>
+        <SettingsCard cat="Plan" color="var(--color-race)" title="Strength priority"
+          subtitle="How a day with both a run and a lift is ordered — strength first leads with the lift (ultra/strength blocks); run first puts the run ahead.">
+          {planPrefs.length
+            ? <PlanPrefsClient plans={planPrefs} />
+            : <p className="text-[14px] text-stone/70">No plans yet.</p>}
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Coaching · change log</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Every change the coach (or you) makes to the plan, newest first — what changed, when,
-              and why. Use <span className="text-ink font-medium">Revert</span> to undo one.
-            </p>
-            <ChangeLogClient entries={adjustments} />
-          </div>
-        </section>
+        <SettingsCard cat="Running" color="var(--color-run)" title="Pace zones"
+          subtitle="Planned runs are built from zones — the paces across your plan derive from these windows, so editing a zone updates every session.">
+          <ZonesClient initialThreshold={threshold} initialZones={zones} />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · pace zones</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Planned runs are built from zones — the paces shown across your plan are
-              derived from these windows, so editing a zone updates every session.
-            </p>
-            <ZonesClient initialThreshold={threshold} initialZones={zones} />
-          </div>
-        </section>
+        <SettingsCard cat="Running" color="var(--color-run)" title="Heart-rate zones"
+          subtitle="Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.">
+          <HrZonesClient
+            initialThreshold={hrThreshold}
+            initialMax={hrMax}
+            initialResting={hrResting}
+            initialZones={hrZoneInputs}
+          />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Running · heart rate zones</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.
-            </p>
-            <HrZonesClient
-              initialThreshold={hrThreshold}
-              initialMax={hrMax}
-              initialResting={hrResting}
-              initialZones={hrZoneInputs}
-            />
-          </div>
-        </section>
+        <SettingsCard cat="Cycling" color="var(--color-ride)" title="Power zones"
+          subtitle="Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from these zones, so editing one updates every ride's targets.">
+          <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · power zones</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from
-              these zones, so editing one updates every ride&apos;s power targets.
-            </p>
-            <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
-          </div>
-        </section>
+        <SettingsCard cat="Cycling" color="var(--color-ride)" title="Bike heart-rate zones"
+          subtitle="Cycling heart rate runs lower than running, so it has its own threshold, max and resting values plus zone ranges in bpm.">
+          <HrZonesClient
+            initialThreshold={bikeHrThreshold}
+            initialMax={bikeHrMax}
+            initialResting={bikeHrResting}
+            initialZones={bikeHrZoneInputs}
+            save={saveBikeHrZones}
+          />
+        </SettingsCard>
 
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden mb-5">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Cycling · heart rate zones</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <p className="text-[15px] text-stone mb-4">
-              Cycling heart rate runs lower than running, so it has its own threshold, max and
-              resting values plus zone ranges in bpm.
-            </p>
-            <HrZonesClient
-              initialThreshold={bikeHrThreshold}
-              initialMax={bikeHrMax}
-              initialResting={bikeHrResting}
-              initialZones={bikeHrZoneInputs}
-              save={saveBikeHrZones}
-            />
-          </div>
-        </section>
-
-        <section className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-          <div className="px-[18px] py-[14px] border-b border-fog">
-            <span className="font-mono text-[12px] tracking-[.14em] uppercase text-stone">Strava</span>
-          </div>
-          <div className="px-[18px] py-[18px]">
-            <SettingsClient
-              connected={!!strava?.athlete_name}
-              athleteName={strava?.athlete_name ?? null}
-              lastSyncedAt={strava?.last_synced_at ?? null}
-            />
-          </div>
-        </section>
+        <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null} last>
+          <SettingsClient
+            connected={!!strava?.athlete_name}
+            athleteName={strava?.athlete_name ?? null}
+            lastSyncedAt={strava?.last_synced_at ?? null}
+          />
+        </SettingsCard>
       </div>
     </>
+  );
+}
+
+// Settings card — coloured category eyebrow + Lora title + subtitle, matching the
+// settings mockup.
+function SettingsCard({ cat, color, title, subtitle, children, last = false }: {
+  cat: string; color: string; title: string; subtitle?: string | null; children: React.ReactNode; last?: boolean;
+}) {
+  return (
+    <section className={`border border-fog rounded-[14px] bg-paper ${last ? '' : 'mb-[14px]'}`} style={{ padding: '16px 18px' }}>
+      <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.07em', color }}>{cat}</div>
+      <div className="font-display font-bold text-[17px] mt-[1px]">{title}</div>
+      {subtitle && <div className="text-[12px] font-medium text-stone mt-[2px] mb-[14px]">{subtitle}</div>}
+      {!subtitle && <div className="mb-[10px]" />}
+      {children}
+    </section>
   );
 }
