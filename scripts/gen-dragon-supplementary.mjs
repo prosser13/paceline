@@ -88,7 +88,7 @@ const FLEX = {
   '2026-07-01': [yogaDynamic(), yogaStatic()],   // VO2 4×1km
   '2026-07-05': [yogaDynamic(), yogaStatic()],   // Porthcawl 10k
   '2026-07-08': [yogaDynamic()],                 // MLR + ultra pace
-  '2026-07-11': [yogaDynamic(), yogaStatic()],   // long run (30km)
+  '2026-07-11': [yogaDynamic(), yogaStatic()],   // long run (21km)
   '2026-07-16': [yogaMobility()],                // rest day (taper)
   '2026-07-19': [yogaDynamic()],                 // Dragon 50 race
 };
