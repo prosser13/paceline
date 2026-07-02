@@ -7,6 +7,8 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getCoachingPrefs } from '@/data/coaching';
 import { getCurrentWeek } from '@/data/plans';
+import { expandSegmentDistances } from '@/lib/plan-structure';
+import { countsToWeeklyVolume } from '@/lib/weekly-volume';
 
 // Fields the planning layer may change. Everything else (id, plan_id, timestamps,
 // intervals link, is_completed) is off-limits — a patch touching them is rejected.
@@ -27,7 +29,8 @@ export interface PlanChangeInput {
 
 export type PlanChangeResult =
   | { ok: true; applied: true; status: 'applied'; adjustment_id: string;
-      before: Record<string, unknown>; after: Record<string, unknown> }
+      before: Record<string, unknown>; after: Record<string, unknown>;
+      warnings?: string[] }
   | { ok: true; applied: false; status: 'duplicate'; adjustment_id: string | null }
   | { ok: false; applied: false; status: 'rejected' | 'proposal_only'; reason: string };
 
@@ -42,6 +45,16 @@ function isoDow(dateStr: string): number {
 }
 
 const reject = (reason: string): PlanChangeResult => ({ ok: false, applied: false, status: 'rejected', reason });
+
+// A run's `structure` must describe the same distance as its headline `distance_km`
+// — the drift that once let a "30km" structure sit on a 21km run. Returns the sum
+// of the structure's per-segment km, or null when it can't be measured (no
+// structure, or zone-only segments with nothing to derive a distance from).
+function structureKm(structure: unknown): number | null {
+  if (!Array.isArray(structure) || !structure.length) return null;
+  const sum = expandSegmentDistances(structure).reduce((s, d) => s + d, 0);
+  return sum > 0 ? sum : null;
+}
 
 // Apply one change to one session through the logged path.
 export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChangeResult> {
@@ -111,6 +124,27 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   // Keep day_of_week consistent when a session is moved.
   if (typeof patch.scheduled_date === 'string') patch.day_of_week = isoDow(patch.scheduled_date);
 
+  // ── data-integrity invariant (everyone) ──
+  // A run's structure must agree with its headline distance. Checked only when the
+  // change touches either, so unrelated edits to an older, already-inconsistent
+  // session aren't blocked — only a change that could (re)introduce the drift is.
+  const touchesShape = 'structure' in patch || 'distance_km' in patch;
+  const isRun = countsToWeeklyVolume({
+    session_type:  (patch.session_type as string | null | undefined) ?? session.session_type,
+    activity_type: (patch.activity_type as string | null | undefined) ?? session.activity_type,
+  });
+  if (touchesShape && isRun) {
+    const effStructure = 'structure' in patch ? patch.structure : session.structure;
+    const effDistance  = Number('distance_km' in patch ? patch.distance_km : session.distance_km) || 0;
+    const sum = structureKm(effStructure);
+    if (sum != null && effDistance > 0 && Math.abs(sum - effDistance) > Math.max(1, effDistance * 0.1)) {
+      return reject(
+        `structure distances sum to ${sum.toFixed(1)}km but distance_km is ${effDistance}km — ` +
+        `keep them in sync (patch both together, or fix the structure)`,
+      );
+    }
+  }
+
   // Capture the inverse (the fields we're about to change) for an exact revert.
   const before: Record<string, unknown> = {};
   for (const k of Object.keys(patch)) before[k] = session[k as keyof typeof session] ?? null;
@@ -145,7 +179,35 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     return reject(`could not record change: ${logErr.message}`);
   }
 
-  return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before, after: patch };
+  // ── week-purpose staleness signal ──
+  // The weekly *volume number* is derived from sessions (weekly-volume.ts), so it
+  // can't drift. The week's free-text `purpose` can: if it bakes in a distance and
+  // a run in that week just changed, warn so the author/agent reviews the text.
+  // (Prose can't be auto-rewritten safely — surfacing it is the honest fix.)
+  const warnings: string[] = [];
+  if (touchesShape && isRun && session.plan_id != null) {
+    const effDate = typeof patch.scheduled_date === 'string'
+      ? patch.scheduled_date : (session.scheduled_date as string);
+    const { data: week } = await supabaseAdmin
+      .from('plan_weeks')
+      .select('week_number, purpose')
+      .eq('plan_id', session.plan_id)
+      .lte('date_from', effDate)
+      .gte('date_to', effDate)
+      .maybeSingle();
+    const purpose = (week?.purpose as string | null) ?? '';
+    if (/\d+\s*km/i.test(purpose)) {
+      warnings.push(
+        `Week ${week!.week_number} description may now be stale — it reads “${purpose}” but a run in ` +
+        `that week just changed. Review the week purpose.`,
+      );
+    }
+  }
+
+  return {
+    ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string,
+    before, after: patch, ...(warnings.length ? { warnings } : {}),
+  };
 }
 
 // Undo a previously-applied change by replaying its before_state. Idempotent per

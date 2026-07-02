@@ -19,6 +19,7 @@ import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
 import { activityKind } from '@/lib/activity-types';
 import { resolveSport, sportSpec } from '@/lib/sports/registry';
+import { weekRunKm, countsToWeeklyVolume } from '@/lib/weekly-volume';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
@@ -397,10 +398,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     // "Running volume" = RUNS only. Rides carry distance_km too, so summing every
     // session double-counts cycling and the number looks wrong — filter to
     // run/run-race sessions (same predicate as the done side below).
-    const isRunSession = (s: { session_type?: string | null; activity_type?: string | null }) =>
-      sportSpec(s).countsToWeeklyVolume;
-    const runSessions = (weekSessions ?? []).filter(isRunSession);
-    weekPlannedKm = Math.round(runSessions.reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
+    const runSessions = (weekSessions ?? []).filter(countsToWeeklyVolume);
+    weekPlannedKm = weekRunKm(weekSessions ?? []);
 
     const plannedByDate = new Map<string, number>();
     const raceKmByDate = new Map<string, number>();
@@ -416,7 +415,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const isRunCompletion = (c: { plan_sessions?: unknown }) => {
       const ps = Array.isArray(c.plan_sessions) ? c.plan_sessions[0] : c.plan_sessions;
       if (!ps) return true; // off-plan completion — assume a run
-      return sportSpec(ps as { session_type?: string | null; activity_type?: string | null }).countsToWeeklyVolume;
+      return countsToWeeklyVolume(ps as { session_type?: string | null; activity_type?: string | null });
     };
     const doneByDate = new Map<string, number>();
     for (const c of weekCompleted ?? []) {

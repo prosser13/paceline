@@ -1,14 +1,17 @@
-// Fix Dragon 50 (plan_id 4) week 6 to match its real 21km long run.
+// Reconcile Dragon 50 (plan_id 4) week 6 with its real 21km long run.
 //
 // Week 6's Sat 11 Jul long run is a 21km session (distance_km 21, structure =
-// 11km Z2 + 10km ultra pace), but three surfaces still described the old 30km
+// 11km Z2 + 10km ultra pace), but two text surfaces still described the old 30km
 // version:
-//   - plan_weeks.purpose        "…30km long run…"  → "…21km long run…"
-//   - plan_weeks.planned_volume 60km               → 51km (8+14+8+21)
-//   - the LR session text        "6km ultra pace · 14km Z2 · 10km ultra pace"
-//                                (30km, and not even matching its own structure)
-//                                → "11km Z2 · 10km ultra pace"
-// The session's distance_km and structure are already correct and left untouched.
+//   - plan_weeks.purpose  had baked in "…30km long run…". It's now qualitative
+//     ("Final big load before taper") — the distance lives on the session, not the
+//     prose, so it can't drift again. (See docs/plan-agent.md.)
+//   - the LR session's text "6km ultra pace · 14km Z2 · 10km ultra pace" (30km, and
+//     not even matching its own structure) -> "11km Z2 · 10km ultra pace".
+//
+// Weekly *volume* is no longer stored/reconciled here — it's derived from the
+// week's run sessions at read time (src/lib/weekly-volume.ts · weekRunKm), so the
+// legacy plan_weeks.planned_volume_km column is left as-is and simply ignored.
 //
 // Idempotent: plain updates keyed by plan/week/date — safe to re-run.
 // Run: node scripts/fix-dragon-week6-longrun.mjs
@@ -25,7 +28,7 @@ const supabase = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE
 const PLAN_ID = 4;
 
 const { error: weekErr } = await supabase.from('plan_weeks')
-  .update({ purpose: 'Final big load — 21km long run before taper', planned_volume_km: 51.0 })
+  .update({ purpose: 'Final big load before taper' })
   .eq('plan_id', PLAN_ID).eq('week_number', 6);
 if (weekErr) { console.error('week update failed:', weekErr.message); process.exit(1); }
 
@@ -35,4 +38,4 @@ const { error: sessErr } = await supabase.from('plan_sessions')
   .eq('scheduled_date', '2026-07-11');
 if (sessErr) { console.error('session update failed:', sessErr.message); process.exit(1); }
 
-console.log('Dragon 50 week 6 aligned to the 21km long run (purpose, volume, session text).');
+console.log('Dragon 50 week 6 reconciled: qualitative purpose + 21km long-run session text.');
