@@ -2,6 +2,7 @@ import type { PlanSession, WorkoutStep } from '@/data/sessions';
 import {
   getWellnessCacheRow, saveWellnessCacheRow, markWellnessCacheStale,
 } from '@/data/wellness-cache';
+import { upsertWellnessDays, type WellnessDay } from '@/data/wellness-days';
 
 const ATHLETE_ID = 'i330821';
 const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
@@ -214,6 +215,88 @@ export async function getWellnessCached(): Promise<WellnessSnapshot> {
 /** Flag the wellness cache stale so the next dashboard load refetches from intervals.icu. */
 export async function invalidateWellnessCache(): Promise<void> {
   await markWellnessCacheStale();
+}
+
+// ── Daily wellness ingestion (persistent history, not the dashboard cache) ──
+// The dashboard cache above holds only the CTL/ATL/TSB snapshot. The store below
+// keeps the full Garmin-sourced biometric set, one row per day, in wellness_days.
+
+// The intervals.icu wellness fields we persist. All nullable — a day may carry
+// only some (e.g. no overnight HRV if the watch wasn't worn).
+interface IntervalsWellnessRow {
+  id?: string;                 // yyyy-mm-dd
+  ctl?: number | null; atl?: number | null;
+  restingHR?: number | null; hrv?: number | null;
+  sleepSecs?: number | null; sleepScore?: number | null; sleepQuality?: number | null;
+  steps?: number | null; vo2max?: number | null; weight?: number | null;
+  updated?: string | null;
+  sportInfo?: Array<{ type?: string; eftp?: number | null }> | null;
+}
+
+const num = (v: unknown): number | null => (v == null ? null : Number(v));
+
+function mapWellnessRow(r: IntervalsWellnessRow): WellnessDay {
+  // eFTP: prefer a Ride entry (cycling watts), else the first sport carrying one.
+  const ride = (r.sportInfo ?? []).find(s => s.type === 'Ride' && s.eftp != null)
+            ?? (r.sportInfo ?? []).find(s => s.eftp != null);
+  return {
+    date:              String(r.id ?? ''),
+    ctl:               num(r.ctl),
+    atl:               num(r.atl),
+    resting_hr:        num(r.restingHR),
+    hrv:               num(r.hrv),
+    sleep_secs:        num(r.sleepSecs),
+    sleep_score:       num(r.sleepScore),
+    sleep_quality:     num(r.sleepQuality),
+    steps:             num(r.steps),
+    vo2max:            num(r.vo2max),
+    weight:            num(r.weight),
+    cycling_eftp_w:    ride?.eftp != null ? Math.round(Number(ride.eftp)) : null,
+    intervals_updated: r.updated ?? null,
+    raw:               r,
+  };
+}
+
+const WELLNESS_SYNC_WINDOW_DAYS = 14;
+
+// Fetch a rolling window of daily wellness records from intervals.icu, mapped to
+// our row shape. Returns null if the key is missing or the API call fails.
+export async function fetchWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessDay[] | null> {
+  if (!process.env.INTERVALS_API_KEY) return null;
+  const today  = new Date();
+  const newest = isoDay(today);
+  const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
+  try {
+    const res = await fetch(
+      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
+      { headers: authHeaders(), cache: 'no-store' },
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as IntervalsWellnessRow[];
+    return rows.filter(r => r.id).map(mapWellnessRow);
+  } catch {
+    return null;
+  }
+}
+
+export interface WellnessSyncResult {
+  ok: boolean;
+  days: number;           // rows upserted
+  latest: string | null;  // most recent date written
+  error?: string;
+}
+
+// Pull the recent wellness window and upsert it into `wellness_days`. Idempotent
+// — safe to run on every scheduled tick; re-running overwrites each day with its
+// latest values (intervals revises a day's record for a day or two afterward).
+export async function syncWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessSyncResult> {
+  const rows = await fetchWellnessDays(windowDays);
+  if (rows == null) {
+    return { ok: false, days: 0, latest: null, error: 'intervals.icu unavailable or INTERVALS_API_KEY unset' };
+  }
+  const written = await upsertWellnessDays(rows);
+  const latest = rows.length ? rows[rows.length - 1].date : null;
+  return { ok: true, days: written, latest };
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {

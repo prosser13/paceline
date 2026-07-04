@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["dub1"]
+  "regions": ["dub1"],
+  "crons": [
+    {
+      "path": "/api/wellness/sync",
+      "schedule": "0 7,11,15,19,23 * * *"
+    }
+  ]
 }
