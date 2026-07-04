@@ -1,0 +1,53 @@
+# Nightly evening-coach — the reliable, in-repo replacement for the external
+# paceline-evening-coach task. Pings /api/coach/run, which generates the evening
+# review, saves it, sends it to Telegram, and refreshes the coach's memory.
+#
+# The route is idempotent (one evening review per day, DB-enforced), so firing
+# several times a night is safe: the first success posts, the rest skip. The
+# spread of fires is the reliability mechanism — GitHub's scheduler can delay or
+# drop an individual run, so we give it multiple chances plus a late safety net
+# that alerts on Telegram if the night still produced nothing.
+#
+# Setup (one-time):
+#   1. Repo → Settings → Secrets and variables → Actions:
+#        - CRON_SECRET (already set for the wellness sync — reused here)
+#   2. Vercel (Production) env — needed by /api/coach/run:
+#        - ANTHROPIC_API_KEY   (the only genuinely new secret)
+#        - TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID (already set)
+#        - CRON_SECRET (already set)
+#   3. (Optional) repo variable COACH_RUN_URL if prod isn't https://paceline.run
+#   4. Scheduled workflows only run once this file is on the DEFAULT branch.
+#
+# Times are UTC. In BST (summer) 20:00 UTC = 21:00 (9pm) local; when the clocks
+# change to GMT, shift these to 21:00 UTC to keep the 9pm slot.
+name: Evening coach
+
+on:
+  schedule:
+    - cron: '0,20,40 20 * * *'   # 21:00 / 21:20 / 21:40 BST — the 9pm slot, with quick catch-up
+    - cron: '40 21 * * *'        # 22:40 BST — final safety net; alerts on Telegram if still missing
+  workflow_dispatch: {}          # manual "Run workflow" button
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger evening coach
+        env:
+          URL: ${{ vars.COACH_RUN_URL || 'https://paceline.run/api/coach/run' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # The 22:40 BST run is the night's last attempt — tell the route to
+          # alert (rather than fail silently) if generation still fails.
+          FINAL: ${{ github.event.schedule == '40 21 * * *' && '1' || '0' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret is not set — add it in repo Settings → Secrets → Actions"
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" "$URL?final=$FINAL")
+          echo "POST $URL?final=$FINAL -> HTTP $code"
+          cat /tmp/resp.json; echo
+          # Fail the run on any non-200 so a broken night is visible in Actions;
+          # the next scheduled fire will retry (the route is idempotent).
+          [ "$code" = "200" ]
