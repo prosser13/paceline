@@ -1,7 +1,7 @@
-// Sleep — last night + 7-night trend + 8h-target nudge. Variants A / B / C.
+// Sleep — last night + 7-night trend + 8h-target nudge (final design: variant A).
 import type { SleepSummary } from '@/lib/wellness-stats';
 import { fmtSleep, fmtDate } from '@/lib/dates';
-import { Tile, Pill, ScoreRing, Sparkline } from './shared';
+import { Tile, Pill, ScoreRing } from './shared';
 
 function NightBars({ s, maxBar = 46 }: { s: SleepSummary; maxBar?: number }) {
   const secs = s.nights.map(n => n.secs ?? 0);
@@ -23,43 +23,8 @@ function NightBars({ s, maxBar = 46 }: { s: SleepSummary; maxBar?: number }) {
   );
 }
 
-export function SleepTile({ s, variant }: { s: SleepSummary; variant: 'A' | 'B' | 'C' }) {
+export function SleepTile({ s }: { s: SleepSummary }) {
   const overUnder = s.lastSecs != null ? s.lastSecs - s.target : null;
-  const balanceH = s.balanceSecs != null ? Math.round(Math.abs(s.balanceSecs) / 3600 * 10) / 10 : null;
-
-  if (variant === 'B') {
-    return (
-      <Tile title="Sleep" kicker={s.lastDate ? fmtDate(s.lastDate, 'weekday') : 'last night'}>
-        <div className="font-display font-bold tabular-nums leading-none" style={{ fontSize: 40 }}>{fmtSleep(s.lastSecs)}</div>
-        <div className="flex gap-[8px] mt-[8px]">
-          {s.lastScore != null && <span className="text-[11px] font-bold rounded-[6px] tabular-nums" style={{ padding: '2px 7px', background: 'rgba(46,158,107,.13)', color: 'var(--color-ready)' }}>score {Math.round(s.lastScore)}</span>}
-          {overUnder != null && <span className="text-[11px] font-bold rounded-[6px] tabular-nums" style={{ padding: '2px 7px', background: 'rgba(91,88,82,.1)', color: 'var(--color-stone)' }}>{overUnder >= 0 ? '+' : '−'}{fmtSleep(Math.abs(overUnder))} vs 8h</span>}
-        </div>
-        <div style={{ marginTop: 14 }}>
-          <Sparkline values={s.nights.map(n => n.secs)} height={40} target={s.target} />
-        </div>
-        <p className="text-[12px] text-stone mt-[10px]">7-night average <b className="text-ink">{s.avgSecs != null ? fmtSleep(s.avgSecs) : '—'}</b> · target line dashed</p>
-      </Tile>
-    );
-  }
-
-  if (variant === 'C') {
-    const ahead = (s.balanceSecs ?? 0) >= 0;
-    return (
-      <Tile title="Sleep balance" kicker="7 nights vs 8h">
-        <div className="flex items-baseline gap-[8px]">
-          <span className="font-display font-bold tabular-nums leading-none" style={{ fontSize: 38, color: ahead ? 'var(--color-ready)' : 'var(--color-strength)' }}>
-            {balanceH != null ? `${ahead ? '+' : '−'}${fmtSleep(Math.abs(s.balanceSecs ?? 0))}` : '—'}
-          </span>
-          <span className="text-[12.5px] text-stone">{ahead ? 'ahead of target' : 'behind target'}</span>
-        </div>
-        <div style={{ marginTop: 14 }}><NightBars s={s} /></div>
-        <p className="text-[13px] leading-[1.45] mt-[11px]">{s.nudge}</p>
-      </Tile>
-    );
-  }
-
-  // Variant A — ring + hours + week bars + nudge
   return (
     <Tile title="Sleep" kicker={s.lastDate ? `last night · ${fmtDate(s.lastDate, 'weekday')}` : 'last night'}>
       <div className="flex items-center gap-[16px]">

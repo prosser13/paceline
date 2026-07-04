@@ -239,6 +239,25 @@ export function standouts(days: WellnessDay[]): Standout[] {
     .slice(0, STANDOUTS.max);
 }
 
+// ── Recovery Trend: HRV + RHR trajectory vs baseline (grid tile) ──
+export interface TrendSeries { values: (number | null)[]; latest: number | null; base: number | null; tone: Flag }
+export interface RecoveryTrend { hrv: TrendSeries; rhr: TrendSeries; status: Flag; headline: string; days: number }
+
+export function recoveryTrend(days: WellnessDay[], window = 14): RecoveryTrend {
+  const recent = days.slice(-window);
+  const history = days.slice(0, -1);
+  const hrvBase = baseline(history, 'hrv');
+  const rhrBase = baseline(history, 'resting_hr');
+  const bs = bodySignals(days); // reuse today's flag for tones + status, keeping the two tiles consistent
+  return {
+    hrv: { values: recent.map(d => d.hrv), latest: bs.hrv.value, base: hrvBase.ready ? round(hrvBase.mu) : null, tone: bs.hrv.tone },
+    rhr: { values: recent.map(d => d.resting_hr), latest: bs.rhr.value, base: rhrBase.ready ? round(rhrBase.mu) : null, tone: bs.rhr.tone },
+    status: bs.status,
+    headline: !bs.ready ? 'Building baseline' : bs.status === 'good' ? 'Trending steady' : bs.headline,
+    days: recent.length,
+  };
+}
+
 // ── Recovery adjustment for the Readiness tile ──
 export interface RecoveryAdjustment { delta: number; reason: string; sleepAdj: number; hrvAdj: number }
 

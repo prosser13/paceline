@@ -25,6 +25,12 @@ const LINE: Record<ReadinessBand, string> = {
   Tired:    'Heavily fatigued — prioritise recovery and ease back if it lingers.',
 };
 
+// Score → band. Exported so callers that adjust the score (e.g. the recovery-aware
+// readiness tile) can re-band without re-deriving from form/fitness/fatigue.
+export function readinessBand(score: number): ReadinessBand {
+  return score >= 80 ? 'Primed' : score >= 60 ? 'Steady' : score >= 40 ? 'Workable' : 'Tired';
+}
+
 export function readinessFrom(
   form: number | null | undefined,
   fitness: number | null | undefined,
@@ -35,7 +41,6 @@ export function readinessFrom(
   const atl = fatigue ?? 0;
   const raw = 75 + 0.7 * form - 0.15 * Math.max(0, atl - ctl);
   const score = Math.max(0, Math.min(100, Math.round(raw)));
-  const band: ReadinessBand =
-    score >= 80 ? 'Primed' : score >= 60 ? 'Steady' : score >= 40 ? 'Workable' : 'Tired';
+  const band = readinessBand(score);
   return { score, band, line: LINE[band] };
 }
