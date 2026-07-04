@@ -11,8 +11,9 @@ import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeH
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
   listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
-  listCompletedTssBetween,
+  listCompletedTssBetween, listRunningDoneSince, listRecentRaces,
 } from '@/data/plan-sessions';
+import { standouts, type Standout, type StandoutRace } from '@/lib/wellness-stats';
 import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
@@ -516,6 +517,54 @@ export const loadWellness = cache(async () => {
 export const loadWellnessDays = cache(async () => {
   const [latest, recent] = await Promise.all([getLatestWellnessDay(), listRecentWellnessDays(30)]);
   return { latest, recent };
+});
+
+// Monday (ISO week start) of a yyyy-mm-dd date.
+function mondayOf(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return isoDate(d);
+}
+function paceToSec(p: string | null): number | null {
+  if (!p) return null;
+  const [m, s] = p.split(':').map(Number);
+  return Number.isFinite(m) && Number.isFinite(s) ? m * 60 + s : null;
+}
+
+// Computed Standout[] for the wellness tile + banner — wellness biometrics plus
+// weekly running-volume and recent race results. cache() shares the reads across
+// the tile and the banner. Each external read is best-effort (failures → skipped)
+// so standouts can never break the dashboard.
+export const loadStandouts = cache(async (): Promise<Standout[]> => {
+  const today = isoDate(new Date());
+  const { recent } = await loadWellnessDays();
+  if (!recent.length) return [];
+
+  let weekKm: { weekStart: string; km: number }[] = [];
+  try {
+    const since = isoDate(new Date(new Date(today + 'T00:00:00').getTime() - 77 * 86_400_000));
+    const runs = await listRunningDoneSince(since);
+    const buckets = new Map<string, number>();
+    for (const r of runs) buckets.set(mondayOf(r.date), (buckets.get(mondayOf(r.date)) ?? 0) + r.km);
+    const currentWeek = mondayOf(today);
+    weekKm = [...buckets.entries()]
+      .filter(([wk]) => wk !== currentWeek)                 // drop the in-progress week
+      .map(([weekStart, km]) => ({ weekStart, km }))
+      .sort((a, b) => (a.weekStart < b.weekStart ? -1 : 1));
+  } catch { /* weekly volume optional */ }
+
+  let races: StandoutRace[] = [];
+  try {
+    const since = isoDate(new Date(new Date(today + 'T00:00:00').getTime() - 7 * 86_400_000)); // races within a week
+    const raw = await listRecentRaces(since);
+    races = raw.map(r => ({
+      date: r.date, name: r.name,
+      timeSec: (r.mins ?? 0) * 60,
+      targetSec: r.targetPace && r.distanceKm ? (paceToSec(r.targetPace) ?? 0) * r.distanceKm : null,
+    }));
+  } catch { /* races optional */ }
+
+  return standouts({ days: recent, asOf: today, weekKm, races });
 });
 
 // Per-week plan series (planned TSS + longest planned run) for the Weekly-load
