@@ -260,23 +260,28 @@ function mapWellnessRow(r: IntervalsWellnessRow): WellnessDay {
 const WELLNESS_SYNC_WINDOW_DAYS = 14;
 
 // Fetch a rolling window of daily wellness records from intervals.icu, mapped to
-// our row shape. Returns null if the key is missing or the API call fails.
-export async function fetchWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessDay[] | null> {
-  if (!process.env.INTERVALS_API_KEY) return null;
+// our row shape. Throws with the intervals.icu HTTP status on a failed request so
+// callers can surface a precise reason (auth vs. outage vs. empty).
+async function fetchWellnessRows(windowDays: number): Promise<WellnessDay[]> {
   const today  = new Date();
   const newest = isoDay(today);
   const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
-  try {
-    const res = await fetch(
-      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
-      { headers: authHeaders(), cache: 'no-store' },
-    );
-    if (!res.ok) return null;
-    const rows = (await res.json()) as IntervalsWellnessRow[];
-    return rows.filter(r => r.id).map(mapWellnessRow);
-  } catch {
-    return null;
+  const res = await fetch(
+    `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
+    { headers: authHeaders(), cache: 'no-store' },
+  );
+  if (!res.ok) {
+    const body = (await res.text().catch(() => '')).slice(0, 160);
+    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
   }
+  const rows = (await res.json()) as IntervalsWellnessRow[];
+  return rows.filter(r => r.id).map(mapWellnessRow);
+}
+
+// Convenience wrapper — the recent window mapped to rows, or null on any failure.
+export async function fetchWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessDay[] | null> {
+  if (!process.env.INTERVALS_API_KEY) return null;
+  try { return await fetchWellnessRows(windowDays); } catch { return null; }
 }
 
 export interface WellnessSyncResult {
@@ -289,10 +294,17 @@ export interface WellnessSyncResult {
 // Pull the recent wellness window and upsert it into `wellness_days`. Idempotent
 // — safe to run on every scheduled tick; re-running overwrites each day with its
 // latest values (intervals revises a day's record for a day or two afterward).
+// Returns a specific error (key-unset vs. request-failed) so the sync route/logs
+// say exactly what's wrong.
 export async function syncWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessSyncResult> {
-  const rows = await fetchWellnessDays(windowDays);
-  if (rows == null) {
-    return { ok: false, days: 0, latest: null, error: 'intervals.icu unavailable or INTERVALS_API_KEY unset' };
+  if (!process.env.INTERVALS_API_KEY) {
+    return { ok: false, days: 0, latest: null, error: 'INTERVALS_API_KEY is not set in this environment' };
+  }
+  let rows: WellnessDay[];
+  try {
+    rows = await fetchWellnessRows(windowDays);
+  } catch (e) {
+    return { ok: false, days: 0, latest: null, error: `intervals.icu request failed — ${e instanceof Error ? e.message : String(e)}` };
   }
   const written = await upsertWellnessDays(rows);
   const latest = rows.length ? rows[rows.length - 1].date : null;
