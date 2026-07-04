@@ -53,11 +53,22 @@ point of one deterministic read is that every session starts from the same state
 The plan lives in three tiers, plus actuals:
 
 - `plans` — the plan (race date, target time/pace, `strength_priority`, dates)
-- `plan_weeks` — per-week phase, purpose, planned volume
+- `plan_weeks` — per-week phase and `purpose` (see below). `planned_volume_km` is
+  **legacy**: weekly volume is now derived from the week's run sessions at read time
+  (`src/lib/weekly-volume.ts` · `weekRunKm`), so nothing needs to update it and no
+  view should render it.
 - `plan_sessions` — individual sessions; `structure` (jsonb) is the per-segment
   prescription, `rationale` the "why", `status` the lifecycle, `priority` the
   A/B/C importance
 - `completed_workouts` — Strava-matched actuals, linked by `plan_session_id`
+
+**Keep `plan_weeks.purpose` qualitative.** It is a one-line intent for the week
+("Final big load before taper", "Speed work and race tune-up"). Do **not** bake a
+specific session distance into it ("… 30km long run …") — the distance lives on the
+session, and duplicating it in prose is exactly what goes stale when a run changes.
+The single-session mutation path can't rewrite prose, so it *warns* (see §4) when a
+run changes under a purpose that still names a distance; qualitative purposes never
+trip that warning because there's nothing to drift.
 
 Session `id` is stable — it is how a change is addressed. Never rebuild a session
 by delete+insert when an update will do; that breaks the actuals link and the
@@ -120,7 +131,10 @@ POST /api/plan-change
 
 **Responses:** `applied` (done), `duplicate` (key already used), `proposal_only`
 (autonomy is `propose` — surface it for approval, nothing changed), `rejected`
-(an invariant or guardrail blocked it, with a reason).
+(an invariant or guardrail blocked it, with a reason). An `applied` response may
+also carry `warnings: string[]` — the change went through, but something adjacent
+may now need attention (e.g. the week `purpose` still names a distance after a run
+changed). Read them and act on them in the same pass.
 
 **Revert** a prior change:
 
@@ -136,6 +150,11 @@ source change.
 - Never modifies a `completed` session or one dated before today; never moves a
   session into the past.
 - Never changes a session's `id` (not an editable field).
+- **Run structure must match its distance.** When a change touches a run's
+  `structure` or `distance_km`, the two must agree (the structure's per-segment km
+  sum to `distance_km`, within ~10%). A patch that would leave them inconsistent is
+  `rejected` — patch both together, or fix the structure. (This is the session-
+  internal half of the drift the weekly-volume derivation fixes at the week level.)
 - For `actor: "claude"`: honours `autonomy` (`propose` → not applied;
   `auto_within_week` → must stay inside the current week) and `protect_priority_a`.
   User-initiated changes bypass these agent guardrails but not the safety invariants.

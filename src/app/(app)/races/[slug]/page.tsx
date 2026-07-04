@@ -8,7 +8,8 @@ import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-gr
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
-import { listPlannedTssBetween, listRunningDoneForPlan } from '@/data/plan-sessions';
+import { listPlannedTssBetween, listRunningDoneForPlan, listSessionDistancesForPlan } from '@/data/plan-sessions';
+import { weekRunKm } from '@/lib/weekly-volume';
 import { parseGpx, type ParsedGpx } from '@/lib/gpx';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
 import { getRaceForecast } from '@/lib/weather';
@@ -58,7 +59,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone] = await Promise.all([
+  const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions] = await Promise.all([
     loadGpx(guide.gpxPath),
     raceDate ? getRaceForecast(guide.start.lat, guide.start.lng, raceDate) : Promise.resolve(null),
     getWellnessCached(),
@@ -67,6 +68,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
       : Promise.resolve([]),
     plan ? listPlanWeeks(plan.id) : Promise.resolve([]),
     plan ? listRunningDoneForPlan(plan.id) : Promise.resolve([]),
+    plan ? listSessionDistancesForPlan(plan.id) : Promise.resolve([]),
   ]);
 
   // Weekly running-volume bars: actual done km for past/current weeks, planned
@@ -76,11 +78,14 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     const doneKm = runningDone
       .filter(d => d.date >= w.date_from && d.date <= w.date_to)
       .reduce((s, d) => s + d.km, 0);
+    // Planned target derived from the week's run sessions — not a stored rollup —
+    // so it always matches what the plan actually prescribes.
+    const plannedKm = weekRunKm(plannedSessions.filter(s => s.scheduled_date >= w.date_from && s.scheduled_date <= w.date_to));
     const isPast = w.date_to < todayStr;
     const isCurrent = w.date_from <= todayStr && todayStr <= w.date_to;
     const state: WeekDay['state'] = isCurrent ? 'today' : isPast ? 'done' : 'plan';
     // Past weeks show what was actually run; current/future show the target.
-    const km = isPast ? doneKm : (w.planned_volume_km ?? 0);
+    const km = isPast ? doneKm : plannedKm;
     // Highlight the race distance within its week's bar.
     const isRaceWeek = !!raceDate && w.date_from <= raceDate && raceDate <= w.date_to;
     return {

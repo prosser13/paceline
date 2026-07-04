@@ -55,3 +55,13 @@ export function fmtRelative(d: Date | string, now: Date | string = new Date()): 
   if (n === -1) return 'Yesterday';
   return n > 0 ? `in ${n} days` : `${-n} days ago`;
 }
+
+// Duration in seconds → "8h 42m" / "45m" / "—" (for sleep and the like).
+export function fmtSleep(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(secs) || secs <= 0) return '—';
+  const total = Math.round(secs / 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}

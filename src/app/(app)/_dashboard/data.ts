@@ -17,8 +17,10 @@ import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
+import { getLatestWellnessDay, listRecentWellnessDays } from '@/data/wellness-days';
 import { activityKind } from '@/lib/activity-types';
 import { resolveSport, sportSpec } from '@/lib/sports/registry';
+import { weekRunKm, countsToWeeklyVolume } from '@/lib/weekly-volume';
 import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
@@ -397,10 +399,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     // "Running volume" = RUNS only. Rides carry distance_km too, so summing every
     // session double-counts cycling and the number looks wrong — filter to
     // run/run-race sessions (same predicate as the done side below).
-    const isRunSession = (s: { session_type?: string | null; activity_type?: string | null }) =>
-      sportSpec(s).countsToWeeklyVolume;
-    const runSessions = (weekSessions ?? []).filter(isRunSession);
-    weekPlannedKm = Math.round(runSessions.reduce((s, x) => s + (Number(x.distance_km) || 0), 0));
+    const runSessions = (weekSessions ?? []).filter(countsToWeeklyVolume);
+    weekPlannedKm = weekRunKm(weekSessions ?? []);
 
     const plannedByDate = new Map<string, number>();
     const raceKmByDate = new Map<string, number>();
@@ -416,7 +416,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const isRunCompletion = (c: { plan_sessions?: unknown }) => {
       const ps = Array.isArray(c.plan_sessions) ? c.plan_sessions[0] : c.plan_sessions;
       if (!ps) return true; // off-plan completion — assume a run
-      return sportSpec(ps as { session_type?: string | null; activity_type?: string | null }).countsToWeeklyVolume;
+      return countsToWeeklyVolume(ps as { session_type?: string | null; activity_type?: string | null });
     };
     const doneByDate = new Map<string, number>();
     for (const c of weekCompleted ?? []) {
@@ -507,6 +507,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
 export const loadWellness = cache(async () => {
   const w = await getWellnessCached();
   return { fitnessForm: w.form, fitnessHistory: w.history };
+});
+
+// Daily biometric history (sleep, HRV, resting HR, VO2max…) from `wellness_days`
+// — the source for the wellness tiles. A fast Supabase read (no external API), so
+// unlike loadWellness it needn't be isolated behind its own Suspense; cache()
+// shares the one read across every wellness tile in a request.
+export const loadWellnessDays = cache(async () => {
+  const [latest, recent] = await Promise.all([getLatestWellnessDay(), listRecentWellnessDays(30)]);
+  return { latest, recent };
 });
 
 // Per-week plan series (planned TSS + longest planned run) for the Weekly-load

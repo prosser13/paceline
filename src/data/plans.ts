@@ -201,7 +201,10 @@ export async function listWeeksByNumber() {
   return data ?? [];
 }
 
-// Weeks for a plan with planned volume — drives the weekly running-volume chart.
+// Weeks for a plan (phase + date span) — the frame for the weekly running-volume
+// chart. NOTE: `planned_volume_km` is legacy and no longer authoritative; volume
+// is now derived from the week's run sessions via weekRunKm (see weekly-volume.ts).
+// The column is still returned for backwards-compat but callers should not render it.
 export async function listPlanWeeks(planId: number): Promise<
   { week_number: number; phase: string; date_from: string; date_to: string; planned_volume_km: number | null }[]
 > {

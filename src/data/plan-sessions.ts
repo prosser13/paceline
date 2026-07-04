@@ -67,6 +67,24 @@ export async function listPlannedTssBetween(
   return [...byDate.entries()].map(([date, tss]) => ({ date, tss }));
 }
 
+// Scheduled date + distance (+ type) for every session in a plan — the planned
+// side of the weekly-volume chart, summed per week via weekRunKm at read time
+// (so it can't drift from the sessions the way a stored rollup would).
+export async function listSessionDistancesForPlan(
+  planId: number,
+): Promise<{ scheduled_date: string; distance_km: number | null; session_type: string | null; activity_type: string | null }[]> {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('scheduled_date, distance_km, session_type, activity_type')
+    .eq('plan_id', planId);
+  return (data ?? []).map(r => ({
+    scheduled_date: r.scheduled_date as string,
+    distance_km: r.distance_km != null ? Number(r.distance_km) : null,
+    session_type: (r.session_type as string | null) ?? null,
+    activity_type: (r.activity_type as string | null) ?? null,
+  }));
+}
+
 // Completed *running* distances for a plan (excludes rides/strength), as
 // completed_date + km — bucketed into weeks for the weekly-volume chart.
 export async function listRunningDoneForPlan(
