@@ -11,6 +11,8 @@ import NextRaceCard from './NextRaceCard';
 import ReadinessTile from './ReadinessTile';
 import CoachCard from './CoachCard';
 import DailyNoteCard from './DailyNoteCard';
+import WellnessSection, { WellnessSkeleton } from './wellness/WellnessSection';
+import StandoutsBannerAsync from './wellness/StandoutsBannerAsync';
 import { fmtDate } from '@/lib/dates';
 
 // Shared section label — the mockup's `.seclab` (13px, uppercase, 700).
@@ -72,6 +74,11 @@ export default async function DashboardBody() {
       {/* Week strip */}
       <WeekStrip days={d.windowDays} />
 
+      {/* Bright spots — dismissible positive-standouts banner */}
+      <Suspense fallback={null}>
+        <StandoutsBannerAsync />
+      </Suspense>
+
       {/* From your coach */}
       {d.coachMessage && (
         <>
@@ -94,6 +101,11 @@ export default async function DashboardBody() {
           <ActivityHero d={d} label={d.recentLabel ?? 'Done'} session={d.recentSession} completed={d.recentCompleted} light />
         </>
       )}
+
+      {/* Wellness — biometric tiles from wellness_days */}
+      <Suspense fallback={<WellnessSkeleton />}>
+        <WellnessSection />
+      </Suspense>
 
       {/* Trends + last 7 */}
       <DashboardExtras d={d} />
