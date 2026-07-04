@@ -11,6 +11,9 @@ export interface RaceCheckpoint {
   distanceKm: number;
   /** Cumulative ascent to this point, in metres (organiser figure). */
   ascentM?: number | null;
+  /** Cumulative descent to this point, in metres. Same scale as `ascentM`
+   *  (anchored to the organiser ascent total; distributed by the GPX profile). */
+  descentM?: number | null;
   /** Official cut-off, "HH:MM" local race-day clock, or null if none. */
   cutoff?: string | null;
   /** What's on offer at the checkpoint. */

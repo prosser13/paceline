@@ -16,6 +16,8 @@ export interface PacingRow {
   legPace: string | null;
   /** Metres of ascent on this leg. 0 at the start. */
   legClimbM: number;
+  /** Metres of descent on this leg. 0 at the start. */
+  legDescentM: number;
   dropBag: boolean;
 }
 
@@ -85,12 +87,14 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
     const cp = cps[i];
     let legPace: string | null = null;
     let legClimbM = 0;
+    let legDescentM = 0;
     if (i > 0) {
       const legSec = (legEffort[i] / totalEffort) * targetSec;
       cumSec += legSec;
       const legKm = cp.distanceKm - cps[i - 1].distanceKm;
       legPace = paceMinKm(legSec, legKm);
       legClimbM = Math.max(0, (cp.ascentM ?? 0) - (cps[i - 1].ascentM ?? 0));
+      legDescentM = Math.max(0, (cp.descentM ?? 0) - (cps[i - 1].descentM ?? 0));
     }
 
     rows.push({
@@ -100,6 +104,7 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
       arrival: clock(startSec + cumSec),
       legPace,
       legClimbM,
+      legDescentM,
       dropBag: !!cp.dropBag,
     });
   }

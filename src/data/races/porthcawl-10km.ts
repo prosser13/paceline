@@ -34,17 +34,17 @@ export const PORTHCAWL_10K: RaceGuide = {
   ],
 
   checkpoints: [
-    { index: 0, name: 'Start · Porthcawl Pavilion', distanceKm: 0, ascentM: 0,
+    { index: 0, name: 'Start · Porthcawl Pavilion', distanceKm: 0, ascentM: 0, descentM: 0,
       supplies: '10:00 start on the Promenade.' },
-    { index: 1, name: '2 km', distanceKm: 2, ascentM: 7,
+    { index: 1, name: '2 km', distanceKm: 2, ascentM: 7, descentM: 7,
       fuelBetween: 'Controlled start — settle to 3:24/km, bank nothing in the adrenaline.', fuelAt: '—' },
-    { index: 2, name: '4 km', distanceKm: 4, ascentM: 17,
+    { index: 2, name: '4 km', distanceKm: 4, ascentM: 17, descentM: 18,
       fuelBetween: 'Relaxed and locked onto pace — the quiet, hard middle.', fuelAt: '—' },
-    { index: 3, name: '6 km', distanceKm: 6, ascentM: 21, supplies: 'Water station (~5 km) — the only one on course.',
+    { index: 3, name: '6 km', distanceKm: 6, ascentM: 21, descentM: 20, supplies: 'Water station (~5 km) — the only one on course.',
       fuelBetween: 'Second Hi5 gel at ~5 km.', fuelAt: 'Water station (~5 km)' },
-    { index: 4, name: '8 km', distanceKm: 8, ascentM: 39,
+    { index: 4, name: '8 km', distanceKm: 8, ascentM: 39, descentM: 28,
       fuelBetween: 'The lighthouse rise — hold effort, let the pace dip, press over the top.', fuelAt: '—' },
-    { index: 5, name: 'Finish · Promenade', distanceKm: 10, ascentM: 50,
+    { index: 5, name: 'Finish · Promenade', distanceKm: 10, ascentM: 50, descentM: 50,
       fuelBetween: 'Down off the rise — empty the tank and sprint the Promenade.', fuelAt: '—' },
   ],
 

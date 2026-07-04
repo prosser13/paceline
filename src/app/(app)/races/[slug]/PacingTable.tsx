@@ -24,6 +24,7 @@ export default function PacingTable({
               <th className="text-right font-normal px-[10px] py-[7px]">Km</th>
               <th className="text-right font-normal px-[10px] py-[7px]">Leg /km</th>
               <th className="text-right font-normal px-[10px] py-[7px]">Climb</th>
+              <th className="text-right font-normal px-[10px] py-[7px]">Descent</th>
               <th className="text-right font-normal px-[10px] py-[7px]">Elapsed</th>
               <th className="text-right font-normal px-[16px] py-[7px]">Arrive</th>
             </tr>
@@ -43,6 +44,9 @@ export default function PacingTable({
                 <td className="px-[10px] py-[8px] text-right font-mono text-stone tabular-nums">{r.legPace ?? '—'}</td>
                 <td className="px-[10px] py-[8px] text-right font-mono text-stone tabular-nums">
                   {r.legClimbM > 0 ? `+${r.legClimbM} m` : <span className="text-stone/50">—</span>}
+                </td>
+                <td className="px-[10px] py-[8px] text-right font-mono text-stone tabular-nums">
+                  {r.legDescentM > 0 ? `−${r.legDescentM} m` : <span className="text-stone/50">—</span>}
                 </td>
                 <td className="px-[10px] py-[8px] text-right font-mono text-ink tabular-nums">{r.cumElapsed}</td>
                 <td className="px-[16px] py-[8px] text-right font-mono text-ink tabular-nums">{r.arrival}</td>
