@@ -7,6 +7,7 @@
 // days before a flag fires — until then a tile shows a "building baseline" state.
 
 import type { WellnessDay } from '@/data/wellness-days';
+import { fmtSleep } from '@/lib/dates';
 
 // ── tunable thresholds ────────────────────────────────────────
 export const BODY = {
@@ -255,6 +256,54 @@ export function recoveryTrend(days: WellnessDay[], window = 14): RecoveryTrend {
     status: bs.status,
     headline: !bs.ready ? 'Building baseline' : bs.status === 'good' ? 'Trending steady' : bs.headline,
     days: recent.length,
+  };
+}
+
+// ── Weekly recap: this week's averages vs last week (the "This week" tile) ──
+export interface WeekStat { key: string; label: string; value: string; delta: string | null; tone: Flag }
+export interface WeeklyRecap { stats: WeekStat[] }
+
+function avgOf(days: WellnessDay[], key: NumKey): number | null {
+  const vs = series(days, key).map(r => r.v);
+  return vs.length ? mean(vs) : null;
+}
+
+const fmtSteps = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${Math.round(n)}`);
+
+// Averages over the last 7 days vs the 7 before, with a signed delta coloured by
+// whether the change is in the good direction (higherGood=null → neutral steps).
+export function weeklyRecap(days: WellnessDay[]): WeeklyRecap {
+  const thisWeek = days.slice(-7);
+  const prevWeek = days.slice(-14, -7);
+
+  const mk = (
+    key: NumKey, label: string, fmt: (n: number) => string,
+    higherGood: boolean | null, minDelta: number,
+  ): WeekStat => {
+    const cur = avgOf(thisWeek, key);
+    if (cur == null) return { key, label, value: '—', delta: null, tone: 'neutral' };
+    const prev = avgOf(prevWeek, key);
+    let delta: string | null = null;
+    let tone: Flag = 'neutral';
+    if (prev != null) {
+      const d = cur - prev;
+      if (Math.abs(d) < minDelta) {
+        delta = '± steady';
+      } else {
+        delta = `${d > 0 ? '▲' : '▼'} ${fmt(Math.abs(d))}`;
+        if (higherGood != null) tone = (higherGood ? d > 0 : d < 0) ? 'good' : 'watch';
+      }
+    }
+    return { key, label, value: fmt(cur), delta, tone };
+  };
+
+  return {
+    stats: [
+      mk('sleep_secs', 'Avg sleep', s => fmtSleep(s), true, 300),   // ±5 min noise floor
+      mk('hrv', 'Avg HRV', v => `${Math.round(v)}`, true, 1),
+      mk('resting_hr', 'Avg RHR', v => `${Math.round(v)}`, false, 1),
+      mk('steps', 'Steps/day', v => fmtSteps(v), null, 500),
+    ],
   };
 }
 
