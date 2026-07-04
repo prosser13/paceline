@@ -17,6 +17,7 @@ import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
+import { getLatestWellnessDay, listRecentWellnessDays } from '@/data/wellness-days';
 import { activityKind } from '@/lib/activity-types';
 import { resolveSport, sportSpec } from '@/lib/sports/registry';
 import { weekRunKm, countsToWeeklyVolume } from '@/lib/weekly-volume';
@@ -506,6 +507,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
 export const loadWellness = cache(async () => {
   const w = await getWellnessCached();
   return { fitnessForm: w.form, fitnessHistory: w.history };
+});
+
+// Daily biometric history (sleep, HRV, resting HR, VO2max…) from `wellness_days`
+// — the source for the wellness tiles. A fast Supabase read (no external API), so
+// unlike loadWellness it needn't be isolated behind its own Suspense; cache()
+// shares the one read across every wellness tile in a request.
+export const loadWellnessDays = cache(async () => {
+  const [latest, recent] = await Promise.all([getLatestWellnessDay(), listRecentWellnessDays(30)]);
+  return { latest, recent };
 });
 
 // Per-week plan series (planned TSS + longest planned run) for the Weekly-load
