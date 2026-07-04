@@ -15,6 +15,24 @@ Both endpoints accept either a logged-in session (the app/UI) or a service token
 for the headless coach: `Authorization: Bearer <PLAN_AGENT_TOKEN>`. The token must
 match in Vercel (prod) and wherever the agent reads it.
 
+## 0. The nightly evening coach ✅
+
+The evening review can be generated **in-repo** on reliable infra, so it no longer
+depends on the external `paceline-evening-coach` task firing at 9pm:
+
+- `POST /api/coach/run` (auth: `CRON_SECRET` bearer, or a logged-in session) loads
+  the briefing (`getPlanContext`) + the coach's rolling memory (`coach_context`),
+  generates the review via the Claude API (`src/lib/coach-generate.ts`), writes it
+  to `coach_messages` (with `kind='evening'`), fans it out to Telegram, and rewrites
+  the memory. It's **idempotent** — a partial unique index on
+  `coach_messages(for_date) WHERE kind='evening'` guarantees one evening review a day.
+- `.github/workflows/evening-coach.yml` fires it several times across the 9pm slot
+  (plus a late safety net that alerts on Telegram if the night still produced nothing).
+  GitHub's scheduler can drop a run, so the spread + idempotency is the reliability
+  mechanism.
+- New prod env: `ANTHROPIC_API_KEY` (Vercel). `COACH_MODEL` optionally overrides the
+  model. `CRON_SECRET` / `TELEGRAM_*` are already set for the wellness sync + fan-out.
+
 ## 1. Start here — the briefing read ✅
 
 Load the whole picture in one call:
