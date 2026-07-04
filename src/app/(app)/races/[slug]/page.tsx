@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
+import { getRaceKit } from '@/data/race-kit';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
 import { listPlannedTssBetween, listRunningDoneForPlan, listSessionDistancesForPlan } from '@/data/plan-sessions';
 import { weekRunKm } from '@/lib/weekly-volume';
@@ -59,7 +60,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions] = await Promise.all([
+  const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions, kitOverride] = await Promise.all([
     loadGpx(guide.gpxPath),
     raceDate ? getRaceForecast(guide.start.lat, guide.start.lng, raceDate) : Promise.resolve(null),
     getWellnessCached(),
@@ -69,7 +70,13 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     plan ? listPlanWeeks(plan.id) : Promise.resolve([]),
     plan ? listRunningDoneForPlan(plan.id) : Promise.resolve([]),
     plan ? listSessionDistancesForPlan(plan.id) : Promise.resolve([]),
+    getRaceKit(slug),
   ]);
+
+  // The athlete's edited kit (if any) fully replaces the guide's curated lists.
+  const kit = kitOverride ?? {
+    wear: guide.kitWear, carry: guide.kitCarry, dropBag: guide.kitDropBag, nightBefore: guide.nightBefore,
+  };
 
   // Weekly running-volume bars: actual done km for past/current weeks, planned
   // for upcoming weeks — the build → taper shape into race day.
@@ -269,10 +276,10 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           <KitChecklist
             slug={guide.slug}
             intro={guide.kitNote}
-            wear={guide.kitWear}
-            carry={guide.kitCarry}
-            dropBag={guide.kitDropBag}
-            nightBefore={guide.nightBefore}
+            wear={kit.wear}
+            carry={kit.carry}
+            dropBag={kit.dropBag}
+            nightBefore={kit.nightBefore}
           />
         </div>
 
