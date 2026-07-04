@@ -7,7 +7,7 @@
 // days before a flag fires — until then a tile shows a "building baseline" state.
 
 import type { WellnessDay } from '@/data/wellness-days';
-import { fmtSleep } from '@/lib/dates';
+import { fmtSleep, daysBetween, toDate } from '@/lib/dates';
 
 // ── tunable thresholds ────────────────────────────────────────
 export const BODY = {
@@ -27,7 +27,19 @@ export const SLEEP = {
   goodScore: 85,
   nights: 7,
 };
-export const STANDOUTS = { window: 30, max: 3 };
+export const STANDOUTS = {
+  recentDays: 2,          // last 3 days: today, yesterday, 2 days ago (n = 0,1,2)
+  lookback: 21,           // window a "best in N days" is judged against
+  max: 4,
+  sleepGoodScore: 85,     // a "good" night, for the streak
+  sleepBestFloor: 90,     // quality floor: a "best sleep" standout must clear this
+  hrvHighZ: 1.0,          // HRV must be ≥ this many SD above baseline to be "high"
+  rhrLowZ: -1.0,          // RHR must be ≤ this many SD below baseline to be "low"
+  stepsMilestone: 20000,  // a "big movement day"
+  streakMin: 3,           // min consecutive good-sleep nights to surface
+  weeklyPbMinWeeks: 3,    // need this many weeks of history to call a volume PB
+  weeklyIncreasePct: 0.15,
+};
 
 export type Flag = 'good' | 'watch' | 'alert' | 'neutral';
 
@@ -65,7 +77,7 @@ export function baseline(history: WellnessDay[], key: NumKey, window = BODY.wind
 export interface Extreme { value: number; date: string; days: number }
 
 // The min/max of `key` across the last `window` days, with how many days it leads.
-export function extremeInWindow(days: WellnessDay[], key: NumKey, dir: 'min' | 'max', window = STANDOUTS.window): Extreme | null {
+export function extremeInWindow(days: WellnessDay[], key: NumKey, dir: 'min' | 'max', window = STANDOUTS.lookback): Extreme | null {
   const s = series(days, key).slice(-window);
   if (!s.length) return null;
   let best = s[0];
@@ -195,49 +207,114 @@ export function sleepSummary(days: WellnessDay[], target = SLEEP.targetSecs): Sl
   };
 }
 
-// ── Standouts: notable recent numbers, positive-leaning ──
-export interface Standout { key: string; icon: 'up' | 'down' | 'star'; text: string; value: string; tone: Flag }
+// ── Standouts: genuinely notable, RECENT (last 3 days), positive things ──
+// Each candidate must (a) have happened within STANDOUTS.recentDays and (b) clear
+// a quality bar (a real high/low vs baseline, an absolute floor, or a streak) —
+// so the tile only celebrates things that are actually standout, not the mere
+// window max. Training standouts (weekly volume, races) come in via StandoutInputs.
+export interface Standout { key: string; icon: 'up' | 'down' | 'star' | 'flame' | 'trophy' | 'run'; text: string; value: string; tone: Flag; when?: string }
 
-export function standouts(days: WellnessDay[]): Standout[] {
-  const w = days.slice(-STANDOUTS.window);
-  const latest = latestOf(days);
+export interface StandoutWeek { weekStart: string; km: number }         // completed weeks only, ascending
+export interface StandoutRace { date: string; name: string; timeSec: number; targetSec: number | null }
+export interface StandoutInputs { days: WellnessDay[]; asOf: string; weekKm?: StandoutWeek[]; races?: StandoutRace[] }
+
+function addDays(dateStr: string, n: number): string {
+  const d = toDate(dateStr); d.setDate(d.getDate() + n);
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fmtClockSec(sec: number): string {
+  const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
+}
+const kSteps = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
+
+export function standouts(input: StandoutInputs): Standout[] {
+  const { days, asOf } = input;
   const out: Standout[] = [];
-  const near = (a?: string | null, b?: string | null) => !!a && !!b && a === b; // extreme is today's
+  const dAgo = (date: string) => daysBetween(date, asOf);           // asOf − date
+  const isRecent = (date: string) => { const n = dAgo(date); return n >= 0 && n <= STANDOUTS.recentDays; };
+  const whenText = (date: string) => { const n = dAgo(date); return n <= 0 ? 'today' : n === 1 ? 'yesterday' : `${n} days ago`; };
+  const w = days.slice(-STANDOUTS.lookback);
+  const history = days.slice(0, -1);
 
-  const bestSleep = extremeInWindow(w, 'sleep_score', 'max');
-  if (bestSleep && bestSleep.days >= 3) {
+  // Best sleep score — a recent, genuinely high night (window best + ≥ floor).
+  const bestSleep = extremeInWindow(w, 'sleep_score', 'max', STANDOUTS.lookback);
+  if (bestSleep && bestSleep.days >= 3 && isRecent(bestSleep.date) && bestSleep.value >= STANDOUTS.sleepBestFloor) {
     out.push({ key: 'sleep', icon: 'star', tone: 'good', value: `${round(bestSleep.value)}`,
-      text: `Best sleep score in ${bestSleep.days} days` });
-  }
-  const lowRhr = extremeInWindow(w, 'resting_hr', 'min');
-  if (lowRhr && lowRhr.days >= 3) {
-    out.push({ key: 'rhr', icon: 'down', tone: 'good', value: `${round(lowRhr.value)}`,
-      text: `Resting HR at a ${lowRhr.days}-day low` });
-  }
-  const highHrv = extremeInWindow(w, 'hrv', 'max');
-  if (highHrv && highHrv.days >= 3) {
-    out.push({ key: 'hrv', icon: 'up', tone: 'good', value: `${round(highHrv.value)}`,
-      text: `HRV peaked over the last ${highHrv.days} days` });
-  }
-  const vo2 = series(w, 'vo2max');
-  if (vo2.length) {
-    const cur = vo2[vo2.length - 1].v;
-    const prev = vo2.length > 1 ? vo2[0].v : cur;
-    if (cur > prev) out.push({ key: 'vo2', icon: 'up', tone: 'good', value: `${round(cur)}`, text: `VO₂max up to ${round(cur)}` });
-    else out.push({ key: 'vo2', icon: 'star', tone: 'neutral', value: `${round(cur)}`, text: `VO₂max holding at ${round(cur)}` });
-  }
-  const longSleep = extremeInWindow(w, 'sleep_secs', 'max');
-  if (longSleep && longSleep.days >= 3 && latest && near(longSleep.date, latest.date)) {
-    out.push({ key: 'longsleep', icon: 'up', tone: 'good', value: `${Math.round(longSleep.value / 3600 * 10) / 10}h`,
-      text: `Longest sleep in ${longSleep.days} days` });
+      text: `Best sleep score in ${bestSleep.days} days`, when: whenText(bestSleep.date) });
   }
 
-  // De-dupe by key, keep positive ones first, cap at STANDOUTS.max.
+  // Good-sleep streak (consecutive nights ending today).
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0; i--) { const sc = days[i].sleep_score; if (sc != null && sc >= STANDOUTS.sleepGoodScore) streak++; else break; }
+  if (streak >= STANDOUTS.streakMin) {
+    out.push({ key: 'sleepstreak', icon: 'flame', tone: 'good', value: `${streak}`, text: `${streak} good sleeps in a row`, when: 'now' });
+  }
+
+  // HRV at a recent high — must be notably above baseline, not just the max.
+  const hrvBase = baseline(history, 'hrv');
+  const hrvHigh = extremeInWindow(w, 'hrv', 'max', STANDOUTS.lookback);
+  if (hrvHigh && hrvHigh.days >= 3 && isRecent(hrvHigh.date) && hrvBase.ready && zScore(hrvHigh.value, hrvBase.mu, hrvBase.sigma) >= STANDOUTS.hrvHighZ) {
+    out.push({ key: 'hrv', icon: 'up', tone: 'good', value: `${round(hrvHigh.value)}`,
+      text: `HRV at a ${hrvHigh.days}-day high`, when: whenText(hrvHigh.date) });
+  }
+
+  // Resting HR at a recent low — must be notably below baseline.
+  const rhrBase = baseline(history, 'resting_hr');
+  const rhrLow = extremeInWindow(w, 'resting_hr', 'min', STANDOUTS.lookback);
+  if (rhrLow && rhrLow.days >= 3 && isRecent(rhrLow.date) && rhrBase.ready && zScore(rhrLow.value, rhrBase.mu, rhrBase.sigma) <= STANDOUTS.rhrLowZ) {
+    out.push({ key: 'rhr', icon: 'down', tone: 'good', value: `${round(rhrLow.value)}`,
+      text: `Resting HR at a ${rhrLow.days}-day low`, when: whenText(rhrLow.date) });
+  }
+
+  // VO₂max increase (a genuine standout metric) — latest reading up on the prior distinct value.
+  const vo2 = series(days, 'vo2max');
+  if (vo2.length >= 2) {
+    const last = vo2[vo2.length - 1];
+    let prev: { date: string; v: number } | null = null;
+    for (let i = vo2.length - 2; i >= 0; i--) { if (vo2[i].v !== last.v) { prev = vo2[i]; break; } }
+    if (prev && last.v > prev.v && isRecent(last.date)) {
+      out.push({ key: 'vo2', icon: 'up', tone: 'good', value: `${round(last.v)}`, text: `VO₂max up to ${round(last.v)}`, when: whenText(last.date) });
+    }
+  }
+
+  // Steps milestone — a big movement day in the recent window.
+  let bigStep: { date: string; v: number } | null = null;
+  for (const d of days) { if (d.steps != null && isRecent(d.date) && (!bigStep || d.steps > bigStep.v)) bigStep = { date: d.date, v: d.steps }; }
+  if (bigStep && bigStep.v >= STANDOUTS.stepsMilestone) {
+    out.push({ key: 'steps', icon: 'flame', tone: 'good', value: kSteps(bigStep.v), text: `Big movement day — ${kSteps(bigStep.v)} steps`, when: whenText(bigStep.date) });
+  }
+
+  // Weekly running volume — a PB or a notable jump in the week that just finished.
+  const weeks = input.weekKm ?? [];
+  if (weeks.length >= 2) {
+    const lastW = weeks[weeks.length - 1], prevW = weeks[weeks.length - 2];
+    if (isRecent(addDays(lastW.weekStart, 6))) {                    // that week ended within the recent window
+      const maxKm = Math.max(...weeks.map(x => x.km));
+      if (weeks.length >= STANDOUTS.weeklyPbMinWeeks && lastW.km >= maxKm) {
+        out.push({ key: 'weekvol', icon: 'trophy', tone: 'good', value: `${Math.round(lastW.km)}km`, text: 'Biggest running week yet', when: 'this week' });
+      } else if (prevW.km > 0 && lastW.km >= prevW.km * (1 + STANDOUTS.weeklyIncreasePct)) {
+        out.push({ key: 'weekvol', icon: 'up', tone: 'good', value: `${Math.round(lastW.km)}km`, text: `Weekly volume up ${Math.round((lastW.km / prevW.km - 1) * 100)}%`, when: 'this week' });
+      }
+    }
+  }
+
+  // Race result — a recent race that hit or beat its target.
+  for (const r of input.races ?? []) {
+    if (!isRecent(r.date) || r.timeSec <= 0) continue;
+    if (r.targetSec != null && r.timeSec <= r.targetSec + 2) {      // 2s grace
+      const gap = Math.round(r.targetSec - r.timeSec);
+      out.push({ key: 'race', icon: 'trophy', tone: 'good', value: fmtClockSec(r.timeSec),
+        text: gap >= 1 ? `${r.name} — beat target by ${gap}s` : `${r.name} — hit target`, when: whenText(r.date) });
+    } else if (r.targetSec == null) {
+      out.push({ key: 'race', icon: 'run', tone: 'good', value: fmtClockSec(r.timeSec), text: `Raced ${r.name}`, when: whenText(r.date) });
+    }
+    break; // one race is plenty
+  }
+
   const seen = new Set<string>();
-  return out
-    .filter(s => (seen.has(s.key) ? false : (seen.add(s.key), true)))
-    .sort((a, b) => (a.tone === 'good' ? 0 : 1) - (b.tone === 'good' ? 0 : 1))
-    .slice(0, STANDOUTS.max);
+  return out.filter(s => (seen.has(s.key) ? false : (seen.add(s.key), true))).slice(0, STANDOUTS.max);
 }
 
 // ── Recovery Trend: HRV + RHR trajectory vs baseline (grid tile) ──

@@ -108,6 +108,43 @@ export async function listRunningDoneForPlan(
     .map(r => ({ date: r.completed_date as string, km: Number(r.actual_distance_km) }));
 }
 
+// Completed *running* distances since `since` (all plans) as date + km — bucketed
+// into weeks by the caller for the weekly-volume standout.
+export async function listRunningDoneSince(since: string): Promise<{ date: string; km: number }[]> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, actual_distance_km, plan_sessions!inner(activity_type)')
+    .gte('completed_date', since)
+    .not('actual_distance_km', 'is', null)
+    .eq('plan_sessions.activity_type', 'running');
+  return (data ?? [])
+    .filter(r => r.completed_date != null)
+    .map(r => ({ date: r.completed_date as string, km: Number(r.actual_distance_km) }));
+}
+
+// Recent RACE completions with their target (pace × distance) and actual time —
+// for the race-result standout. `since` is a yyyy-mm-dd lower bound.
+export async function listRecentRaces(
+  since: string,
+): Promise<{ date: string; name: string; targetPace: string | null; distanceKm: number | null; mins: number | null }[]> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, actual_duration_mins, plan_sessions!inner(name, session_type, target_pace, distance_km)')
+    .gte('completed_date', since)
+    .eq('plan_sessions.session_type', 'RACE');
+  return (data ?? []).map(r => {
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+      { name: string; target_pace: string | null; distance_km: number | null } | null;
+    return {
+      date: r.completed_date as string,
+      name: ps?.name ?? 'Race',
+      targetPace: ps?.target_pace ?? null,
+      distanceKm: ps?.distance_km != null ? Number(ps.distance_km) : null,
+      mins: r.actual_duration_mins != null ? Number(r.actual_duration_mins) : null,
+    };
+  });
+}
+
 // Every session in schedule order (plan page).
 export async function listAllSessions() {
   const { data } = await supabaseAdmin

@@ -2,8 +2,8 @@
 // derives every tile. Two balanced columns: the left stacks the shorter text
 // tiles (Body Signals · Standouts · This week) to match the taller Recovery
 // Trend on the right. Renders nothing until there's data to show.
-import { loadWellnessDays } from '../data';
-import { bodySignals, sleepSummary, standouts, recoveryTrend, weeklyRecap } from '@/lib/wellness-stats';
+import { loadWellnessDays, loadStandouts } from '../data';
+import { bodySignals, sleepSummary, recoveryTrend, weeklyRecap } from '@/lib/wellness-stats';
 import { BodySignalsTile } from './BodySignalsTile';
 import { SleepTile } from './SleepTile';
 import { StandoutsTile } from './StandoutsTile';
@@ -20,7 +20,7 @@ export default async function WellnessSection() {
 
   const bs = bodySignals(recent);
   const sleep = sleepSummary(recent);
-  const stand = standouts(recent);
+  const stand = await loadStandouts();
   const trend = recoveryTrend(recent);
   const recap = weeklyRecap(recent);
 
