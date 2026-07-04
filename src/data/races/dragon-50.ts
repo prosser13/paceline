@@ -134,6 +134,7 @@ export const DRAGON_50: RaceGuide = {
     { label: 'Sunglasses' },
     { label: 'Garmin heart-rate strap' },
     { label: 'Garmin Fenix watch', detail: 'GPS route loaded, fully charged' },
+    { label: 'Number belt', detail: 'For the race number — collected at registration' },
     { label: 'Nipple plasters', detail: 'On before the start' },
   ],
   kitCarry: [
