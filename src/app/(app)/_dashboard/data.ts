@@ -260,9 +260,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
         ? strengthFirstOrder(a) - strengthFirstOrder(b)
         : intraDayOrder(a) - intraDayOrder(b));
   }
-  // The day's primary cardio session (run/ride) feeds the hero + "next up".
+  // The day's primary cardio session (run/ride) feeds the hero + "next up". A RACE
+  // is the day's headline, but on a race day its warm-up run sorts *before* it
+  // (intraDayOrder: warm-up 30, race 35), so taking the first main session would
+  // lock the hero onto the warm-up — the race would never become today's session
+  // and so never show as done. Prefer the race when one is planned that day.
   function pickRun(list?: PlanSession[]): PlanSession | null {
-    return list?.find(s => sportSpec(s).isMain) ?? null;
+    const mains = list?.filter(s => sportSpec(s).isMain);
+    return mains?.find(s => s.session_type === 'RACE') ?? mains?.[0] ?? null;
   }
   function pickStrength(list?: PlanSession[]): PlanSession | null {
     return list?.find(isStrengthTier) ?? null;
