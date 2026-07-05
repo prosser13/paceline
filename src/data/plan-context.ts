@@ -105,11 +105,21 @@ export interface RecentSession {
 }
 
 // Assemble the briefing as of `asOf` (YYYY-MM-DD; defaults to today, UTC).
-export async function getPlanContext(asOf?: string): Promise<PlanContext> {
+//
+// `throughToday` moves the recent/upcoming boundary so TODAY counts as recent
+// (done, with its actuals) rather than upcoming. The evening review runs at ~9pm
+// when today's session is finished, so it must see today's result — without this
+// a race/workout done today lands in `upcoming` with no completion attached and
+// the coach reports it as "not synced yet". The default (false) keeps today in
+// `upcoming` for the mid-day plan agent, where a not-yet-done session shouldn't
+// read as missed.
+export async function getPlanContext(asOf?: string, opts?: { throughToday?: boolean }): Promise<PlanContext> {
   const today = asOf ?? new Date().toISOString().slice(0, 10);
+  const throughToday = opts?.throughToday ?? false;
   const upcomingTo = addDays(today, UPCOMING_DAYS);
+  const upcomingFrom = throughToday ? addDays(today, 1) : today;
   const recentFrom = addDays(today, -RECENT_DAYS);
-  const recentTo = addDays(today, -1);
+  const recentTo = throughToday ? today : addDays(today, -1);
 
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
@@ -119,7 +129,7 @@ export async function getPlanContext(asOf?: string): Promise<PlanContext> {
     getActivePlan(today),
     getUpcomingRaces(today),
     getCurrentWeek(today),
-    getUpcomingSessions(today, upcomingTo),
+    getUpcomingSessions(upcomingFrom, upcomingTo),
     getRecentSessions(recentFrom, recentTo),
     getWellnessCacheRow(),
     getThresholdPace(),
