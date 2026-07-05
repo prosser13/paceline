@@ -453,13 +453,16 @@ export function PlannedDetail({ steps }: { steps: NormStep[] }) {
 export type CompareTone = 'pos' | 'neg' | 'flat' | 'fast';
 export interface CompareRow { metric: string; plan: string; actual: string; delta?: string | null; tone?: CompareTone; }
 
-// "H:MM" / "M:SS" → total minutes, or null. Used by callers of buildRunCompare
-// to derive the actual minutes from a completed session's duration string.
+// "H:MM" / "M:SS" (2-part) or "H:MM:SS" (3-part) → total minutes, or null. Used by
+// callers of buildRunCompare to derive the actual minutes from a completed
+// session's duration string (which now carries seconds).
 export function parseDurationMins(str: string | null | undefined): number | null {
   if (!str) return null;
   const parts = str.split(':').map(Number);
-  if (parts.length !== 2 || parts.some(isNaN)) return null;
-  return parts[0] * 60 + parts[1];
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 60 + parts[1] + parts[2] / 60;
+  return null;
 }
 
 // Compare an actual value against a planned [lo, hi] window: in range → a tick;

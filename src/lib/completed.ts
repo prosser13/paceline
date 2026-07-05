@@ -24,6 +24,7 @@ export interface CompletedActuals {
 
 export interface CompletedRow {
   actual_duration_mins?: number | string | null;
+  actual_duration_secs?: number | string | null;   // precise moving time; preferred over the minute-rounded mins
   actual_avg_pace_min_km?: number | string | null;
   actual_avg_power?: number | string | null;
   actual_ngp_min_km?: number | string | null;
@@ -35,12 +36,20 @@ export interface CompletedRow {
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
-  const mins = cw.actual_duration_mins ? Number(cw.actual_duration_mins) : null;
+  // Prefer the precise moving-time seconds; `actual_duration_mins` is numeric(6,1)
+  // so it can only ever hold whole/tenth minutes (a 34:02 race stores as 34.0),
+  // which is why the displayed time used to round to 34:00. Fall back to minutes
+  // for rows synced before the seconds column existed / non-Strava completions.
+  const rawMins = cw.actual_duration_mins != null ? Number(cw.actual_duration_mins) : null;
+  const secs = cw.actual_duration_secs != null ? Number(cw.actual_duration_secs)
+    : (rawMins != null ? Math.round(rawMins * 60) : null);
+  const mins = secs != null ? secs / 60 : rawMins;
   const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
   const ngp  = cw.actual_ngp_min_km != null ? Number(cw.actual_ngp_min_km) : null;
   const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
-  const durationStr = mins != null
-    ? `${Math.floor(mins / 60)}:${String(Math.round(mins % 60)).padStart(2, '0')}`
+  // "H:MM:SS" (seconds preserved) — humanHMM renders it as "34:02" / "1:07:00".
+  const durationStr = secs != null
+    ? `${Math.floor(secs / 3600)}:${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
     : '';
   // Prefer the stored TSS (kept fresh by recomputeAllCompletedTss); fall back to a
   // live calc when null (e.g. a row synced before this column, or pending NGP).

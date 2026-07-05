@@ -15,6 +15,7 @@ export interface MergePart {
 export interface MergedTotals {
   actual_distance_km: number | null;
   actual_duration_mins: number | null;
+  actual_duration_secs: number | null;
   actual_avg_hr: number | null;
   actual_avg_power: number | null;
   actual_avg_pace_min_km: number | null;
@@ -58,6 +59,7 @@ export function combineActivities(parts: MergePart[], kind: 'run' | 'ride' | str
   return {
     actual_distance_km:     totalDist > 0 ? Math.round(totalDist * 100) / 100 : null,
     actual_duration_mins:   totalDurMin > 0 ? Math.round(totalDurMin * 10) / 10 : null,
+    actual_duration_secs:   totalMoving > 0 ? Math.round(totalMoving) : null,
     actual_avg_hr:          hr != null ? Math.round(hr) : null,
     actual_avg_power:       power != null ? Math.round(power) : null,
     actual_avg_pace_min_km: pace != null ? Math.round(pace * 100) / 100 : null,

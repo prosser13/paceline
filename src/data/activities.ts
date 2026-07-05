@@ -24,7 +24,7 @@ export async function listActivitiesByStravaIds(stravaIds: number[]) {
 export async function getActivityByStravaId(stravaId: number) {
   const { data } = await supabaseAdmin
     .from('activities')
-    .select('id, strava_activity_id, activity_date, activity_type, name, distance_km, duration_mins, avg_pace_min_km, avg_hr')
+    .select('id, strava_activity_id, activity_date, activity_type, name, distance_km, duration_mins, moving_time_secs, avg_pace_min_km, avg_hr')
     .eq('strava_activity_id', stravaId)
     .maybeSingle();
   return data;

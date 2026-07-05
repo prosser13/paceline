@@ -15,7 +15,8 @@ import { revalidatePath } from 'next/cache';
 // A stored activity, as returned by getActivityByStravaId.
 interface ActivityRow {
   id: string; strava_activity_id: number; activity_date: string; activity_type: string;
-  distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null; avg_hr: number | null;
+  distance_km: number | null; duration_mins: number | null; moving_time_secs: number | null;
+  avg_pace_min_km: number | null; avg_hr: number | null;
 }
 
 // The completion row for an activity fulfilling a session — shared by link + promote.
@@ -25,6 +26,7 @@ function completionRow(activity: ActivityRow, kind: ActivityKind | null, planSes
     completed_date:         activity.activity_date,
     actual_distance_km:     kind === 'strength' ? null : activity.distance_km,
     actual_duration_mins:   activity.duration_mins,
+    actual_duration_secs:   activity.moving_time_secs ?? null,
     actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,
     actual_avg_hr:          activity.avg_hr ?? null,
     strava_activity_id:     activity.strava_activity_id,
