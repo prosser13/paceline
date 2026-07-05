@@ -66,7 +66,10 @@ async function handle(request: Request): Promise<Response> {
   }
 
   try {
-    const [ctx, memory] = await Promise.all([getPlanContext(forDate), getCoachContext()]);
+    // throughToday: the evening review runs after today's session is done, so it
+    // must see today's result (a race/workout done today counts as recent, with
+    // its actuals) rather than treating it as an upcoming, not-yet-synced session.
+    const [ctx, memory] = await Promise.all([getPlanContext(forDate, { throughToday: true }), getCoachContext()]);
     const review = await generateEveningReview(ctx, memory.summary);
 
     const { data, error } = await supabaseAdmin
