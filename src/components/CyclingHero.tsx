@@ -91,7 +91,9 @@ export default function CyclingHero({
         </div>
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
           <div className="min-w-0">
-            <div className="font-display font-bold" style={{ fontSize: '54px', lineHeight: .96 }}>{big}</div>
+            {/* Scales down on narrow screens so a wide value can't overlap the
+                stats, and stays on one line; caps at 54px on wider viewports. */}
+            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
             {chips.length > 0 && (
               <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
                 {chips.map(c => (
