@@ -93,7 +93,9 @@ export default function SessionHero({
         </div>
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
           <div className="min-w-0">
-            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: '54px', lineHeight: .96 }}>{big}</div>
+            {/* Scales down on narrow screens so a wide value ("10.0 km", "42.2 km")
+                can't overlap the pace/TSS stats; caps at 54px on wider viewports. */}
+            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
             {chips.length > 0 && (
               <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
                 {chips.map(c => (
