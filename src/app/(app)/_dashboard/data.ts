@@ -78,7 +78,8 @@ export interface DashboardData {
   tomorrowStrength: PlanSession | null;
   todaySessions: PlanSession[];   // all of today's non-rest sessions, in display order
   todayDoneIds: string[];         // ids of today's sessions with a logged completion
-  todayCompleted: CompletedToday | null;
+  todayCompleted: CompletedToday | null;               // headline session's completion
+  todayCompletedById: Record<string, CompletedToday>;  // per run/ride session (each hero renders its own)
   strengthFirst: boolean;
 
   upcomingWithRest: PlanSession[]; // days +2..+7, rest-filled
@@ -375,12 +376,20 @@ export async function loadDashboardData(): Promise<DashboardData> {
     nextRace = { name: raceName, daysTo: daysToRace, dateStr: raceDateStr, priority: null, km: null };
   }
 
-  // Per-session completion: which of today's sessions are logged, plus the run's
-  // rich completion (drives the run hero's pace/HR breakdown).
+  // Per-session completion: which of today's sessions are logged, plus each
+  // run/ride's rich completion (drives its hero's pace/HR breakdown). A race day
+  // completes several main sessions (warm-up + race) and each hero renders its
+  // OWN completion, so build one per session — not just for the headline
+  // todaySession, which would leave every other done run looking unfinished.
   const todayDoneIds = todaySessions.filter(s => completionById.get(s.id)).map(s => s.id);
-  const cw = todaySession ? completionById.get(todaySession.id) ?? null : null;
-
-  const todayCompleted: CompletedToday | null = cw ? buildCompletedActuals(cw, threshMinKm, ftp) : null;
+  const todayCompletedById: Record<string, CompletedToday> = {};
+  for (const s of todaySessions) {
+    if (!sportSpec(s).isMain) continue;
+    const row = completionById.get(s.id);
+    if (row) todayCompletedById[s.id] = buildCompletedActuals(row, threshMinKm, ftp);
+  }
+  const todayCompleted: CompletedToday | null =
+    todaySession ? todayCompletedById[todaySession.id] ?? null : null;
 
   // Recently completed — the latest finished run/ride before today. Rendered by
   // the SAME hero as Today (one card to maintain), with a dated "· Done" label.
@@ -484,7 +493,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
 
   return {
     firstName, greeting: greet(), todayFull, todayStr,
-    todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted,
+    todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted, todayCompletedById,
     strengthFirst,
     upcomingWithRest, windowDays,
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
