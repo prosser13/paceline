@@ -249,7 +249,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getMostRecentCompletedSession(beforeDate: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, plan_sessions!inner(*)')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, plan_sessions!inner(*)')
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
@@ -267,7 +267,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
+    .select('actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -279,7 +279,7 @@ export async function listCompletedForSessions(planSessionIds: string[]) {
   if (!planSessionIds.length) return [];
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_duration_mins, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
+    .select('plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
     .in('plan_session_id', planSessionIds);
   return data ?? [];
 }
@@ -298,7 +298,7 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
 export async function listAllCompleted() {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, merged_strava_ids');
+    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, merged_strava_ids');
   return data ?? [];
 }
 

@@ -242,6 +242,9 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
   // Strava id → average power (rides only) — kept here because the stored activity
   // row doesn't carry watts; used to write the ride completion's actual_avg_power.
   const powerByStravaId = new Map(relevant.map(a => [a.id, a.average_watts != null ? Math.round(a.average_watts) : null]));
+  // Strava id → moving time in seconds — the precise duration stored on the
+  // completion so a race time reads 34:02, not the minute-rounded 34:00.
+  const secsByStravaId = new Map(relevant.map(a => [a.id, a.moving_time]));
 
   await upsertActivities(
     relevant.map(a => ({
@@ -356,6 +359,7 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       // Strength/yoga carry no distance; rides/runs do.
       actual_distance_km:     kind === 'strength' || kind === 'yoga' ? null : activity.distance_km,
       actual_duration_mins:   activity.duration_mins,
+      actual_duration_secs:   secsByStravaId.get(activity.strava_activity_id) ?? null,
       // Pace is meaningless for rides/strength; leaving it null stops the plan view
       // from deriving a bogus pace-based TSS against a non-run activity.
       actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,
