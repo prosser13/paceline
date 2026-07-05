@@ -57,7 +57,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
     const label = done ? 'Done' : 'Today';
     if (s.session_type === 'STRENGTH' || s.session_type === 'CORE') return strengthBlock(s, label, done);
     if (s.session_type === 'YOGA') return yogaBlock(s, label, done);
-    return activityHero(s, label, s.id === d.todaySession?.id ? d.todayCompleted : null);
+    return activityHero(s, label, d.todayCompletedById[s.id] ?? null);
   };
 
   return (
