@@ -93,7 +93,7 @@ export default function SessionHero({
         </div>
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
           <div className="min-w-0">
-            <div className="font-display font-bold" style={{ fontSize: '54px', lineHeight: .96 }}>{big}</div>
+            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: '54px', lineHeight: .96 }}>{big}</div>
             {chips.length > 0 && (
               <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
                 {chips.map(c => (
