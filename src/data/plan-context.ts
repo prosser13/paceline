@@ -35,8 +35,8 @@ const SESSION_SCHEMAS = {
   },
   strength: {
     field: 'structure (jsonb array of exercises)',
-    exercise: { name: 'string', sets: 'number', reps: 'number', reps_type: "'reps' | 'secs'", weight: 'number kg | null (bodyweight/band)', target: 'string, e.g. "Chest"', exercise_id: 'number — from reference.exercise_catalog' },
-    note: 'CORE sessions use the same shape as STRENGTH.',
+    exercise: { name: 'string', sets: 'number', reps: 'number', reps_type: "'reps' | 'secs'", weight: 'number kg | null (bodyweight/band)', target: 'string, e.g. "Chest"', exercise_id: 'number — REQUIRED, from reference.exercise_catalog' },
+    note: 'CORE sessions use the same shape as STRENGTH. exercise_id is REQUIRED and MUST be a real id from reference.exercise_catalog (match by name, then set both name and exercise_id) — an exercise without a catalog id will not prompt for difficulty or progress. Do not invent ids or leave it null.',
     example: [{ name: 'Push-up', sets: 3, reps: 12, reps_type: 'reps', weight: null, target: 'Chest', exercise_id: 62 }],
   },
 } as const;
