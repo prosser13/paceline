@@ -5,12 +5,19 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   type Exercise, type SessionExercise, type SessionIntent, type Duration, type MuscleGroup,
+  type ResolveCtx, type ExerciseStateLite,
   SESSION_INTENT_CONFIG, DURATION_CONFIG, MUSCLE_GROUPS, GROUP_LABEL,
-  buildSession, resolveIntentConfig,
+  buildSession, resolveIntentConfig, formatWeight,
 } from '@/data/strength';
 import { saveSession } from './actions';
 
 export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean }
+
+// Per-intent saved progression state (matches BuilderStateMaps on the server).
+export interface StateMaps {
+  strength: Record<number, ExerciseStateLite>;
+  maintain: Record<number, ExerciseStateLite>;
+}
 
 const INTENTS: SessionIntent[] = ['strength', 'maintain', 'mobility', 'balanced'];
 const DURATIONS: Duration[] = ['short', 'medium', 'long'];
@@ -25,12 +32,12 @@ const INTENT_ICON: Record<SessionIntent, string> = {
 
 const pickRandom = <T,>(arr: T[]): T | undefined => arr[Math.floor(Math.random() * arr.length)];
 
-// Sets × reps, weight, and the muscle-group line (with an each-leg/side note).
+// Sets × reps, weight (with equipment tag), and the muscle-group line.
 function prescription(s: SessionExercise) {
   const rep = s.repsValue != null
     ? `${s.sets} × ${s.repsValue}${s.exercise.repsType === 'secs' ? ' s' : ''}`
     : `${s.sets} sets`;
-  const weight = s.weightKg != null && Number(s.weightKg) > 0 ? `${s.weightKg} kg` : null;
+  const weight = formatWeight(s.exercise, s.weightKg);
   const note = s.exercise.isSingleLeg ? (s.exercise.repsType === 'secs' ? ' · each side' : ' · each leg') : '';
   return { rep, weight, group: GROUP_LABEL[s.exercise.group] + note };
 }
@@ -54,7 +61,7 @@ function SecLabel({ children, suffix, className = '' }: { children: React.ReactN
   );
 }
 
-export default function StrengthClient({ exercises, history }: { exercises: Exercise[]; history: HistoryItem[] }) {
+export default function StrengthClient({ exercises, history, stateMaps }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
   const [intent, setIntent] = useState<SessionIntent>('maintain');
@@ -74,15 +81,31 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
     [exercises, intent],
   );
 
+  // Saved progression state for the current intent (strength track, maintain
+  // track, or none for mobility). Layered onto the library by resolveIntentConfig.
+  const stateRecord = useMemo<Record<number, ExerciseStateLite>>(() => {
+    if (intent === 'strength') return stateMaps.strength;
+    if (intent === 'mobility') return {};
+    return stateMaps.maintain;
+  }, [intent, stateMaps]);
+
+  const ctxFor = (ex: Exercise): ResolveCtx | undefined => {
+    const s = stateRecord[ex.id];
+    return s ? { state: s } : undefined;
+  };
+  const resolve = (ex: Exercise) => resolveIntentConfig(ex, intent, duration, ctxFor(ex));
+
   function build() {
-    setSession(buildSession(intent, duration, groups, exercises));
+    const ctxMap = new Map<number, ResolveCtx>();
+    for (const [id, s] of Object.entries(stateRecord)) ctxMap.set(Number(id), { state: s });
+    setSession(buildSession(intent, duration, groups, exercises, Math.random, ctxMap));
     setSwapFor(null);
     setShowPicker(false);
     setPhase('preview');
   }
 
   function swapTo(i: number, ex: Exercise) {
-    const r = resolveIntentConfig(ex, intent, duration);
+    const r = resolve(ex);
     setSession(prev => prev.map((s, idx) => idx === i ? { exercise: ex, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg } : s));
     setSwapFor(null);
   }
@@ -95,14 +118,14 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
       const anyUnused = eligible.filter(ex => !used.has(ex.id));
       const choice = pickRandom(sameGroup.length ? sameGroup : anyUnused) ?? s.exercise;
       used.add(choice.id);
-      const r = resolveIntentConfig(choice, intent, duration);
+      const r = resolve(choice);
       return { exercise: choice, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg };
     }));
     setSwapFor(null);
   }
 
   function addExercise(ex: Exercise) {
-    const r = resolveIntentConfig(ex, intent, duration);
+    const r = resolve(ex);
     setSession(prev => [...prev, { exercise: ex, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg }]);
   }
 

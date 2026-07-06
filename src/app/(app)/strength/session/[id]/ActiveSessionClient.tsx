@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GROUP_LABEL, SESSION_INTENT_CONFIG, type MuscleGroup, type SessionIntent } from '@/data/strength';
-import { updateSessionExercise, completeSession, deleteSession } from '../../actions';
+import { updateSessionExercise, completeSession, deleteSession, keepOverrideGoingForward } from '../../actions';
 
 export interface ActiveItem {
   id: string;
@@ -15,10 +15,20 @@ export interface ActiveItem {
   repsValue: number | null;
   weightKg: number | null;
   isSingleLeg: boolean;
+  weightType: 'barbell' | 'dumbbells' | null;
+  canProgress: boolean;
   cue: string;
   youtubeUrl: string | null;
   difficulty: number | null;
   isDone: boolean;
+}
+
+// Equipment-tagged weight, e.g. "14 kg · per hand" (dumbbells) / "40 kg · barbell".
+function weightLine(it: { weightKg: number | null; weightType: 'barbell' | 'dumbbells' | null }): string | null {
+  if (it.weightKg == null || it.weightKg <= 0) return null;
+  if (it.weightType === 'dumbbells') return `${it.weightKg} kg · per hand`;
+  if (it.weightType === 'barbell') return `${it.weightKg} kg · barbell`;
+  return `${it.weightKg} kg`;
 }
 
 // The group line + sets×reps + weight, in the clean dashboard/builder style.
@@ -26,7 +36,7 @@ function rx(it: ActiveItem) {
   const rep = it.repsValue != null
     ? `${it.sets} × ${it.repsValue}${it.repsType === 'secs' ? ' s' : ''}`
     : `${it.sets} sets`;
-  const weight = it.weightKg != null && it.weightKg > 0 ? `${it.weightKg} kg` : null;
+  const weight = weightLine(it);
   const note = it.isSingleLeg ? (it.repsType === 'secs' ? ' · each side' : ' · each leg') : '';
   const group = (it.group ? GROUP_LABEL[it.group] : '') + note;
   return { rep, weight, group };
@@ -35,6 +45,13 @@ function rx(it: ActiveItem) {
 function fmtClock(sec: number): string {
   const m = Math.floor(sec / 60);
   return `${m}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+// Unit caption for the weight stat, tagging the equipment.
+function weightUnit(weightType: 'barbell' | 'dumbbells' | null): string {
+  if (weightType === 'dumbbells') return 'kg · per hand';
+  if (weightType === 'barbell') return 'kg · barbell';
+  return 'kg';
 }
 
 function Chevron() {
@@ -55,6 +72,8 @@ export default function ActiveSessionClient({
   const [done, setDone] = useState(!!completedAt);
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({ sets: '', reps: '', weight: '' });
+  const [editedId, setEditedId] = useState<string | null>(null);   // last item edited this session
+  const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
   const exStart = useRef(0);
 
   useEffect(() => {
@@ -118,9 +137,19 @@ export default function ActiveSessionClient({
     const sets = Number(edit.sets) || current.sets;
     const reps = edit.reps === '' ? null : Number(edit.reps);
     const weight = edit.weight === '' ? null : Number(edit.weight);
+    const changed = reps !== current.repsValue || weight !== current.weightKg;
     patch(currentIdx, { sets, repsValue: reps, weightKg: weight });
     setEditing(false);
+    // A manual edit is a one-off by default (it doesn't feed progression). Offer
+    // to keep it going forward only when it's a progressable exercise that moved.
+    setEditedId(changed && current.canProgress ? current.id : null);
     await updateSessionExercise(current.id, { sets, repsValue: reps, weightKg: weight });
+  }
+
+  async function keepForward(id: string) {
+    setPromotedIds(prev => new Set(prev).add(id));
+    setEditedId(null);
+    await keepOverrideGoingForward(id);
   }
 
   async function endEarly() {
@@ -195,10 +224,21 @@ export default function ActiveSessionClient({
             <div className="grid grid-cols-3 gap-[9px] my-[14px]">
               <Stat v={current.sets} u="sets" />
               <Stat v={current.repsValue ?? '—'} u={current.repsType === 'secs' ? 'secs' : 'reps'} />
-              <Stat v={current.weightKg != null && current.weightKg > 0 ? current.weightKg : '—'} u="kg" />
+              <Stat v={current.weightKg != null && current.weightKg > 0 ? current.weightKg : '—'}
+                u={current.weightKg != null && current.weightKg > 0 ? weightUnit(current.weightType) : 'kg'} />
             </div>
             <button type="button" onClick={startEdit}
               className="w-full min-h-[42px] rounded-[12px] border border-fog text-ink text-[13px] mb-[14px] hover:bg-fog/40 transition-colors">Edit</button>
+            {editedId === current.id && !promotedIds.has(current.id) && (
+              <div className="flex items-center gap-[8px] mb-[14px] -mt-[6px]">
+                <span className="text-[11.5px] text-stone">Just for today.</span>
+                <button type="button" onClick={() => keepForward(current.id)}
+                  className="text-[11.5px] font-semibold text-marine hover:text-marine-dark">Keep going forward →</button>
+              </div>
+            )}
+            {promotedIds.has(current.id) && (
+              <div className="text-[11.5px] text-fern mb-[14px] -mt-[6px]">Saved for future sessions.</div>
+            )}
           </>
         )}
 
@@ -207,17 +247,22 @@ export default function ActiveSessionClient({
           <a href={current.youtubeUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-[13px] text-marine hover:text-marine-dark mb-[16px]">▶ Demo video</a>
         )}
 
-        {/* Difficulty */}
-        <div className="flex items-center justify-between gap-3 mb-[9px]">
-          <span className="font-mono text-[10px] uppercase tracking-[.13em] text-stone">How did it feel?</span>
-          <span className="text-stone text-[11.5px]">1 = easy · 5 = failed</span>
-        </div>
-        <div className="flex gap-[8px]">
-          {[1, 2, 3, 4, 5].map(n => (
-            <button key={n} type="button" onClick={() => rate(n)} aria-pressed={current.difficulty === n}
-              className={`flex-1 h-[48px] rounded-[12px] border text-[16px] font-semibold transition-colors ${current.difficulty === n ? 'border-oxblood bg-oxblood text-bone' : 'border-fog bg-paper text-ink'}`}>{n}</button>
-          ))}
-        </div>
+        {/* Difficulty — only for exercises the progression engine tracks (not
+            stretches / mobility, which would just get longer). */}
+        {current.canProgress && (
+          <>
+            <div className="flex items-center justify-between gap-3 mb-[9px]">
+              <span className="font-mono text-[10px] uppercase tracking-[.13em] text-stone">How did it feel?</span>
+              <span className="text-stone text-[11.5px]">1 = easy · 5 = failed</span>
+            </div>
+            <div className="flex gap-[8px]">
+              {[1, 2, 3, 4, 5].map(n => (
+                <button key={n} type="button" onClick={() => rate(n)} aria-pressed={current.difficulty === n}
+                  className={`flex-1 h-[48px] rounded-[12px] border text-[16px] font-semibold transition-colors ${current.difficulty === n ? 'border-oxblood bg-oxblood text-bone' : 'border-fog bg-paper text-ink'}`}>{n}</button>
+              ))}
+            </div>
+          </>
+        )}
 
         <button type="button" onClick={markDone}
           className="mt-[16px] w-full min-h-[48px] rounded-[12px] bg-fern text-bone text-[15px] font-semibold hover:opacity-90 transition-opacity">Done ✓</button>

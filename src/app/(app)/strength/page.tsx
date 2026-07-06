@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import StrengthClient, { type HistoryItem } from './StrengthClient';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { listStrengthHistory } from '@/data/strength-sessions';
+import { loadBuilderStateMaps } from '@/data/strength-progression';
 import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
 
 type HistoryRow = {
@@ -11,7 +12,10 @@ type HistoryRow = {
 };
 
 export default async function StrengthPage() {
-  const raw = (await listStrengthHistory(6)) as HistoryRow[];
+  const [raw, stateMaps] = await Promise.all([
+    listStrengthHistory(6) as Promise<HistoryRow[]>,
+    loadBuilderStateMaps(),
+  ]);
   const history: HistoryItem[] = raw.map(s => {
     const count = s.strength_session_exercises?.[0]?.count ?? 0;
     const mins  = DURATION_CONFIG[s.duration as Duration]?.minutes ?? null;
@@ -27,7 +31,7 @@ export default async function StrengthPage() {
 
   return (
     <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[760px]">
-      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} />
+      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} />
     </div>
   );
 }

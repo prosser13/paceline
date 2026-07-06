@@ -6,6 +6,7 @@ import {
   createStrengthSession, insertSessionExercises, updateStrengthExercise,
   markStrengthSessionComplete, deleteStrengthSession,
 } from '@/data/strength-sessions';
+import { evaluateProgressionAfterSession, promoteOverride } from '@/data/strength-progression';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { revalidatePath } from 'next/cache';
 
@@ -111,7 +112,24 @@ export async function updateSessionExercise(id: string, patch: SessionExercisePa
 export async function completeSession(sessionId: string) {
   await requireUser();
   await markStrengthSessionComplete(sessionId);
+  // Run the progression engine off the captured difficulty ratings. Best-effort:
+  // a failure here must not stop the session being marked complete.
+  try {
+    await evaluateProgressionAfterSession(sessionId);
+  } catch (err) {
+    console.error('progression evaluation failed', err);
+  }
   revalidatePath('/strength/history');
+  revalidatePath('/strength');
+  return { ok: true as const };
+}
+
+// "Keep this going forward" — promote a one-off in-session edit into persistent
+// progression state so future builds start from it.
+export async function keepOverrideGoingForward(sessionExerciseId: string) {
+  await requireUser();
+  await promoteOverride(sessionExerciseId);
+  revalidatePath('/strength');
   return { ok: true as const };
 }
 

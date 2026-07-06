@@ -44,6 +44,41 @@ export interface ResolvedConfig {
   sets: number;
 }
 
+// Saved per-exercise progression state, layered onto the library default by
+// resolveIntentConfig. Absent ⇒ pure library behaviour (unchanged from before).
+export interface ExerciseStateLite {
+  currentReps: number | null;
+  currentWeightKg: number | null;
+}
+
+// Optional context threaded through resolveIntentConfig. Each field owns one
+// layer of the resolver; all optional so existing callers are unaffected.
+// (modifier + niggles arrive in later phases.)
+export interface ResolveCtx {
+  state?: ExerciseStateLite | null;
+}
+
+// A stretch / mobility / activation exercise is never rated or progressed — it
+// would just get longer. Everything else (loaded lifts + bodyweight strength
+// moves + core holds) is progressable.
+export function progressable(ex: Exercise): boolean {
+  return ex.movementPattern !== 'mobility' && ex.movementPattern !== 'activation';
+}
+
+// Equipment kind for display + increment logic. null = bodyweight / band.
+export function equipmentLabel(ex: Exercise): 'barbell' | 'dumbbells' | null {
+  return ex.weightType;
+}
+
+// Weight line with an equipment tag, e.g. "14 kg · per hand" (dumbbells),
+// "40 kg · barbell", or "12 kg". null when bodyweight / unloaded.
+export function formatWeight(ex: Exercise, weightKg: number | null | undefined): string | null {
+  if (weightKg == null || Number(weightKg) <= 0) return null;
+  if (ex.weightType === 'dumbbells') return `${weightKg} kg · per hand`;
+  if (ex.weightType === 'barbell') return `${weightKg} kg · barbell`;
+  return `${weightKg} kg`;
+}
+
 // One exercise as prescribed in a built session.
 export interface SessionExercise {
   exercise: Exercise;
@@ -81,19 +116,35 @@ const FREQ_WEIGHT: Record<NonNullable<Exercise['frequency']>, number> = {
 };
 
 // Effective reps / weight / sets for an exercise at a given intent.
-export function resolveIntentConfig(ex: Exercise, intent: SessionIntent, duration: Duration): ResolvedConfig {
-  if (intent === 'strength' && ex.strengthRepsMin != null) {
+//
+// Layered resolver: (1) library default → (2) saved progression state. Later
+// phases add (3) session modifier and (4) niggle adjustments. When `ctx` is
+// omitted the result is identical to the original pure-library behaviour.
+export function resolveIntentConfig(
+  ex: Exercise, intent: SessionIntent, duration: Duration, ctx?: ResolveCtx,
+): ResolvedConfig {
+  // Layer 1 — library default.
+  const base: ResolvedConfig = (intent === 'strength' && ex.strengthRepsMin != null)
+    ? {
+        repsValue: ex.strengthRepsMin,
+        weightKg: ex.strengthWeightKg ?? ex.weightKg,
+        sets: Math.max(4, DURATION_CONFIG[duration].sets),
+      }
+    : {
+        repsValue: ex.repsValue,
+        weightKg: ex.weightKg,
+        sets: ex.sets ?? DURATION_CONFIG[duration].sets,
+      };
+
+  // Layer 2 — saved progression state overrides reps/weight (sets unchanged).
+  if (ctx?.state) {
     return {
-      repsValue: ex.strengthRepsMin,
-      weightKg: ex.strengthWeightKg ?? ex.weightKg,
-      sets: Math.max(4, DURATION_CONFIG[duration].sets),
+      ...base,
+      repsValue: ctx.state.currentReps ?? base.repsValue,
+      weightKg: ctx.state.currentWeightKg ?? base.weightKg,
     };
   }
-  return {
-    repsValue: ex.repsValue,
-    weightKg: ex.weightKg,
-    sets: ex.sets ?? DURATION_CONFIG[duration].sets,
-  };
+  return base;
 }
 
 // Display string, e.g. "10 reps each leg @ 12kg" or "45 secs".
@@ -146,6 +197,7 @@ export function buildSession(
   groups: MuscleGroup[],
   allExercises: Exercise[],
   rng: () => number = Math.random,
+  ctxByExercise?: Map<number, ResolveCtx>,
 ): SessionExercise[] {
   let pool = allExercises.filter(ex => ex.supportedIntents.includes(intent));
   if (groups.length > 0) {
@@ -158,7 +210,7 @@ export function buildSession(
   const picked: SessionExercise[] = [];
   let total = 0;
   for (const ex of ordered) {
-    const r = resolveIntentConfig(ex, intent, duration);
+    const r = resolveIntentConfig(ex, intent, duration, ctxByExercise?.get(ex.id));
     const secs = estSeconds(ex, r.sets);
     if (total + secs > target && picked.length >= 3) continue;
     picked.push({ exercise: ex, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg });
