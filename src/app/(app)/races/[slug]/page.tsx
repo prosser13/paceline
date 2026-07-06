@@ -30,7 +30,7 @@ import RaceWeather from './RaceWeather';
 import RaceAnalysis from './RaceAnalysis';
 import RaceResults from './RaceResults';
 import RaceNoteCard from './RaceNoteCard';
-import { getRaceSessionBySlug, getCompletionRefForSession } from '@/data/plan-sessions';
+import { getRaceSessionBySlug, getCompletedForSession } from '@/data/plan-sessions';
 import { getRaceAnalysis } from '@/data/race-analyses';
 import { getRaceResult } from '@/data/race-results';
 import { getRaceNote } from '@/data/race-notes';
@@ -40,6 +40,19 @@ function daysUntil(dateStr: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+}
+
+function fmtHMS(secs: number | null): string | null {
+  if (secs == null) return null;
+  const s = Math.round(secs);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
+}
+// decimal min/km → "m:ss"
+function fmtPace(minKm: number | null): string | null {
+  if (minKm == null) return null;
+  const total = Math.round(minKm * 60);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 async function loadGpx(gpxPath: string | null): Promise<ParsedGpx | null> {
@@ -121,15 +134,41 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // Past race → post-race mode: lead with the result, tuck prep into a reference accordion.
   const isPast = daysToGo != null && daysToGo < 0;
 
-  // Post-race extras (coach analysis, full results, notes, whether a run is synced).
+  // Post-race extras (coach analysis, full results, notes) + the completion actuals
+  // for the header stats and the flat-equivalent estimate.
   let post: { analysis: Awaited<ReturnType<typeof getRaceAnalysis>>; result: Awaited<ReturnType<typeof getRaceResult>>; note: string; canAnalyse: boolean } | null = null;
+  let actual: { time: string | null; pace: string | null; distanceKm: number | null; avgHr: number | null } | null = null;
+  let flat: { ngp: string | null; rule: string | null } | null = null;
+  let raceDurationMins: number | null = null;
   if (isPast) {
     const rs = await getRaceSessionBySlug(slug);
-    const [analysis, result, note, compRef] = await Promise.all([
+    const [analysis, result, note, row] = await Promise.all([
       getRaceAnalysis(slug), getRaceResult(slug), getRaceNote(slug),
-      rs ? getCompletionRefForSession(rs.id) : Promise.resolve(null),
+      rs ? getCompletedForSession(rs.id) : Promise.resolve(null),
     ]);
-    post = { analysis, result, note, canAnalyse: !!compRef };
+    post = { analysis, result, note, canAnalyse: !!row };
+    if (row) {
+      const secs = row.actual_duration_secs != null ? Number(row.actual_duration_secs)
+        : row.actual_duration_mins != null ? Number(row.actual_duration_mins) * 60 : null;
+      const dist = row.actual_distance_km != null ? Number(row.actual_distance_km) : null;
+      const ngpMinKm = row.actual_ngp_min_km != null ? Number(row.actual_ngp_min_km) : null;
+      actual = {
+        time: fmtHMS(secs),
+        pace: fmtPace(row.actual_avg_pace_min_km != null ? Number(row.actual_avg_pace_min_km) : null),
+        distanceKm: dist, avgHr: row.actual_avg_hr != null ? Number(row.actual_avg_hr) : null,
+      };
+      // Flat-equivalent finish: (a) grade-adjusted from the run's NGP, (b) a simple
+      // rule (~0.5 s per metre of ascent). Both shown to compare.
+      const ngpTime = ngpMinKm != null && dist != null ? fmtHMS(ngpMinKm * 60 * dist) : null;
+      const ruleTime = secs != null && guide.ascentM ? fmtHMS(secs - guide.ascentM * 0.5) : null;
+      flat = (ngpTime || ruleTime) ? { ngp: ngpTime, rule: ruleTime } : null;
+      if (secs != null) raceDurationMins = Math.round(secs / 60);
+    }
+  }
+  // Fall back to the target time for the weather window if there's no actual yet.
+  if (raceDurationMins == null && targetTime) {
+    const tp = String(targetTime).split(':').map(Number);
+    raceDurationMins = tp.length === 3 ? tp[0] * 60 + tp[1] + Math.round(tp[2] / 60) : tp[0] * 60 + (tp[1] ?? 0);
   }
   const planStart = planWeeks[0]?.date_from ?? null;
   const planStarted = planStart ? todayStr >= planStart : true;
@@ -212,12 +251,20 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
             )}
           </div>
           <div className="bg-paper grid grid-cols-2 sm:grid-cols-4 divide-x divide-fog">
-            {[
-              { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
-              { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
-              { label: 'Target', value: targetTimeDisplay },
-              { label: 'Pace', value: targetPace ? `${targetPace}/km` : '—' },
-            ].map(({ label, value }) => (
+            {(isPast && actual
+              ? [
+                  { label: 'Distance', value: actual.distanceKm != null ? `${actual.distanceKm.toFixed(2)} km` : `${distanceKm ?? guide.distanceKm} km` },
+                  { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
+                  { label: 'Finish', value: actual.time ?? '—' },
+                  { label: 'Pace', value: actual.pace ? `${actual.pace}/km` : '—' },
+                ]
+              : [
+                  { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
+                  { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
+                  { label: 'Target', value: targetTimeDisplay },
+                  { label: 'Pace', value: targetPace ? `${targetPace}/km` : '—' },
+                ]
+            ).map(({ label, value }) => (
               <div key={label} className="px-[16px] py-[13px]">
                 <div className="font-mono text-[11px] tracking-[.06em] uppercase text-stone">{label}</div>
                 <div className="font-display font-bold text-[20px] mt-[4px]">{value}</div>
@@ -232,11 +279,27 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         {isPast && post && (
           <div className="mt-[24px] flex flex-col gap-[24px]">
             <RaceResult slug={slug} />
+            {flat && (
+              <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[14px] -mt-[12px]">
+                <div className="text-[11px] uppercase font-bold text-stone mb-[6px]" style={{ letterSpacing: '.07em' }}>Flat-equivalent finish</div>
+                <div className="flex flex-wrap items-baseline gap-x-[16px] gap-y-[4px]">
+                  {flat.ngp && (
+                    <span className="text-[15px] text-ink">≈<b className="font-display text-[18px]">{flat.ngp}</b> <span className="text-[12px] text-stone">grade-adjusted (your run’s elevation)</span></span>
+                  )}
+                  {flat.rule && (
+                    <span className="text-[15px] text-ink">≈<b className="font-display text-[18px]">{flat.rule}</b> <span className="text-[12px] text-stone">rule of thumb (~0.5 s / m climbed)</span></span>
+                  )}
+                </div>
+                <div className="text-[11px] text-stone mt-[6px]">What this time might be worth on a pancake-flat course. Two methods for now — we’ll refine once we see how they compare.</div>
+              </div>
+            )}
             <RaceWeather
               slug={slug}
               lat={guide.start.lat}
               lng={guide.start.lng}
               dateISO={raceDate}
+              startTime={guide.startTime}
+              durationMins={raceDurationMins}
               seasonal={guide.seasonalWeather}
               raceDateLabel={raceDateShort}
             />

@@ -87,8 +87,10 @@ export async function refreshRaceSplits(
   return { ok: true };
 }
 
-// ── coach race analysis (manual "Analyse this race") ──────────
-export async function analyseRace(slug: string): Promise<{ ok: boolean; reason?: string }> {
+// ── coach race analysis (manual "Analyse this race"; optional pre-screen) ──────────
+export async function analyseRace(
+  slug: string, answers?: Record<string, string>,
+): Promise<{ ok: boolean; reason?: string }> {
   await requireUser();
   const guide = getRaceGuide(slug);
   const session = await getRaceSessionBySlug(slug);
@@ -100,16 +102,24 @@ export async function analyseRace(slug: string): Promise<{ ok: boolean; reason?:
   const completed = buildCompletedActuals(row, parseThresholdPace(threshold), null);
   const [weather, result, note] = await Promise.all([getRaceWeather(slug), getRaceResult(slug), getRaceNote(slug)]);
 
+  const cleanAnswers = answers
+    ? Object.fromEntries(Object.entries(answers).map(([k, v]) => [k, String(v).slice(0, 500)]).filter(([, v]) => v.trim()))
+    : {};
+
   const input = {
-    race: guide ? { name: guide.eventName, summary: guide.summary,
-      game_plan: guide.coachNotes.map(n => n.heading), goal_tiers: guide.goalTiers } : { name: session.name },
-    target: { time: session.target_pace ? null : guide?.targetTime, pace_per_km: session.target_pace ?? guide?.targetPace, distance_km: session.distance_km },
+    // Objective course facts — assess difficulty from these, not the blurb.
+    course: guide ? { name: guide.eventName, distance_km: guide.distanceKm, ascent_m: guide.ascentM, terrain: guide.terrain } : { name: session.name },
+    course_blurb: guide?.summary ?? null,   // promotional copy — treat skeptically
+    game_plan: guide?.coachNotes.map(n => n.heading) ?? [],
+    goal_tiers: guide?.goalTiers ?? [],
+    target: { time: guide?.targetTime, pace_per_km: session.target_pace ?? guide?.targetPace, distance_km: session.distance_km },
     actual: { time: completed.durationStr, distance_km: completed.distanceKm, avg_hr: completed.avgHr, tss: completed.tss },
     per_km_splits_sec_per_km: completed.segmentActuals,
     per_km_hr_bpm: completed.segmentHr,
     weather: weather?.forecast.summary ?? null,
     full_results: result,
     athlete_notes: note || null,
+    athlete_answers: Object.keys(cleanAnswers).length ? cleanAnswers : null,
   };
 
   try {
@@ -128,14 +138,21 @@ export async function saveRaceResult(slug: string, r: RaceResult): Promise<{ ok:
   await requireUser();
   const clip = (s: unknown, n = 40): string | null => (typeof s === 'string' && s.trim() ? s.trim().slice(0, n) : null);
   const int = (v: unknown): number | null => (v == null || v === '' ? null : Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : null);
+  const timeType = (v: unknown): 'chip' | 'gun' => (v === 'gun' ? 'gun' : 'chip');
+  const url = (s: unknown): string | null => {
+    const v = clip(s, 500);
+    return v && /^https?:\/\//i.test(v) ? v : null;
+  };
   const neighbours = Array.isArray(r.neighbours)
     ? r.neighbours.map(n => ({ position: int(n.position), name: clip(n.name, 80) ?? '', time: clip(n.time) ?? '' }))
         .filter(n => n.name || n.time).slice(0, 6)
     : [];
   await upsertRaceResult(slug, {
-    finishTime: clip(r.finishTime), position: int(r.position), fieldSize: int(r.fieldSize),
+    finishTime: clip(r.finishTime), finishTimeGun: clip(r.finishTimeGun), timeType: timeType(r.timeType),
+    position: int(r.position), fieldSize: int(r.fieldSize),
     category: clip(r.category), categoryPos: int(r.categoryPos), categorySize: int(r.categorySize),
     winnerTime: clip(r.winnerTime), neighbours,
+    neighbourTimeType: timeType(r.neighbourTimeType), resultsUrl: url(r.resultsUrl),
   });
   revalidatePath(`/races/${slug}`);
   return { ok: true };
