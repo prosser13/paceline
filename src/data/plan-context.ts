@@ -16,6 +16,8 @@ import {
   getPowerConfig, listPowerZones,
 } from '@/data/zones';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getStrengthCoachSummary } from '@/data/strength-progression';
+import { listActiveNiggles } from '@/data/strength-niggles';
 
 // Static reference an agent needs to author edits, bundled into the briefing so a
 // fresh session has it without searching the codebase. `structure` is shaped
@@ -83,6 +85,10 @@ export interface PlanContext {
   constraints: Record<string, unknown>[];
   coaching: Record<string, unknown> | null;     // autonomy + guardrails + standing notes
   recent_changes: Record<string, unknown>[];    // adjustment_logs tail (empty until the agent writes)
+  strength: {                                    // how the strength builder is progressing + adapting
+    active_niggles: Record<string, unknown>[];
+    summary: Record<string, unknown>;
+  };
   reference: {                                   // static — how to author edits (no need to search the code)
     session_schemas: typeof SESSION_SCHEMAS;
     exercise_catalog: typeof EXERCISE_CATALOG;
@@ -124,7 +130,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
     wellness, threshold, paceZones, hrConfig, hrZones, powerConfig, powerZones,
-    constraints, coaching, recentChanges,
+    constraints, coaching, recentChanges, strengthSummary, activeNiggles,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
@@ -141,6 +147,8 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     listPlanConstraints(),
     getCoachingPrefs(),
     getRecentChanges(),
+    getStrengthCoachSummary(),
+    listActiveNiggles(),
   ]);
 
   return {
@@ -166,6 +174,10 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     constraints: constraints as Record<string, unknown>[],
     coaching: coaching as Record<string, unknown> | null,
     recent_changes: recentChanges,
+    strength: {
+      active_niggles: activeNiggles as unknown as Record<string, unknown>[],
+      summary: strengthSummary as unknown as Record<string, unknown>,
+    },
     reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
   };
 }

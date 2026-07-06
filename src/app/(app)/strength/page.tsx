@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import StrengthClient, { type HistoryItem } from './StrengthClient';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { listStrengthHistory } from '@/data/strength-sessions';
-import { loadBuilderStateMaps } from '@/data/strength-progression';
+import { loadBuilderStateMaps, listRecentProgressionEvents } from '@/data/strength-progression';
 import { getStrengthContext } from '@/data/strength-context';
 import { listActiveNiggles } from '@/data/strength-niggles';
 import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
@@ -14,12 +14,31 @@ type HistoryRow = {
 };
 
 export default async function StrengthPage() {
-  const [raw, stateMaps, context, niggles] = await Promise.all([
+  const [raw, stateMaps, context, niggles, events] = await Promise.all([
     listStrengthHistory(6) as Promise<HistoryRow[]>,
     loadBuilderStateMaps(),
     getStrengthContext(),
     listActiveNiggles(),
+    listRecentProgressionEvents(6),
   ]);
+
+  const exName = new Map(STRENGTH_EXERCISES.map(e => [e.id, e.name] as const));
+  const KIND_VERB: Record<string, string> = {
+    reps_up: 'reps up to', weight_up: 'load up to', reps_down: 'eased to', weight_down: 'load down to',
+  };
+  const progress = events
+    .filter(e => KIND_VERB[e.kind as string] != null && e.exercise_id !== 0)
+    .map(e => {
+      const after = (e.after_state ?? {}) as { reps?: number | null; weightKg?: number | null };
+      const isWeight = (e.kind as string).startsWith('weight');
+      const val = isWeight
+        ? (after.weightKg != null ? `${after.weightKg} kg` : '—')
+        : (after.reps != null ? `${after.reps}` : '—');
+      return {
+        id: e.id as string,
+        text: `${exName.get(e.exercise_id as number) ?? 'Exercise'} — ${KIND_VERB[e.kind as string]} ${val}`,
+      };
+    });
   const history: HistoryItem[] = raw.map(s => {
     const count = s.strength_session_exercises?.[0]?.count ?? 0;
     const mins  = DURATION_CONFIG[s.duration as Duration]?.minutes ?? null;
@@ -35,7 +54,7 @@ export default async function StrengthPage() {
 
   return (
     <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[760px]">
-      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} context={context} niggles={niggles} />
+      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} context={context} niggles={niggles} progress={progress} />
     </div>
   );
 }

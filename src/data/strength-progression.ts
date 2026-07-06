@@ -46,6 +46,19 @@ export async function setProgressionMode(mode: ProgressionMode): Promise<void> {
     .upsert({ id: 1, strength_progression_mode: mode }, { onConflict: 'id' });
 }
 
+// Coach write-hook: adjust the tunable engine knobs, logged (exercise_id 0
+// sentinel) so the change is inspectable and reversible. `patch` uses snake_case
+// column names, e.g. { weight_up_streak: 2 }.
+export async function updateStrengthTuning(patch: Record<string, number>, reason: string): Promise<void> {
+  const { data: before } = await supabaseAdmin.from('strength_tuning').select('*').eq('id', 1).maybeSingle();
+  await supabaseAdmin.from('strength_tuning').upsert({ id: 1, ...patch }, { onConflict: 'id' });
+  const { data: after } = await supabaseAdmin.from('strength_tuning').select('*').eq('id', 1).maybeSingle();
+  await supabaseAdmin.from('strength_progression_events').insert({
+    user_id: null, exercise_id: 0, intent: 'tuning', session_id: null,
+    kind: 'tuning', reason, before_state: before, after_state: after,
+  });
+}
+
 // ── state reads ──────────────────────────────────────────────
 interface StateRow {
   exercise_id: number;
@@ -134,12 +147,50 @@ async function sessionHasEvents(sessionId: string): Promise<boolean> {
   return (data?.length ?? 0) > 0;
 }
 
-// Recent progression events (for a future history view + the coach reference).
+// Recent progression events (for the history view + the coach reference).
 export async function listRecentProgressionEvents(limit = 40) {
   const { data } = await supabaseAdmin
     .from('strength_progression_events')
     .select('*').order('logged_at', { ascending: false }).limit(limit);
   return data ?? [];
+}
+
+// A compact strength summary the evening coach can reason over: how the builder
+// is set up, what it has been doing, and where a lift may be stalling (rated hard
+// repeatedly with no progress) so the coach can propose a tuning tweak.
+export async function getStrengthCoachSummary() {
+  const [mode, tuning, events, { data: hardRatings }] = await Promise.all([
+    getProgressionMode(),
+    getStrengthTuning(),
+    listRecentProgressionEvents(20),
+    supabaseAdmin
+      .from('strength_session_exercises')
+      .select('exercise_id, difficulty')
+      .gte('difficulty', 4)
+      .order('id', { ascending: false })
+      .limit(60),
+  ]);
+
+  // Exercises rated 4–5 three+ times recently with no recent up-event = stalling.
+  const recentUpByExercise = new Set(
+    events.filter(e => e.kind === 'reps_up' || e.kind === 'weight_up').map(e => e.exercise_id as number),
+  );
+  const hardCount = new Map<number, number>();
+  for (const r of hardRatings ?? []) hardCount.set(r.exercise_id as number, (hardCount.get(r.exercise_id as number) ?? 0) + 1);
+  const stalling = [...hardCount.entries()]
+    .filter(([id, n]) => n >= 3 && !recentUpByExercise.has(id))
+    .map(([exercise_id, hard_sessions]) => ({ exercise_id, hard_sessions }));
+
+  return {
+    progression_mode: mode,
+    tuning,
+    recent_events: events.map(e => ({
+      exercise_id: e.exercise_id, intent: e.intent, kind: e.kind, reason: e.reason,
+      after: e.after_state, logged_at: e.logged_at,
+    })),
+    stalling,
+    note: 'Adjust behaviour by tuning knobs (see tuning) — e.g. lower weight_up_streak if progression is too slow, or flag a stalling lift.',
+  };
 }
 
 // ── the engine ───────────────────────────────────────────────

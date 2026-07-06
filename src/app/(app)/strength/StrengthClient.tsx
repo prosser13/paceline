@@ -72,7 +72,9 @@ function SecLabel({ children, suffix, className = '' }: { children: React.ReactN
   );
 }
 
-export default function StrengthClient({ exercises, history, stateMaps, context, niggles }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext; niggles: ActiveNiggle[] }) {
+export interface ProgressItem { id: string; text: string }
+
+export default function StrengthClient({ exercises, history, stateMaps, context, niggles, progress }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext; niggles: ActiveNiggle[]; progress: ProgressItem[] }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
   const [intent, setIntent] = useState<SessionIntent>(context.suggestion.intent);
@@ -328,6 +330,21 @@ export default function StrengthClient({ exercises, history, stateMaps, context,
           <svg className="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
           Build my session
         </button>
+
+        {/* Recent progress — what the engine has adjusted as you got stronger */}
+        {progress.length > 0 && (
+          <>
+            <SecLabel className="mt-[24px]">Recent progress</SecLabel>
+            <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '2px 16px' }}>
+              {progress.map(p => (
+                <div key={p.id} className="flex items-center gap-[10px] py-[9px] border-t border-fog/60 first:border-t-0">
+                  <span className="text-fern text-[13px] shrink-0">↑</span>
+                  <span className="text-[13px] text-ink leading-snug">{p.text}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Recent sessions — visible */}
         {history.length > 0 && (
