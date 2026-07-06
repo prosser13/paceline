@@ -25,6 +25,15 @@ import FuelPlan, { type FuelStop } from './FuelPlan';
 import CoachNotes from './CoachNotes';
 import KitChecklist from './KitChecklist';
 import ReadinessChart from './ReadinessChart';
+import RaceResult from './RaceResult';
+import RaceWeather from './RaceWeather';
+import RaceAnalysis from './RaceAnalysis';
+import RaceResults from './RaceResults';
+import RaceNoteCard from './RaceNoteCard';
+import { getRaceSessionBySlug, getCompletionRefForSession } from '@/data/plan-sessions';
+import { getRaceAnalysis } from '@/data/race-analyses';
+import { getRaceResult } from '@/data/race-results';
+import { getRaceNote } from '@/data/race-notes';
 
 function daysUntil(dateStr: string): number {
   const target = new Date(dateStr + 'T00:00:00');
@@ -109,6 +118,19 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   //    (fitness 50 / form 50), swapped for real data once day 1 lands.
   const seed = wellness.form;
   const daysToGo = raceDate ? daysUntil(raceDate) : null;
+  // Past race → post-race mode: lead with the result, tuck prep into a reference accordion.
+  const isPast = daysToGo != null && daysToGo < 0;
+
+  // Post-race extras (coach analysis, full results, notes, whether a run is synced).
+  let post: { analysis: Awaited<ReturnType<typeof getRaceAnalysis>>; result: Awaited<ReturnType<typeof getRaceResult>>; note: string; canAnalyse: boolean } | null = null;
+  if (isPast) {
+    const rs = await getRaceSessionBySlug(slug);
+    const [analysis, result, note, compRef] = await Promise.all([
+      getRaceAnalysis(slug), getRaceResult(slug), getRaceNote(slug),
+      rs ? getCompletionRefForSession(rs.id) : Promise.resolve(null),
+    ]);
+    post = { analysis, result, note, canAnalyse: !!compRef };
+  }
   const planStart = planWeeks[0]?.date_from ?? null;
   const planStarted = planStart ? todayStr >= planStart : true;
 
@@ -178,7 +200,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         <div className="rounded-[18px] overflow-hidden border border-fog mt-[10px]">
           <div className="px-[22px] py-[20px] flex items-start justify-between gap-6" style={{ background: RACE_PRIORITY_COLOR[guide.priority] ?? RACE_PRIORITY_COLOR.A }}>
             <div>
-              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/80">{guide.priority}-Race · Guide</span>
+              <span className="font-mono text-[12px] tracking-[.16em] uppercase text-bone/80">{guide.priority}-Race · {isPast ? 'Result' : 'Guide'}</span>
               <h1 className="font-display font-extrabold text-[30px] text-bone leading-[1.05] mt-[2px]">{guide.eventName}</h1>
               <p className="text-[13px] text-bone/85 mt-[5px]">{guide.region}{raceDateLong ? ` · ${raceDateLong}` : ''}</p>
             </div>
@@ -206,6 +228,24 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
         <p className="text-[15px] text-ink leading-relaxed mt-[18px]">{guide.summary}</p>
 
+        {/* Post-race: the result + per-km splits lead, then weather, coach, results, notes. */}
+        {isPast && post && (
+          <div className="mt-[24px] flex flex-col gap-[24px]">
+            <RaceResult slug={slug} />
+            <RaceWeather
+              slug={slug}
+              lat={guide.start.lat}
+              lng={guide.start.lng}
+              dateISO={raceDate}
+              seasonal={guide.seasonalWeather}
+              raceDateLabel={raceDateShort}
+            />
+            <RaceAnalysis slug={slug} analysis={post.analysis} canAnalyse={post.canAnalyse} />
+            <RaceResults slug={slug} result={post.result} />
+            <RaceNoteCard slug={slug} raceDate={raceDate} initialNote={post.note} />
+          </div>
+        )}
+
         {/* ── Course ── */}
         <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
           <RouteMap title="Course" parsed={parsed} checkpoints={guide.checkpoints} totalKm={guide.distanceKm} />
@@ -223,6 +263,16 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
             </div>
           </div>
         </div>
+
+        {/* Pre-race sections render inline; post-race they collapse into a
+            "Race prep (reference)" accordion — available, not the headline. */}
+        <details open={!isPast} className="mt-[24px] group">
+          <summary className={isPast
+            ? 'cursor-pointer list-none [&::-webkit-details-marker]:hidden text-[11px] uppercase font-bold text-stone hover:text-ink transition-colors'
+            : 'hidden'} style={{ letterSpacing: '.07em' }}>
+            Race prep · reference
+            <span className="inline-block ml-[6px] group-open:rotate-90 transition-transform">▸</span>
+          </summary>
 
         {/* ── Targets & readiness ── */}
         <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
@@ -313,6 +363,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               </div>
           );
         })()}
+        </details>
       </div>
     </>
   );

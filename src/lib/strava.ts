@@ -204,6 +204,23 @@ async function computeForActivity(
   };
 }
 
+// Recompute per-segment splits/HR/NGP for a single already-synced completion
+// against a (possibly changed) structure — e.g. after upgrading a RACE session to
+// a per-km structure for the post-race view. Reuses the sync's stream+compute
+// path. Caller passes the completion id + strava id + the target structure.
+export async function recomputeCompletionSegments(
+  completionId: string, stravaActivityId: number, structure: unknown[] | null,
+): Promise<boolean> {
+  const token = await getValidAccessToken();
+  if (!token) return false;
+  const seg = await computeForActivity(stravaActivityId, structure, token);
+  if (!seg) return false;
+  await updateCompletedWorkout(completionId, {
+    segment_actuals: seg.pace, segment_hr: seg.hr, actual_ngp_min_km: seg.ngpMinKm,
+  });
+  return true;
+}
+
 const BACKFILL_LIMIT = 50;
 
 // "H:MM" estimated_duration → minutes (e.g. "0:10" → 10). Null when blank/bad.
