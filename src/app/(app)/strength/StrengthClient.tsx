@@ -11,7 +11,11 @@ import {
 } from '@/data/strength';
 import { applyLegsFeel, type SessionModifier, type LegsFeel } from '@/data/strength-context-rules';
 import type { StrengthContext } from '@/data/strength-context';
-import { saveSession } from './actions';
+import {
+  getExerciseEffect, NIGGLE_AREAS, SEVERITY_LABEL,
+  type ActiveNiggle, type NiggleArea, type NiggleSeverity,
+} from '@/data/strength-injuries';
+import { saveSession, addNiggle, setNiggleActive } from './actions';
 
 export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean }
 
@@ -68,7 +72,7 @@ function SecLabel({ children, suffix, className = '' }: { children: React.ReactN
   );
 }
 
-export default function StrengthClient({ exercises, history, stateMaps, context }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext }) {
+export default function StrengthClient({ exercises, history, stateMaps, context, niggles }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext; niggles: ActiveNiggle[] }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
   const [intent, setIntent] = useState<SessionIntent>(context.suggestion.intent);
@@ -108,9 +112,27 @@ export default function StrengthClient({ exercises, history, stateMaps, context 
 
   const ctxFor = (ex: Exercise): ResolveCtx => {
     const s = stateRecord[ex.id];
-    return { state: s ?? null, modifier: modLite };
+    const eff = niggles.length ? getExerciseEffect(ex, niggles) : null;
+    return {
+      state: s ?? null,
+      modifier: modLite,
+      excluded: eff ? eff.effect === 'exclude' || eff.effect === 'substitute' : false,
+      niggleLoadFactor: eff && eff.effect === 'load_reduction' ? eff.loadFactor : 1,
+    };
   };
   const resolve = (ex: Exercise) => resolveIntentConfig(ex, intent, duration, ctxFor(ex));
+
+  // ── niggles ──
+  const [addingNiggle, setAddingNiggle] = useState(false);
+  const [niggleArea, setNiggleArea] = useState<NiggleArea>('knee');
+  const [niggleSeverity, setNiggleSeverity] = useState<NiggleSeverity>('mild');
+  function submitNiggle() {
+    start(async () => { await addNiggle(niggleArea, niggleSeverity, null); setAddingNiggle(false); router.refresh(); });
+  }
+  function resolveNiggle(id: string) {
+    start(async () => { await setNiggleActive(id, false); router.refresh(); });
+  }
+  const niggleAreaLabel = (a: NiggleArea) => NIGGLE_AREAS.find(n => n.key === a)?.label ?? a;
 
   function build() {
     const ctxMap = new Map<number, ResolveCtx>();
@@ -226,6 +248,48 @@ export default function StrengthClient({ exercises, history, stateMaps, context 
           })}
         </div>
 
+        {/* Niggles — persistent, optional. Active ones auto-adjust every build. */}
+        <SecLabel className="mt-[18px]" suffix="optional">Niggles</SecLabel>
+        <div className="flex flex-wrap gap-[7px] items-center">
+          {niggles.map(n => (
+            <span key={n.id} className="inline-flex items-center gap-[6px] text-[12px] font-semibold rounded-[20px] border border-oxblood/40 bg-oxblood-soft text-ink" style={{ padding: '6px 10px' }}>
+              {niggleAreaLabel(n.bodyArea)} · {SEVERITY_LABEL[n.severity]}
+              <button type="button" onClick={() => resolveNiggle(n.id)} aria-label={`Resolve ${niggleAreaLabel(n.bodyArea)}`}
+                className="text-stone hover:text-oxblood leading-none text-[14px]">×</button>
+            </span>
+          ))}
+          {!addingNiggle && (
+            <button type="button" onClick={() => setAddingNiggle(true)}
+              className="text-[12px] font-semibold rounded-[20px] border border-dashed border-fog text-stone hover:text-ink" style={{ padding: '6px 12px' }}>
+              + Add niggle
+            </button>
+          )}
+        </div>
+        {addingNiggle && (
+          <div className="mt-[8px] border border-fog rounded-[12px] bg-paper p-[12px]">
+            <div className="flex flex-wrap gap-[6px] mb-[8px]">
+              {NIGGLE_AREAS.map(a => (
+                <button key={a.key} type="button" onClick={() => setNiggleArea(a.key)} aria-pressed={niggleArea === a.key}
+                  className={`text-[12px] font-semibold rounded-[16px] border transition-colors ${niggleArea === a.key ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                  style={{ padding: '5px 10px' }}>{a.label}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-[8px]">
+              <div className="flex gap-[6px]">
+                {(['mild', 'moderate', 'severe'] as NiggleSeverity[]).map(s => (
+                  <button key={s} type="button" onClick={() => setNiggleSeverity(s)} aria-pressed={niggleSeverity === s}
+                    className={`text-[12px] font-semibold rounded-[16px] border transition-colors ${niggleSeverity === s ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                    style={{ padding: '5px 10px' }}>{SEVERITY_LABEL[s]}</button>
+                ))}
+              </div>
+              <button type="button" onClick={submitNiggle} disabled={pending}
+                className="ml-auto text-[12px] font-bold rounded-[16px] bg-oxblood text-bone px-[12px] py-[6px] disabled:opacity-50">Log</button>
+              <button type="button" onClick={() => setAddingNiggle(false)}
+                className="text-[12px] text-stone px-[6px]">Cancel</button>
+            </div>
+          </div>
+        )}
+
         {/* Legs check — auto-shown only when the plan already suggests fatigue. */}
         {context.fatigueLikely && (
           <>
@@ -319,6 +383,15 @@ export default function StrengthClient({ exercises, history, stateMaps, context 
           <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
             {modifier.reasons.join(' · ')}
             {modifier.loadScale !== 1 && <> — loads ~{Math.round(modifier.loadScale * 100)}%</>}
+          </div>
+        </div>
+      )}
+
+      {niggles.length > 0 && (
+        <div className="mb-[14px] rounded-[12px] border border-oxblood/30 bg-oxblood-soft px-[14px] py-[10px]">
+          <div className="text-[11px] uppercase font-bold text-oxblood" style={{ letterSpacing: '.07em' }}>Working around</div>
+          <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+            {niggles.map(n => niggleAreaLabel(n.bodyArea)).join(', ')} — risky moves dropped or lightened
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { listStrengthHistory } from '@/data/strength-sessions';
 import { loadBuilderStateMaps } from '@/data/strength-progression';
 import { getStrengthContext } from '@/data/strength-context';
+import { listActiveNiggles } from '@/data/strength-niggles';
 import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
 
 type HistoryRow = {
@@ -13,10 +14,11 @@ type HistoryRow = {
 };
 
 export default async function StrengthPage() {
-  const [raw, stateMaps, context] = await Promise.all([
+  const [raw, stateMaps, context, niggles] = await Promise.all([
     listStrengthHistory(6) as Promise<HistoryRow[]>,
     loadBuilderStateMaps(),
     getStrengthContext(),
+    listActiveNiggles(),
   ]);
   const history: HistoryItem[] = raw.map(s => {
     const count = s.strength_session_exercises?.[0]?.count ?? 0;
@@ -33,7 +35,7 @@ export default async function StrengthPage() {
 
   return (
     <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[760px]">
-      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} context={context} />
+      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} context={context} niggles={niggles} />
     </div>
   );
 }

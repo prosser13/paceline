@@ -7,6 +7,8 @@ import {
   markStrengthSessionComplete, deleteStrengthSession,
 } from '@/data/strength-sessions';
 import { evaluateProgressionAfterSession, promoteOverride } from '@/data/strength-progression';
+import { insertNiggle, setNiggleActiveRow } from '@/data/strength-niggles';
+import type { NiggleArea, NiggleSeverity } from '@/data/strength-injuries';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { revalidatePath } from 'next/cache';
 
@@ -130,6 +132,21 @@ export async function completeSession(sessionId: string) {
 export async function keepOverrideGoingForward(sessionExerciseId: string) {
   await requireUser();
   await promoteOverride(sessionExerciseId);
+  revalidatePath('/strength');
+  return { ok: true as const };
+}
+
+// ── niggles ──────────────────────────────────────────────────
+export async function addNiggle(area: NiggleArea, severity: NiggleSeverity, note: string | null) {
+  await requireUser();
+  await insertNiggle(area, severity, note && note.trim() ? note.trim() : null);
+  revalidatePath('/strength');
+  return { ok: true as const };
+}
+
+export async function setNiggleActive(id: string, active: boolean) {
+  await requireUser();
+  await setNiggleActiveRow(id, active);
   revalidatePath('/strength');
   return { ok: true as const };
 }

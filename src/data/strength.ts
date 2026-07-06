@@ -62,10 +62,11 @@ export interface ModifierLite {
 
 // Optional context threaded through resolveIntentConfig. Each field owns one
 // layer of the resolver; all optional so existing callers are unaffected.
-// (niggles arrive in a later phase.)
 export interface ResolveCtx {
   state?: ExerciseStateLite | null;
   modifier?: ModifierLite | null;
+  excluded?: boolean;                // niggle says drop this exercise from selection
+  niggleLoadFactor?: number;         // niggle load reduction (< 1)
 }
 
 const roundHalf = (n: number): number => Math.round(n * 2) / 2;
@@ -161,6 +162,11 @@ export function resolveIntentConfig(
       weightKg: out.weightKg != null && out.weightKg > 0 ? roundHalf(out.weightKg * m.loadScale) : out.weightKg,
       sets: Math.max(1, out.sets + m.setBias),
     };
+  }
+
+  // Layer 4 — niggle load reduction (weight only).
+  if (ctx?.niggleLoadFactor != null && ctx.niggleLoadFactor < 1 && out.weightKg != null && out.weightKg > 0) {
+    out = { ...out, weightKg: roundHalf(out.weightKg * ctx.niggleLoadFactor) };
   }
   return out;
 }
@@ -259,7 +265,9 @@ export function buildSession(
     .sort((a, b) => b.key - a.key)
     .map(x => x.ex);
 
-  const supported = allExercises.filter(ex => ex.supportedIntents.includes(intent));
+  // Drop niggle-excluded exercises up front (the fill naturally substitutes).
+  const notExcluded = (ex: Exercise) => !ctxByExercise?.get(ex.id)?.excluded;
+  const supported = allExercises.filter(ex => ex.supportedIntents.includes(intent) && notExcluded(ex));
   const inFocus = (ex: Exercise) => groups.length === 0
     || groups.includes(ex.group) || ex.additionalGroups.some(g => groups.includes(g));
 
