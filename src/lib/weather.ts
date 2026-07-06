@@ -43,12 +43,12 @@ interface OpenMeteoResponse {
   hourly?: {
     time: string[];
     temperature_2m: number[];
-    apparent_temperature: number[];
-    precipitation: number[];
-    precipitation_probability: number[];
+    apparent_temperature?: number[];       // archive/ERA5 may omit
+    precipitation?: number[];
+    precipitation_probability?: number[];  // forecast-only
     weather_code: number[];
     wind_speed_10m: number[];
-    wind_gusts_10m: number[];
+    wind_gusts_10m?: number[];
   };
 }
 
@@ -59,30 +59,10 @@ function within16Days(dateISO: string): boolean {
   return days >= -1 && days <= 16;
 }
 
-export async function getRaceForecast(
-  lat: number,
-  lng: number,
-  dateISO: string,
-): Promise<RaceForecast | null> {
-  if (!within16Days(dateISO)) return null;
-
-  const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-    `&hourly=temperature_2m,apparent_temperature,precipitation,precipitation_probability,` +
-    `weather_code,wind_speed_10m,wind_gusts_10m` +
-    `&wind_speed_unit=kmh&timezone=Europe%2FLondon` +
-    `&start_date=${dateISO}&end_date=${dateISO}`;
-
-  let json: OpenMeteoResponse;
-  try {
-    // Revalidate every 6 hours — the forecast updates a few times a day.
-    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
-    if (!res.ok) return null;
-    json = (await res.json()) as OpenMeteoResponse;
-  } catch {
-    return null;
-  }
-
+// Map an Open-Meteo hourly response (forecast OR archive — same field names) into
+// a RaceForecast. Archive (ERA5) omits precipitation_probability and can omit
+// apparent_temperature, so both are read defensively.
+function mapOpenMeteo(json: OpenMeteoResponse, dateISO: string): RaceForecast | null {
   const h = json.hourly;
   if (!h?.time?.length) return null;
 
@@ -94,11 +74,11 @@ export async function getRaceForecast(
       time: h.time[i],
       hourLabel: h.time[i].slice(11, 16),
       tempC: Math.round(h.temperature_2m[i]),
-      feelsC: Math.round(h.apparent_temperature[i]),
+      feelsC: Math.round(h.apparent_temperature?.[i] ?? h.temperature_2m[i]),
       windKph: Math.round(h.wind_speed_10m[i]),
-      gustKph: Math.round(h.wind_gusts_10m[i]),
-      precipMm: h.precipitation[i],
-      precipProb: Math.round(h.precipitation_probability[i] ?? 0),
+      gustKph: Math.round(h.wind_gusts_10m?.[i] ?? h.wind_speed_10m[i]),
+      precipMm: h.precipitation?.[i] ?? 0,
+      precipProb: Math.round(h.precipitation_probability?.[i] ?? 0),
       code: h.weather_code[i],
     });
   }
@@ -119,4 +99,47 @@ export async function getRaceForecast(
     `${maxWindKph >= 30 ? `, windy (gusts to ${Math.max(...hours.map(x => x.gustKph))} km/h)` : ''}`;
 
   return { date: dateISO, hours, high, low, maxWindKph, maxPrecipProb, summary };
+}
+
+const HOURLY_KEYS =
+  'temperature_2m,apparent_temperature,precipitation,precipitation_probability,' +
+  'weather_code,wind_speed_10m,wind_gusts_10m';
+
+async function fetchOpenMeteo(base: string, lat: number, lng: number, dateISO: string): Promise<OpenMeteoResponse | null> {
+  const url = `${base}?latitude=${lat}&longitude=${lng}&hourly=${HOURLY_KEYS}` +
+    `&wind_speed_unit=kmh&timezone=Europe%2FLondon&start_date=${dateISO}&end_date=${dateISO}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 60 * 60 * 6 } });
+    if (!res.ok) return null;
+    return (await res.json()) as OpenMeteoResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function getRaceForecast(
+  lat: number,
+  lng: number,
+  dateISO: string,
+): Promise<RaceForecast | null> {
+  if (!within16Days(dateISO)) return null;
+  const json = await fetchOpenMeteo('https://api.open-meteo.com/v1/forecast', lat, lng, dateISO);
+  return json ? mapOpenMeteo(json, dateISO) : null;
+}
+
+// Race-day weather for a PAST date (post-race). Recent days come from the forecast
+// endpoint (which serves the last few days); older dates from the ERA5 archive,
+// which lags ~5 days. Returns the forecast + which source it came from (so it can
+// be snapshotted).
+export async function getRaceWeatherHistory(
+  lat: number, lng: number, dateISO: string,
+): Promise<{ forecast: RaceForecast; source: 'forecast' | 'archive' } | null> {
+  const daysAgo = (Date.now() - new Date(dateISO + 'T00:00:00').getTime()) / 86400000;
+  const useArchive = daysAgo > 5;
+  const base = useArchive
+    ? 'https://archive-api.open-meteo.com/v1/archive'
+    : 'https://api.open-meteo.com/v1/forecast';
+  const json = await fetchOpenMeteo(base, lat, lng, dateISO);
+  const forecast = json ? mapOpenMeteo(json, dateISO) : null;
+  return forecast ? { forecast, source: useArchive ? 'archive' : 'forecast' } : null;
 }

@@ -8,15 +8,17 @@ export default function WeatherPanel({
   forecast,
   seasonal,
   raceDateLabel,
+  past = false,
 }: {
   forecast: RaceForecast | null;
   seasonal: string;
   raceDateLabel: string | null;
+  past?: boolean;   // post-race: "on the day" framing + no "forecast coming" note
 }) {
   return (
     <div className={cardClass}>
       <div className="px-[18px] py-[15px]">
-        <CardTitle right={raceDateLabel ?? undefined}>Race-day weather</CardTitle>
+        <CardTitle right={raceDateLabel ?? undefined}>{past ? 'Weather on the day' : 'Race-day weather'}</CardTitle>
         {forecast ? (
           <>
             <div className="flex items-baseline gap-[10px] mb-[4px]">
@@ -55,7 +57,9 @@ export default function WeatherPanel({
             </p>
             <p className="text-[14px] text-ink leading-relaxed">{seasonal}</p>
             <p className="font-mono text-[11px] text-stone mt-[12px] border-t border-fog pt-[10px]">
-              A live forecast appears here automatically within ~16 days of race day.
+              {past
+                ? 'Actual conditions weren’t recorded for this race.'
+                : 'A live forecast appears here automatically within ~16 days of race day.'}
             </p>
           </>
         )}

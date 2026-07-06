@@ -18,7 +18,7 @@ import type { PlanSession, CompletedToday } from './data';
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function SessionHero({
-  label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false,
+  label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false, defaultOpen,
 }: {
   label: string;
   session: PlanSession;
@@ -29,6 +29,7 @@ export default function SessionHero({
   accentKey?: 'oxblood' | 'marine' | 'fern';
   showAdjust?: boolean;
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
+  defaultOpen?: boolean;  // override the open state (post-race lead: show splits up front)
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   const { segActuals, segHr } = wholeRunActuals(
@@ -80,7 +81,7 @@ export default function SessionHero({
   const accent = light ? RUN : RUN_B;
 
   return (
-    <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
+    <details open={defaultOpen ?? !isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
       <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer" style={{ padding: '22px 24px' }}>
         <div className="flex items-center justify-between">
           <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px]" style={{ letterSpacing: '.06em', color: accent }}>

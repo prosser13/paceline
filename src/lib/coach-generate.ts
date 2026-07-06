@@ -103,3 +103,65 @@ export async function generateEveningReview(ctx: PlanContext, memory: string): P
   // Never wipe memory on a thin response — fall back to the prior summary.
   return { headline, bodyMd, updatedContext: updatedContext || memory };
 }
+
+// ── Race debrief (manual "Analyse this race" button) ──────────
+
+const RACE_SYSTEM = `You are the athlete's endurance running coach, writing a debrief of a race they just ran.
+
+Voice and stance:
+- Direct, warm, honest — a real coach, not a cheerleader. Grade the execution against the pre-race game plan and the target.
+- Concise: 2–4 short paragraphs, light markdown (**bold** for emphasis; no headings).
+- Ground every claim ONLY in the data provided (target vs actual, the per-km splits, weather, full-results context, the athlete's notes, the pre-race plan). Never invent paces or numbers.
+
+What to cover, briefly:
+- The result vs the target/goal tiers: did they hit it, and by how much.
+- Pacing execution from the per-km splits: even/positive/negative split, where it was won or lost, any blow-up or strong finish (name the kilometres).
+- Conditions and context (weather, the field/position) where relevant.
+- One or two concrete, forward-looking takeaways for the next race.
+
+Return a JSON object with exactly:
+- "headline": one punchy line summarising the race (no markdown).
+- "body_md": the debrief, 2–4 short paragraphs, light markdown.`;
+
+const RACE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { headline: { type: 'string' }, body_md: { type: 'string' } },
+  required: ['headline', 'body_md'],
+} as const;
+
+export async function generateRaceAnalysis(input: Record<string, unknown>): Promise<{ headline: string; bodyMd: string }> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 3000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: RACE_SCHEMA } },
+      system: RACE_SYSTEM,
+      messages: [{ role: 'user', content: `Analyse this race.\n\n── Race data (JSON) ──\n${JSON.stringify(input)}` }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (data?.stop_reason === 'refusal') throw new Error('Claude refused the race-analysis request');
+  const text: string = (data?.content as Block[] | undefined ?? [])
+    .filter(b => b.type === 'text').map(b => b.text ?? '').join('');
+
+  let parsed: { headline?: unknown; body_md?: unknown };
+  try { parsed = JSON.parse(text); } catch { throw new Error(`Race analysis returned non-JSON: ${text.slice(0, 200)}`); }
+  const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
+  const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
+  if (!headline || !bodyMd) throw new Error('Race analysis returned an empty headline or body');
+  return { headline, bodyMd };
+}
+
+export const COACH_MODEL_NAME = MODEL;

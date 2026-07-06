@@ -263,6 +263,30 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
   return { cw: data, ps };
 }
 
+// The RACE plan_session for a race guide slug (races are planned sessions), or
+// null. Shaped for SessionHero's PlanSession. Latest by date if several.
+export async function getRaceSessionBySlug(slug: string) {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, session_type, activity_type, name, description, distance_km, target_pace, target_pace_end, estimated_tss, estimated_duration, rationale, status, intensity, profile_shape, structure')
+    .eq('race_slug', slug)
+    .eq('session_type', 'RACE')
+    .order('scheduled_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
+// The completion's id + strava id for a session (for a targeted split recompute).
+export async function getCompletionRefForSession(planSessionId: string) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, strava_activity_id, segment_actuals')
+    .eq('plan_session_id', planSessionId)
+    .maybeSingle();
+  return data;
+}
+
 // The completion for one planned session, or null.
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
