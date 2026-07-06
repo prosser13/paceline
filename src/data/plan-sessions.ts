@@ -277,6 +277,26 @@ export async function getRaceSessionBySlug(slug: string) {
   return data;
 }
 
+// Finish time + date for every race that has a completion, keyed by race_slug —
+// for the races index (archived races show their result).
+export async function listRaceFinishes(): Promise<Record<string, { secs: number | null; date: string | null }>> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('actual_duration_secs, actual_duration_mins, completed_date, plan_sessions!inner(race_slug, session_type, scheduled_date)')
+    .eq('plan_sessions.session_type', 'RACE');
+  const out: Record<string, { secs: number | null; date: string | null }> = {};
+  for (const row of data ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ps: any = Array.isArray(row.plan_sessions) ? row.plan_sessions[0] : row.plan_sessions;
+    const slug = ps?.race_slug as string | null;
+    if (!slug) continue;
+    const secs = row.actual_duration_secs != null ? Number(row.actual_duration_secs)
+      : row.actual_duration_mins != null ? Math.round(Number(row.actual_duration_mins) * 60) : null;
+    out[slug] = { secs, date: (ps?.scheduled_date as string | null) ?? (row.completed_date as string | null) };
+  }
+  return out;
+}
+
 // The completion's id + strava id for a session (for a targeted split recompute).
 export async function getCompletionRefForSession(planSessionId: string) {
   const { data } = await supabaseAdmin

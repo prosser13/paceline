@@ -106,18 +106,17 @@ export async function generateEveningReview(ctx: PlanContext, memory: string): P
 
 // ── Race debrief (manual "Analyse this race" button) ──────────
 
-const RACE_SYSTEM = `You are the athlete's endurance running coach, writing a debrief of a race they just ran.
+const RACE_SYSTEM = `You are the athlete's endurance running coach, debriefing a race they just ran.
 
-Voice and stance:
-- Direct, warm, honest — a real coach, not a cheerleader. Grade the execution against the pre-race game plan and the target.
-- Concise: 2–4 short paragraphs, light markdown (**bold** for emphasis; no headings).
-- Ground every claim ONLY in the data provided (target vs actual, the per-km splits, weather, full-results context, the athlete's notes, the pre-race plan). Never invent paces or numbers.
+Voice: direct, warm, honest — a real coach, not a cheerleader. 2–4 short paragraphs, light markdown (**bold** only; no headings).
 
-What to cover, briefly:
-- The result vs the target/goal tiers: did they hit it, and by how much.
-- Pacing execution from the per-km splits: even/positive/negative split, where it was won or lost, any blow-up or strong finish (name the kilometres).
-- Conditions and context (weather, the field/position) where relevant.
-- One or two concrete, forward-looking takeaways for the next race.
+Grounding (important):
+- Judge the race from the DATA, not from marketing. If a "course_blurb" is supplied it is promotional copy — do NOT repeat its claims (e.g. calling a course "PB-friendly") as fact. Assess the course yourself from distance_km, ascent_m and terrain (e.g. ~50 m of climb over 10 km with a mid-race rise is mildly undulating, not pancake-flat).
+- Weigh HEART RATE heavily. Read per_km_hr alongside per_km_splits to judge how hard the effort truly was, whether they paced by effort, where they redlined, and where there was more in the tank. Effort is HR × pace, not pace alone.
+- The athlete's notes and pre-screen answers are honest but inherently self-biased — both flatteringly and self-critically. Use them, but sanity-check against the pace/HR/splits and say so plainly when the data disagrees with the self-assessment.
+- Never invent paces, HR or numbers not in the data. If a key fact is missing and it would materially change your read, say what you'd want to know rather than guessing.
+
+Cover briefly: result vs the target/goal tiers; pacing + effort execution from the per-km splits AND HR (name the kilometres; even/positive/negative split; any blow-up, redline, or strong finish); conditions/context (weather, field/position); one or two concrete takeaways for next time.
 
 Return a JSON object with exactly:
 - "headline": one punchy line summarising the race (no markdown).
