@@ -29,10 +29,11 @@ export async function saveSession(
   duration: string,
   groups: string[],
   exercises: SaveSessionExercise[],
+  extra?: { planSessionId?: string | null; modifier?: unknown },
 ): Promise<{ ok: true; shortId: string } | { ok: false; error: string }> {
   await requireUser();
 
-  const sess = await createStrengthSession(intent, duration, groups);
+  const sess = await createStrengthSession(intent, duration, groups, extra);
   if (!sess) return { ok: false, error: 'Could not save session' };
 
   const rows = exercises.map((e, i) => ({

@@ -149,13 +149,17 @@ const LIB = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
 // it has already produced events, it does nothing on a re-run.
 export async function evaluateProgressionAfterSession(sessionId: string): Promise<void> {
   const { data: session } = await supabaseAdmin
-    .from('strength_sessions').select('id, intent').eq('id', sessionId).maybeSingle();
+    .from('strength_sessions').select('id, intent, modifier').eq('id', sessionId).maybeSingle();
   if (!session) return;
 
   const si = stateIntentFor(session.intent);
   if (!si) return; // mobility sessions don't progress
 
   if (await sessionHasEvents(sessionId)) return;
+
+  // A deliberately-light session (taper, recovery, sore legs) still allows
+  // down-regulation, but shouldn't ratchet load up off an easy rating.
+  const deliberatelyLight = !!(session.modifier as { deliberatelyLight?: boolean } | null)?.deliberatelyLight;
 
   const [{ data: exRows }, tuning, mode, stateRows] = await Promise.all([
     supabaseAdmin.from('strength_session_exercises')
@@ -185,7 +189,7 @@ export async function evaluateProgressionAfterSession(sessionId: string): Promis
       state: prev
         ? { currentReps: prev.current_reps, currentWeightKg: before.weightKg, consecutiveEasy: prev.consecutive_easy }
         : null,
-      tuning,
+      tuning, deliberatelyLight,
     });
 
     const streakChanged = (prev?.consecutive_easy ?? 0) !== result.consecutiveEasy;

@@ -9,6 +9,8 @@ import {
   SESSION_INTENT_CONFIG, DURATION_CONFIG, MUSCLE_GROUPS, GROUP_LABEL,
   buildSession, resolveIntentConfig, formatWeight,
 } from '@/data/strength';
+import { applyLegsFeel, type SessionModifier, type LegsFeel } from '@/data/strength-context-rules';
+import type { StrengthContext } from '@/data/strength-context';
 import { saveSession } from './actions';
 
 export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean }
@@ -18,6 +20,11 @@ export interface StateMaps {
   strength: Record<number, ExerciseStateLite>;
   maintain: Record<number, ExerciseStateLite>;
 }
+
+const LEGS_FEEL: { key: LegsFeel; label: string }[] = [
+  { key: 'fresh', label: 'Fresh' }, { key: 'normal', label: 'Normal' },
+  { key: 'heavy', label: 'Heavy' }, { key: 'sore', label: 'Sore' },
+];
 
 const INTENTS: SessionIntent[] = ['strength', 'maintain', 'mobility', 'balanced'];
 const DURATIONS: Duration[] = ['short', 'medium', 'long'];
@@ -61,12 +68,13 @@ function SecLabel({ children, suffix, className = '' }: { children: React.ReactN
   );
 }
 
-export default function StrengthClient({ exercises, history, stateMaps }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps }) {
+export default function StrengthClient({ exercises, history, stateMaps, context }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
-  const [intent, setIntent] = useState<SessionIntent>('maintain');
-  const [duration, setDuration] = useState<Duration>('medium');
+  const [intent, setIntent] = useState<SessionIntent>(context.suggestion.intent);
+  const [duration, setDuration] = useState<Duration>(context.suggestion.duration);
   const [groups, setGroups] = useState<MuscleGroup[]>([]);
+  const [legsFeel, setLegsFeel] = useState<LegsFeel | null>(null);
   const [session, setSession] = useState<SessionExercise[]>([]);
   const [swapFor, setSwapFor] = useState<number | null>(null);  // row index showing swap options
   const [showPicker, setShowPicker] = useState(false);
@@ -81,6 +89,15 @@ export default function StrengthClient({ exercises, history, stateMaps }: { exer
     [exercises, intent],
   );
 
+  // Effective auto-regulation modifier: the plan-derived base, plus the optional
+  // legs-feel tap on top. Drives load/reps/sets scaling and selection bias.
+  const modifier = useMemo<SessionModifier>(
+    () => (legsFeel ? applyLegsFeel(context.modifier, legsFeel) : context.modifier),
+    [context.modifier, legsFeel],
+  );
+  const modLite = { loadScale: modifier.loadScale, repsScale: modifier.repsScale, setBias: modifier.setBias };
+  const isAdjusted = modifier.loadScale !== 1 || modifier.setBias !== 0 || modifier.groupBias !== 'none' || modifier.repsScale !== 1;
+
   // Saved progression state for the current intent (strength track, maintain
   // track, or none for mobility). Layered onto the library by resolveIntentConfig.
   const stateRecord = useMemo<Record<number, ExerciseStateLite>>(() => {
@@ -89,16 +106,16 @@ export default function StrengthClient({ exercises, history, stateMaps }: { exer
     return stateMaps.maintain;
   }, [intent, stateMaps]);
 
-  const ctxFor = (ex: Exercise): ResolveCtx | undefined => {
+  const ctxFor = (ex: Exercise): ResolveCtx => {
     const s = stateRecord[ex.id];
-    return s ? { state: s } : undefined;
+    return { state: s ?? null, modifier: modLite };
   };
   const resolve = (ex: Exercise) => resolveIntentConfig(ex, intent, duration, ctxFor(ex));
 
   function build() {
     const ctxMap = new Map<number, ResolveCtx>();
-    for (const [id, s] of Object.entries(stateRecord)) ctxMap.set(Number(id), { state: s });
-    setSession(buildSession(intent, duration, groups, exercises, Math.random, ctxMap));
+    for (const ex of exercises) ctxMap.set(ex.id, ctxFor(ex));
+    setSession(buildSession(intent, duration, groups, exercises, Math.random, ctxMap, { groupBias: modifier.groupBias }));
     setSwapFor(null);
     setShowPicker(false);
     setPhase('preview');
@@ -143,7 +160,7 @@ export default function StrengthClient({ exercises, history, stateMaps }: { exer
         sets: s.sets,
         repsValue: s.repsValue,
         weightKg: s.weightKg,
-      })));
+      })), { modifier: isAdjusted ? modifier : null });
       if (res.ok) router.push(`/strength/session/${res.shortId}`);
     });
   }
@@ -209,6 +226,38 @@ export default function StrengthClient({ exercises, history, stateMaps }: { exer
           })}
         </div>
 
+        {/* Legs check — auto-shown only when the plan already suggests fatigue. */}
+        {context.fatigueLikely && (
+          <>
+            <SecLabel className="mt-[18px]" suffix="optional">How do your legs feel?</SecLabel>
+            <div className="flex gap-[8px]">
+              {LEGS_FEEL.map(f => {
+                const on = legsFeel === f.key;
+                return (
+                  <button key={f.key} type="button" onClick={() => setLegsFeel(on ? null : f.key)} aria-pressed={on}
+                    className={`flex-1 text-center rounded-[12px] border transition-colors ${on ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                    style={{ padding: '9px' }}>
+                    <span className="text-[13px] font-semibold">{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Auto-regulation banner — what the plan/legs adjusted, and why. */}
+        {isAdjusted && modifier.reasons.length > 0 && (
+          <div className="mt-[16px] rounded-[12px] border border-fog bg-fog/25 px-[14px] py-[10px]">
+            <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.07em' }}>Auto-adjusted</div>
+            <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+              {modifier.reasons.join(' · ')}
+              {modifier.loadScale !== 1 && <> — loads ~{Math.round(modifier.loadScale * 100)}%</>}
+              {modifier.groupBias === 'upper' && <> · leaning upper-body</>}
+              {modifier.groupBias === 'mobility' && <> · leaning mobility</>}
+            </div>
+          </div>
+        )}
+
         <button type="button" onClick={build}
           className="w-full rounded-[24px] bg-strength text-white text-[14px] font-bold inline-flex items-center justify-center gap-[7px] hover:opacity-90 transition-opacity active:scale-[0.985]"
           style={{ padding: '12px 18px', marginTop: '18px' }}>
@@ -263,6 +312,16 @@ export default function StrengthClient({ exercises, history, stateMaps }: { exer
       <p className="text-stone text-[13px] mb-[14px]">
         {SESSION_INTENT_CONFIG[intent].label} · {DURATION_CONFIG[duration].minutes} min · {session.length} exercise{session.length === 1 ? '' : 's'}
       </p>
+
+      {isAdjusted && modifier.reasons.length > 0 && (
+        <div className="mb-[14px] rounded-[12px] border border-fog bg-fog/25 px-[14px] py-[10px]">
+          <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.07em' }}>Auto-adjusted</div>
+          <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+            {modifier.reasons.join(' · ')}
+            {modifier.loadScale !== 1 && <> — loads ~{Math.round(modifier.loadScale * 100)}%</>}
+          </div>
+        </div>
+      )}
 
       {/* Tools */}
       <div className="flex gap-[8px] mb-3">
