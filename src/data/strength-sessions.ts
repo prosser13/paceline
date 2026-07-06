@@ -49,11 +49,16 @@ export async function createStrengthSession(
   intent: string,
   duration: string,
   groups: string[],
+  extra?: { planSessionId?: string | null; modifier?: unknown },
 ): Promise<{ id: string; short_id: string } | null> {
   for (let attempt = 0; attempt < 2; attempt++) {
     const { data, error } = await supabaseAdmin
       .from('strength_sessions')
-      .insert({ short_id: genShortId(), intent, duration, groups })
+      .insert({
+        short_id: genShortId(), intent, duration, groups,
+        plan_session_id: extra?.planSessionId ?? null,
+        modifier: extra?.modifier ?? null,
+      })
       .select('id, short_id')
       .single();
     if (data) return data as { id: string; short_id: string };

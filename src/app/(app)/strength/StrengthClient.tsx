@@ -5,12 +5,30 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   type Exercise, type SessionExercise, type SessionIntent, type Duration, type MuscleGroup,
+  type ResolveCtx, type ExerciseStateLite,
   SESSION_INTENT_CONFIG, DURATION_CONFIG, MUSCLE_GROUPS, GROUP_LABEL,
-  buildSession, resolveIntentConfig,
+  buildSession, resolveIntentConfig, formatWeight,
 } from '@/data/strength';
-import { saveSession } from './actions';
+import { applyLegsFeel, type SessionModifier, type LegsFeel } from '@/data/strength-context-rules';
+import type { StrengthContext } from '@/data/strength-context';
+import {
+  getExerciseEffect, NIGGLE_AREAS, SEVERITY_LABEL,
+  type ActiveNiggle, type NiggleArea, type NiggleSeverity,
+} from '@/data/strength-injuries';
+import { saveSession, addNiggle, setNiggleActive } from './actions';
 
 export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean }
+
+// Per-intent saved progression state (matches BuilderStateMaps on the server).
+export interface StateMaps {
+  strength: Record<number, ExerciseStateLite>;
+  maintain: Record<number, ExerciseStateLite>;
+}
+
+const LEGS_FEEL: { key: LegsFeel; label: string }[] = [
+  { key: 'fresh', label: 'Fresh' }, { key: 'normal', label: 'Normal' },
+  { key: 'heavy', label: 'Heavy' }, { key: 'sore', label: 'Sore' },
+];
 
 const INTENTS: SessionIntent[] = ['strength', 'maintain', 'mobility', 'balanced'];
 const DURATIONS: Duration[] = ['short', 'medium', 'long'];
@@ -25,12 +43,12 @@ const INTENT_ICON: Record<SessionIntent, string> = {
 
 const pickRandom = <T,>(arr: T[]): T | undefined => arr[Math.floor(Math.random() * arr.length)];
 
-// Sets × reps, weight, and the muscle-group line (with an each-leg/side note).
+// Sets × reps, weight (with equipment tag), and the muscle-group line.
 function prescription(s: SessionExercise) {
   const rep = s.repsValue != null
     ? `${s.sets} × ${s.repsValue}${s.exercise.repsType === 'secs' ? ' s' : ''}`
     : `${s.sets} sets`;
-  const weight = s.weightKg != null && Number(s.weightKg) > 0 ? `${s.weightKg} kg` : null;
+  const weight = formatWeight(s.exercise, s.weightKg);
   const note = s.exercise.isSingleLeg ? (s.exercise.repsType === 'secs' ? ' · each side' : ' · each leg') : '';
   return { rep, weight, group: GROUP_LABEL[s.exercise.group] + note };
 }
@@ -54,12 +72,15 @@ function SecLabel({ children, suffix, className = '' }: { children: React.ReactN
   );
 }
 
-export default function StrengthClient({ exercises, history }: { exercises: Exercise[]; history: HistoryItem[] }) {
+export interface ProgressItem { id: string; text: string }
+
+export default function StrengthClient({ exercises, history, stateMaps, context, niggles, progress }: { exercises: Exercise[]; history: HistoryItem[]; stateMaps: StateMaps; context: StrengthContext; niggles: ActiveNiggle[]; progress: ProgressItem[] }) {
   const router = useRouter();
   const [phase, setPhase] = useState<'setup' | 'preview'>('setup');
-  const [intent, setIntent] = useState<SessionIntent>('maintain');
-  const [duration, setDuration] = useState<Duration>('medium');
+  const [intent, setIntent] = useState<SessionIntent>(context.suggestion.intent);
+  const [duration, setDuration] = useState<Duration>(context.suggestion.duration);
   const [groups, setGroups] = useState<MuscleGroup[]>([]);
+  const [legsFeel, setLegsFeel] = useState<LegsFeel | null>(null);
   const [session, setSession] = useState<SessionExercise[]>([]);
   const [swapFor, setSwapFor] = useState<number | null>(null);  // row index showing swap options
   const [showPicker, setShowPicker] = useState(false);
@@ -74,15 +95,58 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
     [exercises, intent],
   );
 
+  // Effective auto-regulation modifier: the plan-derived base, plus the optional
+  // legs-feel tap on top. Drives load/reps/sets scaling and selection bias.
+  const modifier = useMemo<SessionModifier>(
+    () => (legsFeel ? applyLegsFeel(context.modifier, legsFeel) : context.modifier),
+    [context.modifier, legsFeel],
+  );
+  const modLite = { loadScale: modifier.loadScale, repsScale: modifier.repsScale, setBias: modifier.setBias };
+  const isAdjusted = modifier.loadScale !== 1 || modifier.setBias !== 0 || modifier.groupBias !== 'none' || modifier.repsScale !== 1;
+
+  // Saved progression state for the current intent (strength track, maintain
+  // track, or none for mobility). Layered onto the library by resolveIntentConfig.
+  const stateRecord = useMemo<Record<number, ExerciseStateLite>>(() => {
+    if (intent === 'strength') return stateMaps.strength;
+    if (intent === 'mobility') return {};
+    return stateMaps.maintain;
+  }, [intent, stateMaps]);
+
+  const ctxFor = (ex: Exercise): ResolveCtx => {
+    const s = stateRecord[ex.id];
+    const eff = niggles.length ? getExerciseEffect(ex, niggles) : null;
+    return {
+      state: s ?? null,
+      modifier: modLite,
+      excluded: eff ? eff.effect === 'exclude' || eff.effect === 'substitute' : false,
+      niggleLoadFactor: eff && eff.effect === 'load_reduction' ? eff.loadFactor : 1,
+    };
+  };
+  const resolve = (ex: Exercise) => resolveIntentConfig(ex, intent, duration, ctxFor(ex));
+
+  // ── niggles ──
+  const [addingNiggle, setAddingNiggle] = useState(false);
+  const [niggleArea, setNiggleArea] = useState<NiggleArea>('knee');
+  const [niggleSeverity, setNiggleSeverity] = useState<NiggleSeverity>('mild');
+  function submitNiggle() {
+    start(async () => { await addNiggle(niggleArea, niggleSeverity, null); setAddingNiggle(false); router.refresh(); });
+  }
+  function resolveNiggle(id: string) {
+    start(async () => { await setNiggleActive(id, false); router.refresh(); });
+  }
+  const niggleAreaLabel = (a: NiggleArea) => NIGGLE_AREAS.find(n => n.key === a)?.label ?? a;
+
   function build() {
-    setSession(buildSession(intent, duration, groups, exercises));
+    const ctxMap = new Map<number, ResolveCtx>();
+    for (const ex of exercises) ctxMap.set(ex.id, ctxFor(ex));
+    setSession(buildSession(intent, duration, groups, exercises, Math.random, ctxMap, { groupBias: modifier.groupBias }));
     setSwapFor(null);
     setShowPicker(false);
     setPhase('preview');
   }
 
   function swapTo(i: number, ex: Exercise) {
-    const r = resolveIntentConfig(ex, intent, duration);
+    const r = resolve(ex);
     setSession(prev => prev.map((s, idx) => idx === i ? { exercise: ex, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg } : s));
     setSwapFor(null);
   }
@@ -95,14 +159,14 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
       const anyUnused = eligible.filter(ex => !used.has(ex.id));
       const choice = pickRandom(sameGroup.length ? sameGroup : anyUnused) ?? s.exercise;
       used.add(choice.id);
-      const r = resolveIntentConfig(choice, intent, duration);
+      const r = resolve(choice);
       return { exercise: choice, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg };
     }));
     setSwapFor(null);
   }
 
   function addExercise(ex: Exercise) {
-    const r = resolveIntentConfig(ex, intent, duration);
+    const r = resolve(ex);
     setSession(prev => [...prev, { exercise: ex, sets: r.sets, repsValue: r.repsValue, weightKg: r.weightKg }]);
   }
 
@@ -120,7 +184,7 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
         sets: s.sets,
         repsValue: s.repsValue,
         weightKg: s.weightKg,
-      })));
+      })), { modifier: isAdjusted ? modifier : null });
       if (res.ok) router.push(`/strength/session/${res.shortId}`);
     });
   }
@@ -186,12 +250,101 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
           })}
         </div>
 
+        {/* Niggles — persistent, optional. Active ones auto-adjust every build. */}
+        <SecLabel className="mt-[18px]" suffix="optional">Niggles</SecLabel>
+        <div className="flex flex-wrap gap-[7px] items-center">
+          {niggles.map(n => (
+            <span key={n.id} className="inline-flex items-center gap-[6px] text-[12px] font-semibold rounded-[20px] border border-oxblood/40 bg-oxblood-soft text-ink" style={{ padding: '6px 10px' }}>
+              {niggleAreaLabel(n.bodyArea)} · {SEVERITY_LABEL[n.severity]}
+              <button type="button" onClick={() => resolveNiggle(n.id)} aria-label={`Resolve ${niggleAreaLabel(n.bodyArea)}`}
+                className="text-stone hover:text-oxblood leading-none text-[14px]">×</button>
+            </span>
+          ))}
+          {!addingNiggle && (
+            <button type="button" onClick={() => setAddingNiggle(true)}
+              className="text-[12px] font-semibold rounded-[20px] border border-dashed border-fog text-stone hover:text-ink" style={{ padding: '6px 12px' }}>
+              + Add niggle
+            </button>
+          )}
+        </div>
+        {addingNiggle && (
+          <div className="mt-[8px] border border-fog rounded-[12px] bg-paper p-[12px]">
+            <div className="flex flex-wrap gap-[6px] mb-[8px]">
+              {NIGGLE_AREAS.map(a => (
+                <button key={a.key} type="button" onClick={() => setNiggleArea(a.key)} aria-pressed={niggleArea === a.key}
+                  className={`text-[12px] font-semibold rounded-[16px] border transition-colors ${niggleArea === a.key ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                  style={{ padding: '5px 10px' }}>{a.label}</button>
+              ))}
+            </div>
+            <div className="flex items-center gap-[8px]">
+              <div className="flex gap-[6px]">
+                {(['mild', 'moderate', 'severe'] as NiggleSeverity[]).map(s => (
+                  <button key={s} type="button" onClick={() => setNiggleSeverity(s)} aria-pressed={niggleSeverity === s}
+                    className={`text-[12px] font-semibold rounded-[16px] border transition-colors ${niggleSeverity === s ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                    style={{ padding: '5px 10px' }}>{SEVERITY_LABEL[s]}</button>
+                ))}
+              </div>
+              <button type="button" onClick={submitNiggle} disabled={pending}
+                className="ml-auto text-[12px] font-bold rounded-[16px] bg-oxblood text-bone px-[12px] py-[6px] disabled:opacity-50">Log</button>
+              <button type="button" onClick={() => setAddingNiggle(false)}
+                className="text-[12px] text-stone px-[6px]">Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {/* Legs check — auto-shown only when the plan already suggests fatigue. */}
+        {context.fatigueLikely && (
+          <>
+            <SecLabel className="mt-[18px]" suffix="optional">How do your legs feel?</SecLabel>
+            <div className="flex gap-[8px]">
+              {LEGS_FEEL.map(f => {
+                const on = legsFeel === f.key;
+                return (
+                  <button key={f.key} type="button" onClick={() => setLegsFeel(on ? null : f.key)} aria-pressed={on}
+                    className={`flex-1 text-center rounded-[12px] border transition-colors ${on ? 'bg-hero text-onhero border-hero' : 'bg-paper border-fog text-ink'}`}
+                    style={{ padding: '9px' }}>
+                    <span className="text-[13px] font-semibold">{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* Auto-regulation banner — what the plan/legs adjusted, and why. */}
+        {isAdjusted && modifier.reasons.length > 0 && (
+          <div className="mt-[16px] rounded-[12px] border border-fog bg-fog/25 px-[14px] py-[10px]">
+            <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.07em' }}>Auto-adjusted</div>
+            <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+              {modifier.reasons.join(' · ')}
+              {modifier.loadScale !== 1 && <> — loads ~{Math.round(modifier.loadScale * 100)}%</>}
+              {modifier.groupBias === 'upper' && <> · leaning upper-body</>}
+              {modifier.groupBias === 'mobility' && <> · leaning mobility</>}
+            </div>
+          </div>
+        )}
+
         <button type="button" onClick={build}
           className="w-full rounded-[24px] bg-strength text-white text-[14px] font-bold inline-flex items-center justify-center gap-[7px] hover:opacity-90 transition-opacity active:scale-[0.985]"
           style={{ padding: '12px 18px', marginTop: '18px' }}>
           <svg className="w-[16px] h-[16px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M13 2 3 14h7l-1 8 10-12h-7z" /></svg>
           Build my session
         </button>
+
+        {/* Recent progress — what the engine has adjusted as you got stronger */}
+        {progress.length > 0 && (
+          <>
+            <SecLabel className="mt-[24px]">Recent progress</SecLabel>
+            <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '2px 16px' }}>
+              {progress.map(p => (
+                <div key={p.id} className="flex items-center gap-[10px] py-[9px] border-t border-fog/60 first:border-t-0">
+                  <span className="text-fern text-[13px] shrink-0">↑</span>
+                  <span className="text-[13px] text-ink leading-snug">{p.text}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Recent sessions — visible */}
         {history.length > 0 && (
@@ -240,6 +393,25 @@ export default function StrengthClient({ exercises, history }: { exercises: Exer
       <p className="text-stone text-[13px] mb-[14px]">
         {SESSION_INTENT_CONFIG[intent].label} · {DURATION_CONFIG[duration].minutes} min · {session.length} exercise{session.length === 1 ? '' : 's'}
       </p>
+
+      {isAdjusted && modifier.reasons.length > 0 && (
+        <div className="mb-[14px] rounded-[12px] border border-fog bg-fog/25 px-[14px] py-[10px]">
+          <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.07em' }}>Auto-adjusted</div>
+          <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+            {modifier.reasons.join(' · ')}
+            {modifier.loadScale !== 1 && <> — loads ~{Math.round(modifier.loadScale * 100)}%</>}
+          </div>
+        </div>
+      )}
+
+      {niggles.length > 0 && (
+        <div className="mb-[14px] rounded-[12px] border border-oxblood/30 bg-oxblood-soft px-[14px] py-[10px]">
+          <div className="text-[11px] uppercase font-bold text-oxblood" style={{ letterSpacing: '.07em' }}>Working around</div>
+          <div className="text-[12.5px] text-ink mt-[3px] leading-snug">
+            {niggles.map(n => niggleAreaLabel(n.bodyArea)).join(', ')} — risky moves dropped or lightened
+          </div>
+        </div>
+      )}
 
       {/* Tools */}
       <div className="flex gap-[8px] mb-3">

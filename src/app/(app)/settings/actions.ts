@@ -12,6 +12,8 @@ import {
   replacePlanConstraints, saveCoachingPrefs,
   type ConstraintKind, type Autonomy,
 } from '@/data/coaching';
+import { setProgressionMode } from '@/data/strength-progression';
+import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -41,6 +43,14 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
   revalidatePath('/plan');
   revalidatePath('/');
 
+  return { ok: true };
+}
+
+export async function saveStrengthProgressionMode(mode: ProgressionMode) {
+  await requireUser();
+  await setProgressionMode(mode);
+  revalidatePath('/settings');
+  revalidatePath('/strength');
   return { ok: true };
 }
 

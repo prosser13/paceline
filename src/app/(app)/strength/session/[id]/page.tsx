@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { progressable } from '@/data/strength';
 import { getStrengthSessionByShortId, listSessionExercises } from '@/data/strength-sessions';
 import ActiveSessionClient, { type ActiveItem } from './ActiveSessionClient';
 
@@ -25,6 +26,8 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
       repsValue: r.reps_value,
       weightKg: r.weight_kg != null ? Number(r.weight_kg) : null,
       isSingleLeg: ex?.isSingleLeg ?? false,
+      weightType: ex?.weightType ?? null,
+      canProgress: ex ? progressable(ex) : false,
       cue: ex?.cue ?? '',
       youtubeUrl: ex?.youtubeUrl ?? null,
       difficulty: r.difficulty,

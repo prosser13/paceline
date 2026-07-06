@@ -6,9 +6,11 @@ import {
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
+import { getProgressionMode } from '@/data/strength-progression';
 import { listPlanPrefs } from '@/data/plans';
 import { listAdjustments } from '@/data/plan-mutations';
 import SettingsClient from './SettingsClient';
+import StrengthProgressionClient from './StrengthProgressionClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
 import PowerZonesClient from './PowerZonesClient';
@@ -26,7 +28,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs, adjustments,
+    constraints, coachingPrefs, planPrefs, adjustments, progressionMode,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -42,6 +44,7 @@ export default async function SettingsPage() {
     getCoachingPrefs(),
     listPlanPrefs(),
     listAdjustments(),
+    getProgressionMode(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -121,6 +124,11 @@ export default async function SettingsPage() {
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
           subtitle="Every change the coach (or you) makes to the plan, newest first — what changed, when, and why. Revert to undo one.">
           <ChangeLogClient entries={adjustments} />
+        </SettingsCard>
+
+        <SettingsCard cat="Strength" color="var(--color-strength)" title="Progression"
+          subtitle="How the strength builder adapts as you get stronger. Hybrid grows upper-body work for tone while holding leg loads for injury-proofing; progressive climbs everything; maintenance holds throughout.">
+          <StrengthProgressionClient initialMode={progressionMode} />
         </SettingsCard>
 
         <SettingsCard cat="Plan" color="var(--color-race)" title="Target times"
