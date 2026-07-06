@@ -14,10 +14,49 @@ import { resolveIntentConfig, type SessionIntent, type Duration } from '@/data/s
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { revalidatePath } from 'next/cache';
 
-// Look up an exercise's library id by name — some planned sessions store the
-// prescription without exercise_id (manually authored), which used to make the
-// "Do this session" insert fail (exercise_id is NOT NULL). 0 = not in library.
+// Resolve a planned exercise name to a library id. Planned sessions store
+// hand-authored names ("Overhead press", "Bent-over row") that don't always
+// match the library exactly; an unmatched name → id 0 → no difficulty prompt and
+// no progression. So we match exact first, then on a normalised form that strips
+// equipment/qualifier words (so "Overhead press" ↔ "Dumbbell overhead press").
+// 0 = genuinely not in the library.
 const EXERCISE_ID_BY_NAME = new Map(STRENGTH_EXERCISES.map(e => [e.name.toLowerCase(), e.id]));
+
+const normName = (s: string): string =>
+  s.toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')                                          // drop "(band)", "(weighted)"
+    .replace(/\b(dumbbell|barbell|band|bodyweight|unweighted|weighted|bilateral|resistance|with|the|a)\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+// Normalised map — first writer wins so a strength/weighted variant isn't
+// overwritten by a lighter namesake.
+const EXERCISE_ID_BY_NORM = (() => {
+  const m = new Map<string, number>();
+  for (const e of STRENGTH_EXERCISES) { const n = normName(e.name); if (n && !m.has(n)) m.set(n, e.id); }
+  return m;
+})();
+
+// Explicit aliases for plan names that are a different *exercise name* for a
+// library entry (not just an equipment-word variant), so they still prompt +
+// progress. The prescription itself comes from the plan structure; this only
+// maps to the library for the difficulty track.
+const EXERCISE_ALIASES: Record<string, number> = {
+  'reverse lunge': 38,                 // Backwards lunge (alternating)
+  'step-up with knee raise': 58,       // Step-up with knee drive
+  'single-leg glute bridge': 41,       // Single leg hip thrust (unweighted)
+  'calf raise (3s eccentric)': 57,     // Eccentric heel drop (3s eccentric calf)
+  'clamshell / mini-band step': 31,    // Clamshell with band
+  'prone plank with leg lift': 49,     // Plank
+  'bicycle crunch': 44,                // Supine Curl Up
+};
+
+function resolveExerciseId(name: string): number {
+  const raw = String(name ?? '').toLowerCase().trim();
+  if (!raw) return 0;
+  return EXERCISE_ID_BY_NAME.get(raw)
+    ?? EXERCISE_ALIASES[raw]
+    ?? EXERCISE_ID_BY_NORM.get(normName(raw))
+    ?? 0;
+}
 
 export interface SaveSessionExercise {
   exerciseId: number;
@@ -90,9 +129,9 @@ export async function startPlannedSession(
   const exercises: SaveSessionExercise[] = [];
   for (const e of presc) {
     const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
-    const exerciseId = Number.isFinite(fromStruct)
+    const exerciseId = Number.isFinite(fromStruct) && fromStruct > 0
       ? fromStruct
-      : (EXERCISE_ID_BY_NAME.get(String(e.name ?? '').toLowerCase()) ?? 0);
+      : resolveExerciseId(String(e.name ?? ''));
     const lib = LIB_BY_ID.get(exerciseId);
 
     // Drop exercises an active niggle excludes.
