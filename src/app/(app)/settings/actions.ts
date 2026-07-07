@@ -14,6 +14,8 @@ import {
 } from '@/data/coaching';
 import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
+import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
+import { geocodePlace } from '@/lib/weather';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -323,5 +325,39 @@ export async function saveCoaching(prefs: CoachingPrefsInput) {
 
   revalidatePath('/settings');
 
+  return { ok: true };
+}
+
+// ── Training location (weather-adjusted paces) ────────────────
+
+// Save the home location (geocoded from a place name) + usual run hour.
+export async function saveTrainingLocation(input: { place: string; defaultHour: string }): Promise<{ ok: boolean; error?: string; label?: string }> {
+  await requireUser();
+  const geo = await geocodePlace(input.place);
+  if (!geo) return { ok: false, error: `Couldn't find "${input.place.trim()}"` };
+  const hour = Math.min(23, Math.max(0, Number(input.defaultHour) || 7));
+  await setHomeLocation(geo.lat, geo.lng, geo.label, hour);
+  revalidatePath('/settings');
+  revalidatePath('/');
+  return { ok: true, label: geo.label };
+}
+
+// Set a temporary travel override (geocoded), used until cleared.
+export async function setTravelLocation(place: string): Promise<{ ok: boolean; error?: string; label?: string }> {
+  await requireUser();
+  const geo = await geocodePlace(place);
+  if (!geo) return { ok: false, error: `Couldn't find "${place.trim()}"` };
+  await setOverrideLocation(geo.lat, geo.lng, geo.label);
+  revalidatePath('/settings');
+  revalidatePath('/');
+  return { ok: true, label: geo.label };
+}
+
+// Clear the travel override — back to home.
+export async function clearTravelLocation(): Promise<{ ok: boolean }> {
+  await requireUser();
+  await clearOverrideLocation();
+  revalidatePath('/settings');
+  revalidatePath('/');
   return { ok: true };
 }

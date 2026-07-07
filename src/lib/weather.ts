@@ -127,6 +127,64 @@ export async function getRaceForecast(
   return json ? mapOpenMeteo(json, dateISO) : null;
 }
 
+// ── Daily run conditions + heat-adjusted pace (PB-campaign wave 4) ────────────
+//
+// A lighter fetch than the race forecast: just temperature + dewpoint per hour for
+// one day, so the dashboard can preview the heat penalty at the athlete's intended
+// run hour. Runs only. Times are Europe/London (the app's timezone assumption).
+
+export interface RunHourCondition { hour: number; tempC: number; dewC: number; }
+
+export async function getRunConditions(lat: number, lng: number, dateISO: string): Promise<RunHourCondition[] | null> {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+    `&hourly=temperature_2m,dew_point_2m&timezone=Europe%2FLondon&start_date=${dateISO}&end_date=${dateISO}`;
+  try {
+    const res = await fetch(url, { next: { revalidate: 60 * 60 } });   // 1h cache
+    if (!res.ok) return null;
+    const json = (await res.json()) as { hourly?: { time: string[]; temperature_2m: number[]; dew_point_2m: number[] } };
+    const h = json.hourly;
+    if (!h?.time?.length) return null;
+    const out: RunHourCondition[] = [];
+    for (let i = 0; i < h.time.length; i++) {
+      if (h.temperature_2m[i] == null) continue;
+      out.push({ hour: Number(h.time[i].slice(11, 13)), tempC: Math.round(h.temperature_2m[i]), dewC: Math.round(h.dew_point_2m?.[i] ?? h.temperature_2m[i]) });
+    }
+    return out.length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+// Resolve a place name to coordinates via Open-Meteo's free geocoder, so the
+// athlete can type "Bristol" rather than latitude/longitude.
+export async function geocodePlace(name: string): Promise<{ lat: number; lng: number; label: string } | null> {
+  const q = name.trim();
+  if (!q) return null;
+  try {
+    const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1`);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { results?: { name: string; latitude: number; longitude: number; admin1?: string; country_code?: string }[] };
+    const r = json.results?.[0];
+    if (!r) return null;
+    return { lat: r.latitude, lng: r.longitude, label: [r.name, r.admin1, r.country_code].filter(Boolean).join(', ') };
+  } catch {
+    return null;
+  }
+}
+
+export interface HeatPenalty { pct: number; secPerKm: number; }
+
+// Heat penalty on running pace from temperature + dewpoint. A deliberately simple
+// model (to be refined): no penalty in cool air, growing with heat and — via the
+// dewpoint — humidity. Pure, so the client can recompute as the previewed hour
+// changes. Below ~3 s/km the caller should treat it as "no penalty".
+export function heatPenalty(tempC: number, dewC: number, planPaceSec: number): HeatPenalty {
+  const base = Math.max(0, tempC - 15);            // cool below 15°C
+  const humidity = Math.max(0, dewC - 12) * 0.5;   // sticky air adds to it
+  const pct = Math.min(12, (base + humidity) * 0.3);
+  return { pct: Math.round(pct * 10) / 10, secPerKm: Math.round((planPaceSec * pct) / 100) };
+}
+
 // Race-day weather for a PAST date (post-race). Recent days come from the forecast
 // endpoint (which serves the last few days); older dates from the ERA5 archive,
 // which lags ~5 days. Returns the forecast + which source it came from (so it can
