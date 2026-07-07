@@ -10,6 +10,9 @@ interface Props {
   initialMinRest: string;
   initialProtectA: boolean;
   initialNotes: string;
+  initialMorningBriefing: boolean;
+  initialMorningFallback: string;
+  initialMorningSkipRest: boolean;
 }
 
 const INPUT =
@@ -23,12 +26,16 @@ const AUTONOMY_OPTS: { value: Autonomy; label: string; hint: string }[] = [
 
 export default function CoachingClient({
   initialAutonomy, initialMaxRamp, initialMinRest, initialProtectA, initialNotes,
+  initialMorningBriefing, initialMorningFallback, initialMorningSkipRest,
 }: Props) {
   const [autonomy, setAutonomy]   = useState<Autonomy>(initialAutonomy);
   const [maxRamp, setMaxRamp]     = useState(initialMaxRamp);
   const [minRest, setMinRest]     = useState(initialMinRest);
   const [protectA, setProtectA]   = useState(initialProtectA);
   const [notes, setNotes]         = useState(initialNotes);
+  const [morningOn, setMorningOn]     = useState(initialMorningBriefing);
+  const [morningFallback, setMorningFallback] = useState(initialMorningFallback);
+  const [morningSkipRest, setMorningSkipRest] = useState(initialMorningSkipRest);
   const [saved, setSaved]         = useState(false);
   const [pending, start]          = useTransition();
 
@@ -42,6 +49,9 @@ export default function CoachingClient({
         min_rest_days: minRest,
         protect_priority_a: protectA,
         notes,
+        morning_briefing: morningOn,
+        morning_fallback_time: morningFallback,
+        morning_skip_rest: morningSkipRest,
       });
       setSaved(true);
     });
@@ -85,6 +95,33 @@ export default function CoachingClient({
                className="w-[15px] h-[15px] accent-oxblood" />
         <span className="text-[14px] text-ink">Never move or alter A-priority sessions</span>
       </label>
+
+      {/* Morning briefing */}
+      <div className="flex flex-col gap-3 border-t border-fog pt-4">
+        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+          <input type="checkbox" checked={morningOn} onChange={e => { setMorningOn(e.target.checked); dirty(); }}
+                 className="w-[15px] h-[15px] accent-oxblood" />
+          <span className="text-[14px] text-ink">Send a morning briefing</span>
+        </label>
+        <span className="text-[13px] text-stone -mt-1">
+          A short readiness + today’s-session note, sent to Telegram once your overnight sleep &amp; HRV sync from Garmin.
+        </span>
+        {morningOn && (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pl-[25px]">
+            <div className="flex items-center gap-2">
+              <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">Fallback time</label>
+              <input value={morningFallback} onChange={e => { setMorningFallback(e.target.value); dirty(); }}
+                     placeholder="09:30" inputMode="numeric" className={`${INPUT} w-[72px] text-center`} />
+              <span className="font-mono text-[11px] text-stone">London — send even if wellness hasn’t synced</span>
+            </div>
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={morningSkipRest} onChange={e => { setMorningSkipRest(e.target.checked); dirty(); }}
+                     className="w-[15px] h-[15px] accent-oxblood" />
+              <span className="text-[14px] text-ink">Skip on rest days</span>
+            </label>
+          </div>
+        )}
+      </div>
 
       {/* Standing guidance */}
       <div className="flex flex-col gap-1.5">

@@ -80,10 +80,10 @@ export default async function DashboardBody() {
       </Suspense>
 
       {/* From your coach */}
-      {d.coachMessage && (
+      {(d.coachMessages.morning || d.coachMessages.evening) && (
         <>
           <SecLabel>From your coach</SecLabel>
-          <CoachCard msg={d.coachMessage} />
+          <CoachCard morning={d.coachMessages.morning} evening={d.coachMessages.evening} />
         </>
       )}
 
