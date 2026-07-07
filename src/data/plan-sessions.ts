@@ -424,6 +424,22 @@ export async function updateCompletedWorkout(
   await supabaseAdmin.from('completed_workouts').update(patch).eq('id', id);
 }
 
+// Long runs (run = has a pace; ≥20 km) that carry HR but no decoupling yet — the
+// backfill set for long-run quality on activities synced before the metric existed.
+// HR-gated so rows that can never compute decoupling aren't re-fetched forever.
+export async function listLongRunsMissingQuality(limit: number) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, strava_activity_id')
+    .eq('source', 'strava')
+    .is('decoupling_pct', null)
+    .not('actual_avg_hr', 'is', null)
+    .not('actual_avg_pace_min_km', 'is', null)
+    .gte('actual_distance_km', 20)
+    .limit(limit);
+  return (data ?? []) as { id: string; strava_activity_id: number | null }[];
+}
+
 // Recompute + store `tss` for every completion from the CURRENT threshold pace and
 // FTP (top of the Z4 power zone) — the single write path for the stored column.
 // Called after a sync (new actuals / backfilled NGP) and whenever threshold pace

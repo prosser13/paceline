@@ -90,6 +90,83 @@ export function computeNgp(
   return 1000 / ngpSpeed / 60;                      // → min/km
 }
 
+// Long-run quality from the Strava streams (PB-campaign wave 3). Both metrics are
+// grade-adjusted (via the same Minetti cost curve NGP uses), so hills don't distort
+// them:
+//   decouplingPct — aerobic decoupling: the drop in grade-adjusted-speed:HR
+//     efficiency from the first half to the second (cardiac drift). Positive =
+//     efficiency fell (HR drifted up for the same effort). Needs the HR stream.
+//   paceDecayPct  — grade-adjusted pace of the final third vs the first two-thirds.
+//     Positive = slowed toward the end; negative = negative split.
+// Either is null when the streams can't support it (too short, mismatched, no HR).
+export function computeLongRunQuality(
+  distanceM: number[] | null | undefined,
+  timeS: number[] | null | undefined,
+  heartrate: number[] | null | undefined,
+  altitudeM: number[] | null | undefined,
+): { decouplingPct: number | null; paceDecayPct: number | null } {
+  const none = { decouplingPct: null, paceDecayPct: null };
+  if (!distanceM?.length || !timeS?.length || distanceM.length !== timeS.length) return none;
+  const n = distanceM.length;
+  if (n < 4) return none;
+
+  // Per-step grade-adjusted distance (metres), using the Minetti cost multiplier.
+  const gaStep = new Array<number>(n).fill(0);
+  const hasAlt = altitudeM?.length === n;
+  for (let i = 1; i < n; i++) {
+    const dStep = distanceM[i] - distanceM[i - 1];
+    if (dStep <= 0) continue;
+    let mult = 1;
+    if (hasAlt) {
+      const grade = dStep > 0.5 ? (altitudeM![i] - altitudeM![i - 1]) / dStep : 0;
+      mult = gradeCostMultiplier(grade);
+    }
+    gaStep[i] = dStep * mult;
+  }
+
+  const round1 = (x: number) => Math.round(x * 10) / 10;
+
+  // ── final-third pace decay (split by distance) ──
+  let paceDecayPct: number | null = null;
+  const totalDist = distanceM[n - 1] - distanceM[0];
+  if (totalDist > 0) {
+    const twoThirdsM = distanceM[0] + totalDist * (2 / 3);
+    let gaFirst = 0, gaLast = 0, idxSplit = n - 1;
+    for (let i = 1; i < n; i++) {
+      if (distanceM[i] <= twoThirdsM) { gaFirst += gaStep[i]; idxSplit = i; }
+      else gaLast += gaStep[i];
+    }
+    const tFirst = timeS[idxSplit] - timeS[0];
+    const tLast = timeS[n - 1] - timeS[idxSplit];
+    if (gaFirst > 0 && gaLast > 0 && tFirst > 0 && tLast > 0) {
+      const paceFirst = (tFirst / gaFirst) * 1000 / 60;   // grade-adjusted min/km
+      const paceLast = (tLast / gaLast) * 1000 / 60;
+      paceDecayPct = round1(((paceLast - paceFirst) / paceFirst) * 100);
+    }
+  }
+
+  // ── aerobic decoupling (grade-adjusted speed : HR, first half vs second) ──
+  let decouplingPct: number | null = null;
+  if (heartrate?.length === n) {
+    const totalT = timeS[n - 1] - timeS[0];
+    const midT = timeS[0] + totalT / 2;
+    let mid = 1;
+    for (let i = 1; i < n; i++) { if (timeS[i] <= midT) mid = i; }
+    const efficiency = (i0: number, i1: number): number | null => {
+      let ga = 0, hrSum = 0, hrN = 0;
+      for (let i = i0 + 1; i <= i1; i++) ga += gaStep[i];
+      for (let i = i0; i <= i1; i++) { const h = heartrate![i]; if (h > 0) { hrSum += h; hrN++; } }
+      const dur = timeS[i1] - timeS[i0];
+      if (ga <= 0 || dur <= 0 || hrN === 0) return null;
+      return (ga / dur) / (hrSum / hrN);                  // (m/s grade-adjusted) per bpm
+    };
+    const e1 = efficiency(0, mid), e2 = efficiency(mid, n - 1);
+    if (e1 != null && e2 != null && e1 > 0) decouplingPct = round1(((e1 - e2) / e1) * 100);
+  }
+
+  return { decouplingPct, paceDecayPct };
+}
+
 // The shared run-TSS formula. `paceMinKm` is NGP when available, else average
 // pace; `threshMinKm` is the user's threshold pace. Returns null without enough
 // to compute.

@@ -3,7 +3,7 @@ import { invalidateWellnessCache } from './intervals';
 import { getStravaTokens, updateStravaTokens, markStravaSynced } from '@/data/strava-connection';
 import {
   getEarliestSessionDate, listSessionsForMatching, completedWorkoutExistsForSession,
-  insertCompletedWorkout, listCompletedMissingSegments, updateCompletedWorkout,
+  insertCompletedWorkout, listCompletedMissingSegments, listLongRunsMissingQuality, updateCompletedWorkout,
   listCompletedSessionIds,
   listCompletedStravaActivityIds,
   recomputeAllCompletedTss,
@@ -11,7 +11,7 @@ import {
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
-import { computeNgp } from '@/lib/run-tss';
+import { computeNgp, computeLongRunQuality } from '@/lib/run-tss';
 
 export interface StravaActivity {
   id: number;
@@ -191,16 +191,20 @@ async function computeForActivity(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure: any[] | null | undefined,
   token: string,
-): Promise<{ pace: (number | null)[] | null; hr: (number | null)[] | null; ngpMinKm: number | null } | null> {
+): Promise<{ pace: (number | null)[] | null; hr: (number | null)[] | null; ngpMinKm: number | null; decouplingPct: number | null; paceDecayPct: number | null } | null> {
   const streams = await fetchStreams(stravaId, token);
   if (!streams) return null;
-  // NGP needs only the streams; per-segment pacing additionally needs a structure.
+  // NGP + long-run quality need only the streams; per-segment pacing additionally
+  // needs a structure.
   const ngpMinKm = computeNgp(streams.distance, streams.time, streams.altitude);
+  const lrq = computeLongRunQuality(streams.distance, streams.time, streams.heartrate, streams.altitude);
   const distances = expandSegmentDistances(structure);
   return {
     pace: distances.length ? computeSegmentActuals(distances, streams.distance, streams.time) : null,
     hr:   distances.length && streams.heartrate ? computeSegmentHr(distances, streams.distance, streams.heartrate) : null,
     ngpMinKm,
+    decouplingPct: lrq.decouplingPct,
+    paceDecayPct:  lrq.paceDecayPct,
   };
 }
 
@@ -391,6 +395,9 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       segment_hr:             kind === 'run' ? (seg?.hr ?? null)   : [],
       // Normalized Graded Pace (runs only) → grade-adjusted rTSS downstream.
       actual_ngp_min_km:      kind === 'run' ? (seg?.ngpMinKm ?? null) : null,
+      // Long-run quality (runs only): aerobic decoupling + final-third pace decay.
+      decoupling_pct:         kind === 'run' ? (seg?.decouplingPct ?? null) : null,
+      pace_decay_pct:         kind === 'run' ? (seg?.paceDecayPct ?? null) : null,
     });
 
     if (!(await planSessionHasMatch(match.id))) {
@@ -424,6 +431,8 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
       if (seg?.pace) update.segment_actuals = seg.pace;
       if (seg?.hr)   update.segment_hr = seg.hr;
       if (cw.actual_ngp_min_km == null && seg?.ngpMinKm != null) update.actual_ngp_min_km = seg.ngpMinKm;
+      if (seg?.decouplingPct != null) update.decoupling_pct = seg.decouplingPct;
+      if (seg?.paceDecayPct != null)  update.pace_decay_pct = seg.paceDecayPct;
       if (cw.actual_avg_hr == null && hrById.get(cw.strava_activity_id) != null) {
         update.actual_avg_hr = hrById.get(cw.strava_activity_id);
       }
@@ -431,6 +440,20 @@ export async function syncActivities(): Promise<{ synced: number; matched: numbe
         await updateCompletedWorkout(cw.id, update);
       }
     }
+  }
+
+  // Backfill long-run quality for existing long runs synced before this metric —
+  // rows that already have segments (so the pass above skips them) but no
+  // decoupling yet. Capped, HR-gated, so it self-limits over a few syncs.
+  const lrqMissing = await listLongRunsMissingQuality(BACKFILL_LIMIT);
+  for (const cw of lrqMissing) {
+    if (!cw.strava_activity_id) continue;
+    const q = await computeForActivity(cw.strava_activity_id, null, token);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: Record<string, any> = {};
+    if (q?.decouplingPct != null) update.decoupling_pct = q.decouplingPct;
+    if (q?.paceDecayPct != null)  update.pace_decay_pct = q.paceDecayPct;
+    if (Object.keys(update).length) await updateCompletedWorkout(cw.id, update);
   }
 
   // Store TSS for new completions and any whose NGP was just backfilled — one
