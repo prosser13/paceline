@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
-// Evening-coach messages (the 9pm review). Written by the paceline-evening-coach
-// scheduled task via /api/coach-message; the dashboard shows the latest.
+// Evening-coach messages (the 9pm review). Generated + saved by the GitHub
+// evening-coach cron (/api/coach/run); the dashboard shows the latest.
 export interface CoachMessage {
   id: string;
   created_at: string;

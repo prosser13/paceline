@@ -2,11 +2,10 @@ import { isAuthorizedRequest } from '@/lib/auth';
 import { upsertCoachContext } from '@/data/coach';
 import { NextResponse } from 'next/server';
 
-// The coach's rolling-memory sink. The paceline-evening-coach scheduled task POSTs
-// its freshly-distilled "athlete context" summary here each night (full replace),
-// then reads it back on every future review for trailing context. Auth-gated
-// identically to /api/coach-message and /api/plan-change (see docs/plan-agent.md).
-// This is the coach's own memory, not a plan mutation — safe to run unattended.
+// The coach's rolling-memory sink. Kept for manual/agent use; the nightly review
+// (/api/coach/run) refreshes this memory in-process. Auth-gated identically to
+// /api/plan-change (see docs/plan-agent.md). The coach's own memory, not a plan
+// mutation — safe to run unattended.
 //
 //   POST /api/coach-context
 //   { summary: string }

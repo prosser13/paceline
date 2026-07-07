@@ -1,20 +1,21 @@
-// In-repo nightly evening-coach — generates the evening review, saves it, fans it
-// out to Telegram, and refreshes the coach's rolling memory. Runs on reliable
-// infra (the GitHub Actions cron in .github/workflows/evening-coach.yml, same
-// pattern as the wellness sync) so a message lands every night regardless of
-// whether the external paceline-evening-coach task fires.
+// The evening coach — the SOLE generator of the nightly review (the external
+// paceline-evening-coach task was retired). Driven by the GitHub Actions cron in
+// .github/workflows/evening-coach.yml, which fires several times through the
+// evening for reliability. Each fire:
+//   1. Generates the review at ~21:00 (9pm) London — gated on the London clock so
+//      it lands at 9pm year-round without a manual BST/GMT switch.
+//   2. Saves it (one per London day, DB-enforced) and sends it to Telegram
+//      immediately, with retries.
+//   3. If a message already exists but wasn't delivered to Telegram (a prior
+//      send failed), retries the delivery — so a generated-but-undelivered night
+//      still reaches Telegram. Delivery is tracked via coach_messages.delivered_at.
 //
-// Idempotent: at most one evening review per calendar day (enforced by a partial
-// unique index on coach_messages(for_date) where kind='evening'), so the several
-// scheduled fires per night collapse to a single message — retries/catch-up
-// without duplicates.
-//
-// Auth: a cron invocation carries `Authorization: Bearer <CRON_SECRET>` (matching
-// the wellness sync); a logged-in session is also accepted for manual triggering.
+// Auth: `Authorization: Bearer <CRON_SECRET>` for the cron; a logged-in session is
+// also accepted for manual triggering.
 //
 //   POST /api/coach/run[?force=1][?final=1]
-//     force=1 — regenerate even if tonight's review already exists
-//     final=1 — this is the night's last catch-up; on failure, alert via Telegram
+//     force=1 — regenerate/redeliver even if it's before 9pm or already done
+//     final=1 — the night's last catch-up; on failure, alert via Telegram
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getCurrentUser } from '@/lib/auth';
@@ -26,28 +27,55 @@ import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+const GENERATE_HOUR_LONDON = 21; // 9pm
+
 function isCronRequest(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   return !!secret && request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
-// The evening run belongs to "tonight" in the athlete's timezone — a 20:00–22:00
-// UTC fire maps to the correct local day (and is robust if it ever slips past
-// midnight UTC), so key off the London civil date, not the UTC date.
-function londonToday(): string {
-  return new Intl.DateTimeFormat('en-CA', {
+// The London civil date/hour — a 20:00–22:00 UTC fire maps to the right local day
+// and hour whether it's BST or GMT, so 9pm London needs no manual clock switch.
+function londonParts(): { date: string; hour: number } {
+  const now = new Date();
+  const date = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(new Date());
+  }).format(now);
+  const hour = Number(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hour: '2-digit', hourCycle: 'h23',
+  }).format(now));
+  return { date, hour };
 }
 
-async function eveningExists(forDate: string): Promise<boolean> {
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+// Send to Telegram with a few retries for transient failures (best-effort).
+async function deliverWithRetry(text: string, attempts = 3): Promise<{ ok: boolean; error?: string }> {
+  let last = { ok: false, error: 'not attempted' } as { ok: boolean; error?: string };
+  for (let i = 0; i < attempts; i++) {
+    last = await sendTelegramMessage(text);
+    if (last.ok) return last;
+    if (i < attempts - 1) await sleep(1500);
+  }
+  return last;
+}
+
+function messageText(headline: string, bodyMd: string): string {
+  return `<b>${mdToTelegramHtml(headline)}</b>\n\n${mdToTelegramHtml(bodyMd)}`;
+}
+
+async function markDelivered(id: string): Promise<void> {
+  await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('id', id);
+}
+
+async function existingEvening(forDate: string): Promise<{ id: string; headline: string; body_md: string; delivered_at: string | null } | null> {
   const { data } = await supabaseAdmin
     .from('coach_messages')
-    .select('id')
+    .select('id, headline, body_md, delivered_at')
     .eq('for_date', forDate)
     .eq('kind', 'evening')
     .maybeSingle();
-  return !!data;
+  return (data as { id: string; headline: string; body_md: string; delivered_at: string | null } | null) ?? null;
 }
 
 async function handle(request: Request): Promise<Response> {
@@ -58,17 +86,31 @@ async function handle(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const forced = params.get('force') === '1';
   const isFinal = params.get('final') === '1';
-  const forDate = londonToday();
+  const { date: forDate, hour: londonHour } = londonParts();
 
-  // Idempotent skip — a prior fire (or the external task) already handled tonight.
-  if (!forced && (await eveningExists(forDate))) {
-    return Response.json({ ok: true, skipped: 'exists', for_date: forDate }, { status: 200 });
+  // ── already have tonight's message? deliver it if a prior send failed. ──
+  const existing = await existingEvening(forDate);
+  if (existing) {
+    if (existing.delivered_at) {
+      return Response.json({ ok: true, skipped: 'exists-delivered', for_date: forDate }, { status: 200 });
+    }
+    // Generated but never delivered — retry the Telegram send (delivery backup).
+    const retry = await deliverWithRetry(messageText(existing.headline, existing.body_md));
+    if (retry.ok) await markDelivered(existing.id);
+    return Response.json(
+      { ok: true, for_date: forDate, redelivered: retry.ok, ...(retry.ok ? {} : { deliver_error: retry.error }) },
+      { status: 200 },
+    );
+  }
+
+  // ── no message yet — only generate at/after 9pm London (unless forced). ──
+  if (!forced && londonHour < GENERATE_HOUR_LONDON) {
+    return Response.json({ ok: true, skipped: 'too-early', for_date: forDate, london_hour: londonHour }, { status: 200 });
   }
 
   try {
-    // throughToday: the evening review runs after today's session is done, so it
-    // must see today's result (a race/workout done today counts as recent, with
-    // its actuals) rather than treating it as an upcoming, not-yet-synced session.
+    // throughToday: the review runs after today's session, so it must see today's
+    // result (with actuals) rather than treating it as an upcoming session.
     const [ctx, memory] = await Promise.all([getPlanContext(forDate, { throughToday: true }), getCoachContext()]);
     const review = await generateEveningReview(ctx, memory.summary);
 
@@ -79,24 +121,25 @@ async function handle(request: Request): Promise<Response> {
       .single();
 
     if (error) {
-      // 23505 = unique_violation: a concurrent fire won the race and already posted.
+      // 23505 = a concurrent fire won the race; deliver that one if it's pending.
       if (error.code === '23505') {
+        const other = await existingEvening(forDate);
+        if (other && !other.delivered_at) {
+          const retry = await deliverWithRetry(messageText(other.headline, other.body_md));
+          if (retry.ok) await markDelivered(other.id);
+        }
         return Response.json({ ok: true, skipped: 'race', for_date: forDate }, { status: 200 });
       }
       throw new Error(`coach_messages insert failed: ${error.message}`);
     }
 
-    // Fan out to Telegram (best-effort) and refresh the rolling memory.
-    const telegram = await sendTelegramMessage(
-      `<b>${mdToTelegramHtml(review.headline)}</b>\n\n${mdToTelegramHtml(review.bodyMd)}`,
-    );
+    // Send to Telegram immediately (with retries), then refresh rolling memory.
+    const telegram = await deliverWithRetry(messageText(review.headline, review.bodyMd));
+    if (telegram.ok) await markDelivered(data.id);
     await upsertCoachContext(review.updatedContext, forDate);
 
     return Response.json(
-      {
-        ok: true, id: data.id, for_date: forDate,
-        delivered: telegram.ok, ...(telegram.ok ? {} : { deliver_error: telegram.error }),
-      },
+      { ok: true, id: data.id, for_date: forDate, delivered: telegram.ok, ...(telegram.ok ? {} : { deliver_error: telegram.error }) },
       { status: 200 },
     );
   } catch (e) {
