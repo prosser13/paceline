@@ -102,13 +102,14 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         </div>
       </Card>
 
-      {/* VO2max / eFTP / resting HR */}
-      <SecLabel>Aerobic markers</SecLabel>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-[12px]">
-        <Marker label="VO2max" value={d.vo2max.current != null ? String(d.vo2max.current) : '—'} series={d.vo2max.series} color="var(--color-ride)" />
-        <Marker label="eFTP · bike" value={d.eftp.current != null ? `${d.eftp.current} W` : '—'} series={d.eftp.series} color="var(--color-ride)" />
+      {/* Running VDOT + resting HR. Garmin's wellness VO2max is the athlete's cycling
+          number, so it's deliberately not shown; VDOT here is running-specific. */}
+      <SecLabel>Running fitness</SecLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+        <Marker label="VDOT · running" value={d.vdot.current != null ? String(d.vdot.current) : '—'} series={d.vdot.series} color="var(--color-run)" />
         <Marker label="Resting HR" value={d.restingHr.current != null ? `${d.restingHr.current}` : '—'} series={d.restingHr.series} color="var(--color-yoga)" invert />
       </div>
+      <p className="text-[11.5px] text-stone mt-[8px]">VDOT is Daniels’ running-fitness score, derived from your race results and threshold pace — not Garmin’s VO2max.</p>
 
       {/* Race results */}
       <SecLabel>Race results</SecLabel>

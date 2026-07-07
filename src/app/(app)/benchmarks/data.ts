@@ -1,7 +1,9 @@
 // Benchmarks page loader — the "fitness ladder" over a rolling 12-week window:
-// predicted marathon time (with the signal breakdown), threshold pace, VO2max,
-// cycling eFTP, resting HR, and recent race results with their implied marathon
-// time. Long-run quality (decoupling / pace decay) + gear arrive in later waves.
+// predicted marathon time (with the signal breakdown), threshold pace, running
+// VDOT, resting HR, and recent race results with their implied marathon time.
+// VDOT is derived from the prediction (running-specific) — we deliberately do NOT
+// show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
+// markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
 import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
@@ -28,16 +30,14 @@ export interface BenchmarksData {
   signals: { source: string; label: string; impliedSeconds: number }[];
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
-  predictedTrend: Series[];          // seconds per week
-  vo2max: { current: number | null; series: Series[] };
-  eftp: { current: number | null; series: Series[] };
+  vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
   races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number }[];
 }
 
-function lastNonNull(series: Series[]): number | null {
-  for (let i = series.length - 1; i >= 0; i--) return series[i].v;
-  return null;
+// Running VDOT implied by a marathon time (seconds), rounded to one decimal.
+function vdotOfMarathon(seconds: number): number {
+  return Math.round(danielsVdot(42195, seconds / 60) * 10) / 10;
 }
 
 export async function loadBenchmarksData(): Promise<BenchmarksData> {
@@ -53,12 +53,13 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     listRaceResultsSince(addDays(asOf, -365)),   // races are sparse milestones — wider window
   ]);
 
-  const seriesOf = (pick: (w: (typeof wellness)[number]) => number | null): Series[] =>
-    wellness.flatMap(w => { const v = pick(w); return v != null ? [{ date: w.date, v }] : []; });
+  const rhrSeries: Series[] = wellness.flatMap(w => w.resting_hr != null ? [{ date: w.date, v: w.resting_hr }] : []);
+  const rhrCurrent = rhrSeries.length ? rhrSeries[rhrSeries.length - 1].v : null;
 
-  const vo2Series = seriesOf(w => w.vo2max);
-  const eftpSeries = seriesOf(w => w.cycling_eftp_w);
-  const rhrSeries = seriesOf(w => w.resting_hr);
+  // VDOT: current from the live prediction; the trend from each weekly snapshot's
+  // predicted time (so it grows as snapshots accumulate).
+  const vdotSeries: Series[] = snapshots.flatMap(s => s.predicted_seconds != null ? [{ date: s.week_start, v: vdotOfMarathon(s.predicted_seconds) }] : []);
+  const vdotCurrent = prediction.predictedSeconds != null ? vdotOfMarathon(prediction.predictedSeconds) : null;
 
   return {
     asOf,
@@ -69,10 +70,8 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
     thresholdMinKm: thresholdStr ? parseThresholdPace(thresholdStr) : null,
     thresholdTrend: snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []),
-    predictedTrend: snapshots.flatMap(s => s.predicted_seconds != null ? [{ date: s.week_start, v: s.predicted_seconds }] : []),
-    vo2max: { current: lastNonNull(vo2Series), series: vo2Series },
-    eftp: { current: lastNonNull(eftpSeries), series: eftpSeries },
-    restingHr: { current: lastNonNull(rhrSeries), series: rhrSeries },
+    vdot: { current: vdotCurrent, series: vdotSeries },
+    restingHr: { current: rhrCurrent, series: rhrSeries },
     races: races
       .sort((a, b) => b.date.localeCompare(a.date))
       .map(r => {
