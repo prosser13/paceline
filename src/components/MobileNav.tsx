@@ -15,7 +15,11 @@ const STATIONS = [
   { href: '/plan', label: 'Plan', match: (p: string) => p.startsWith('/plan') },
   { href: '/races', label: 'Races', match: (p: string) => p.startsWith('/races') },
   { href: '/strength', label: 'Strength', match: (p: string) => p.startsWith('/strength') },
+  { href: '/benchmarks', label: 'Benchmarks', match: (p: string) => p.startsWith('/benchmarks') },
 ] as const;
+
+// Even horizontal spacing per station, so the runner + line math scale with count.
+const STEP = 100 / STATIONS.length;
 
 export default function MobileNav() {
   const pathname = usePathname();
@@ -54,7 +58,7 @@ export default function MobileNav() {
             aria-hidden
             className="absolute top-[19px] h-3.5 w-3.5 -translate-x-1/2 rounded-full bg-strength transition-[left] duration-[420ms] z-[3]"
             style={{
-              left: `${(activeIndex + 0.5) * 25}%`,
+              left: `${(activeIndex + 0.5) * STEP}%`,
               boxShadow: '0 0 0 4px var(--color-paper), 0 0 0 5px var(--color-strength)',
               transitionTimingFunction: 'cubic-bezier(.34,1.4,.5,1)',
             }}

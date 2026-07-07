@@ -5,6 +5,7 @@ import { Suspense } from 'react';
 import { WeeklyBars, CardSkeleton } from '@/components/dashboard-graphics';
 import OffPlanRow from '@/components/OffPlanRow';
 import FitnessChartAsync from './FitnessChartAsync';
+import TargetTrajectoryAsync from './TargetTrajectoryAsync';
 import SeasonGoalCard from './SeasonGoalCard';
 import AcwrTile from './AcwrTile';
 import WeeklyLoadCard from './WeeklyLoadCard';
@@ -23,6 +24,9 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
   return (
     <>
       <SecLabel>Trends &amp; insights</SecLabel>
+      <Suspense fallback={<CardSkeleton header="Target trajectory" bodyHeight={150} />}>
+        <TargetTrajectoryAsync />
+      </Suspense>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
         <SeasonGoalCard
           name={d.raceName ?? 'No race scheduled'}
