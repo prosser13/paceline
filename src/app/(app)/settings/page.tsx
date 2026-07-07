@@ -99,6 +99,9 @@ export default async function SettingsPage() {
   const coachMinRest  = coachingPrefs?.min_rest_days != null ? String(coachingPrefs.min_rest_days) : '1';
   const coachProtectA = coachingPrefs?.protect_priority_a ?? true;
   const coachNotes    = coachingPrefs?.notes ?? '';
+  const morningBriefing = coachingPrefs?.morning_briefing ?? true;
+  const morningFallback = (coachingPrefs?.morning_fallback_time as string | undefined) ?? '09:30';
+  const morningSkipRest = coachingPrefs?.morning_skip_rest ?? false;
 
   return (
     <>
@@ -113,6 +116,9 @@ export default async function SettingsPage() {
             initialMinRest={coachMinRest}
             initialProtectA={coachProtectA}
             initialNotes={coachNotes}
+            initialMorningBriefing={morningBriefing}
+            initialMorningFallback={morningFallback}
+            initialMorningSkipRest={morningSkipRest}
           />
         </SettingsCard>
 

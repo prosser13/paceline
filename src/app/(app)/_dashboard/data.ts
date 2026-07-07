@@ -16,7 +16,7 @@ import {
 import { standouts, type Standout, type StandoutRace } from '@/lib/wellness-stats';
 import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
-import { getLatestCoachMessage, type CoachMessage } from '@/data/coach';
+import { getLatestCoachMessages, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
 import { getLatestWellnessDay, listRecentWellnessDays } from '@/data/wellness-days';
 import { activityKind } from '@/lib/activity-types';
@@ -127,7 +127,7 @@ export interface DashboardData {
   recentCompleted: CompletedToday | null;
   recentLabel: string | null;
 
-  coachMessage: CoachMessage | null;   // latest 9pm evening-review message
+  coachMessages: { morning: CoachMessage | null; evening: CoachMessage | null };  // latest of each kind
   dailyNote: string;                   // today's athlete note (for tonight's review)
 }
 
@@ -199,7 +199,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     raceRow,
     offPlanRaw,
     recentCompletedRaw,
-    coachMessage,
+    coachMessages,
     dailyNote,
   ] = await Promise.all([
     getCurrentUser(),
@@ -214,7 +214,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getNextRace(todayStr),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
     getMostRecentCompletedSession(todayStr),
-    getLatestCoachMessage(),
+    getLatestCoachMessages(),
     getDailyNote(todayStr),
   ]);
 
@@ -508,7 +508,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     last7: { totalKm, sessions, h, m, totalTss },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
-    coachMessage,
+    coachMessages,
     dailyNote,
   };
 }

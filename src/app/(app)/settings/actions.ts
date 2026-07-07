@@ -293,6 +293,18 @@ export interface CoachingPrefsInput {
   min_rest_days: string;
   protect_priority_a: boolean;
   notes: string;
+  morning_briefing: boolean;
+  morning_fallback_time: string;
+  morning_skip_rest: boolean;
+}
+
+// London HH:MM in 24h form, clamped to a sane fallback if malformed.
+function normalizeTime(v: string): string {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
+  if (!m) return '09:30';
+  const h = Math.min(23, Math.max(0, Number(m[1])));
+  const min = Math.min(59, Math.max(0, Number(m[2])));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
 }
 
 export async function saveCoaching(prefs: CoachingPrefsInput) {
@@ -304,6 +316,9 @@ export async function saveCoaching(prefs: CoachingPrefsInput) {
     min_rest_days:       Number(prefs.min_rest_days) || 0,
     protect_priority_a:  prefs.protect_priority_a,
     notes:               prefs.notes.trim() || null,
+    morning_briefing:      prefs.morning_briefing,
+    morning_fallback_time: normalizeTime(prefs.morning_fallback_time),
+    morning_skip_rest:     prefs.morning_skip_rest,
   });
 
   revalidatePath('/settings');

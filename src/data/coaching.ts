@@ -26,6 +26,9 @@ export interface CoachingPrefs {
   min_rest_days: number;
   protect_priority_a: boolean;
   notes: string | null;
+  morning_briefing: boolean;
+  morning_fallback_time: string;   // London HH:MM
+  morning_skip_rest: boolean;
 }
 
 // ── reads ────────────────────────────────────────────────────

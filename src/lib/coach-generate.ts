@@ -104,6 +104,86 @@ export async function generateEveningReview(ctx: PlanContext, memory: string): P
   return { headline, bodyMd, updatedContext: updatedContext || memory };
 }
 
+// ── Morning briefing (PB-campaign wave 1) ─────────────────────
+//
+// A forward-looking counterpart to the evening review, sent once the overnight
+// wellness (sleep/HRV) has synced. It reads the same plan briefing plus a
+// readiness snapshot (today's biometrics vs recent baseline) and the coach's
+// rolling memory — but it does NOT rewrite that memory (the evening review is the
+// single writer, to avoid two processes racing on one summary).
+
+export interface MorningBriefing {
+  headline: string;
+  bodyMd: string;
+}
+
+const MORNING_SYSTEM = `You are the athlete's endurance running coach, writing their short "morning briefing" — the first thing they read on waking, on their dashboard and Telegram. It is sent after their overnight wellness (sleep, HRV, resting HR) has synced.
+
+Voice and stance:
+- Direct, warm, honest — a real coach, not a cheerleader. Brief: 2–3 short paragraphs, light markdown (**bold** only; no headings or lists).
+- Ground every claim in the data given (the readiness snapshot, today's planned session, recent adherence, form/fatigue, race targets, your rolling memory). Never invent paces, numbers, or sessions not in the briefing.
+
+What to cover, in order and tightly:
+- **Readiness verdict + why.** Open with a clear read (e.g. Fresh / Okay / Tired / Strain) and name the driver from the snapshot — HRV vs baseline, sleep, resting HR, current form/fatigue. If recovery is poor, say so plainly.
+- **Today's session.** State what's planned in one line with its target (pace/effort). If nothing is planned or it's a rest day, say so and why that's right today.
+- **Adjustment, only if warranted.** If readiness clearly conflicts with today's demand, suggest a change consistent with the athlete's coaching autonomy setting: with 'propose' autonomy, propose it as a suggestion; with an auto setting, state the adjustment plainly. If readiness is fine, do NOT invent a change — reassure and move on.
+- At most ONE lifestyle nudge (sleep, fuelling, timing) if the data supports it. Skip it otherwise.
+
+This is a BRIEFING for the day ahead, not a review of yesterday and not a plan edit — observe, orient, and advise.
+
+Return a JSON object with exactly:
+- "headline": one punchy line, ideally starting with the weekday and date (e.g. "Wed 8 Jul — ..."), capturing today's readiness + focus. No markdown.
+- "body_md": the briefing body, 2–3 short paragraphs, light markdown.`;
+
+const MORNING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: { headline: { type: 'string' }, body_md: { type: 'string' } },
+  required: ['headline', 'body_md'],
+} as const;
+
+export async function generateMorningBriefing(
+  ctx: PlanContext, memory: string, readiness: Record<string, unknown>,
+): Promise<MorningBriefing> {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
+
+  const userContent =
+    `Today is ${ctx.as_of}. Write this morning's briefing.\n\n` +
+    `── Readiness snapshot (today's biometrics vs recent baseline) ──\n${JSON.stringify(readiness)}\n\n` +
+    `── Your rolling memory (from prior nights) ──\n${memory || '(none yet — this is an early run)'}\n\n` +
+    `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: 3000,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: MORNING_SCHEMA } },
+      system: MORNING_SYSTEM,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (data?.stop_reason === 'refusal') throw new Error('Claude refused the morning-briefing request');
+  const text: string = (data?.content as Block[] | undefined ?? [])
+    .filter(b => b.type === 'text').map(b => b.text ?? '').join('');
+
+  let parsed: { headline?: unknown; body_md?: unknown };
+  try { parsed = JSON.parse(text); } catch { throw new Error(`Morning briefing returned non-JSON: ${text.slice(0, 200)}`); }
+  const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
+  const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
+  if (!headline || !bodyMd) throw new Error('Morning briefing returned an empty headline or body');
+  return { headline, bodyMd };
+}
+
 // ── Race debrief (manual "Analyse this race" button) ──────────
 
 const RACE_SYSTEM = `You are the athlete's endurance running coach, debriefing a race they just ran.
