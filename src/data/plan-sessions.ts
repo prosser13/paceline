@@ -249,7 +249,7 @@ export async function listCompletedBetween(from: string, to: string) {
 export async function getMostRecentCompletedSession(beforeDate: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, plan_sessions!inner(*)')
+    .select('completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, strava_activity_id, plan_sessions!inner(*)')
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
@@ -311,7 +311,7 @@ export async function getCompletionRefForSession(planSessionId: string) {
 export async function getCompletedForSession(planSessionId: string) {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
+    .select('actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort')
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -323,7 +323,7 @@ export async function listCompletedForSessions(planSessionIds: string[]) {
   if (!planSessionIds.length) return [];
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss')
+    .select('plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort')
     .in('plan_session_id', planSessionIds);
   return data ?? [];
 }
@@ -342,7 +342,7 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
 export async function listAllCompleted() {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, strava_activity_id, merged_strava_ids');
+    .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, strava_activity_id, merged_strava_ids');
   return data ?? [];
 }
 
@@ -422,6 +422,18 @@ export async function updateCompletedWorkout(
   patch: Record<string, any>,
 ): Promise<void> {
   await supabaseAdmin.from('completed_workouts').update(patch).eq('id', id);
+}
+
+// Stamp the Garmin RPE (perceived_exertion, 1–10) onto the completion for a Strava
+// activity. Returns whether a row was updated. intervals.icu is the source of truth
+// for run RPE, so this overwrites unconditionally.
+export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .update({ perceived_effort: rpe })
+    .eq('strava_activity_id', stravaId)
+    .select('id');
+  return !!(data && data.length);
 }
 
 // Long runs (run = has a pace; ≥20 km) that carry HR but no decoupling yet — the

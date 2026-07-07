@@ -20,6 +20,7 @@ export interface CompletedActuals {
   avgPower: number | null;   // rides only
   segmentActuals: (number | null)[] | null;
   segmentHr: (number | null)[] | null;
+  perceivedEffort: number | null;   // Garmin RPE (1–10) from intervals.icu, when logged
 }
 
 export interface CompletedRow {
@@ -33,6 +34,7 @@ export interface CompletedRow {
   segment_actuals?: unknown;
   segment_hr?: unknown;
   tss?: number | string | null;   // stored (recomputed on threshold/FTP change); null → compute live
+  perceived_effort?: number | string | null;
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
@@ -62,6 +64,7 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
     avgPower,
     segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
     segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
+    perceivedEffort: cw.perceived_effort != null ? Number(cw.perceived_effort) : null,
   };
 }
 

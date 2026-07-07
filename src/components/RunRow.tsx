@@ -51,6 +51,7 @@ export interface RunRowCompleted {
   avgPower?: number | null;
   segmentActuals?: (number | null)[] | null;
   segmentHr?: (number | null)[] | null;
+  perceivedEffort?: number | null;
 }
 
 const toneClass = (t?: string) =>
@@ -204,15 +205,22 @@ export default function RunRow({
                   {session.description}
                 </div>
               )}
-              {exec && (
-                <div className="mt-[6px]">
-                  <span
-                    className="inline-flex items-center gap-[5px] font-mono text-[11px] font-bold rounded-[5px] border px-[6px] py-[1px]"
-                    style={{ color: scoreColor(exec.score), borderColor: `color-mix(in srgb, ${scoreColor(exec.score)} 45%, transparent)` }}
-                    title={exec.note}
-                  >
-                    {exec.score}<span className="text-stone font-medium">execution</span>
-                  </span>
+              {(exec || (done && completed?.perceivedEffort != null)) && (
+                <div className="mt-[6px] flex items-center gap-[6px] flex-wrap">
+                  {exec && (
+                    <span
+                      className="inline-flex items-center gap-[5px] font-mono text-[11px] font-bold rounded-[5px] border px-[6px] py-[1px]"
+                      style={{ color: scoreColor(exec.score), borderColor: `color-mix(in srgb, ${scoreColor(exec.score)} 45%, transparent)` }}
+                      title={exec.note}
+                    >
+                      {exec.score}<span className="text-stone font-medium">execution</span>
+                    </span>
+                  )}
+                  {done && completed?.perceivedEffort != null && (
+                    <span className="inline-flex items-center gap-[4px] font-mono text-[11px] font-bold text-stone border border-fog rounded-[5px] px-[6px] py-[1px]" title="Effort you logged on your watch">
+                      RPE {completed.perceivedEffort}<span className="text-stone/60 font-medium">/10</span>
+                    </span>
+                  )}
                 </div>
               )}
               {session.race_slug && (

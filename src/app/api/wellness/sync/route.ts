@@ -7,7 +7,7 @@
 // (set CRON_SECRET in the environment). A browser session is also accepted so the
 // sync can be triggered from the app. Requests with neither are rejected.
 
-import { syncWellnessDays } from '@/lib/intervals';
+import { syncWellnessDays, syncActivityRpe } from '@/lib/intervals';
 import { getCurrentUser } from '@/lib/auth';
 import { writeBenchmarkSnapshot } from '@/data/benchmarks';
 
@@ -24,9 +24,12 @@ async function handle(request: Request): Promise<Response> {
   }
   try {
     const result = await syncWellnessDays();
+    // Stamp Garmin RPE onto matching completions (best-effort — a failure here must
+    // not fail the wellness sync).
+    const rpe = await syncActivityRpe().catch(() => ({ ok: false, updated: 0 }));
     // Refresh this week's marathon-prediction snapshot (best-effort; never throws).
     await writeBenchmarkSnapshot(new Date().toISOString().slice(0, 10));
-    return Response.json(result, { status: result.ok ? 200 : 502 });
+    return Response.json({ ...result, rpe_updated: rpe.updated }, { status: result.ok ? 200 : 502 });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });
   }

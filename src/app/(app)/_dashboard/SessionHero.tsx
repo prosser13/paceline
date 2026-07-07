@@ -74,7 +74,11 @@ export default function SessionHero({
   const paceLabel = session.target_pace
     ? `${session.target_pace}${session.target_pace_end ? `–${session.target_pace_end}` : ''}/km`
     : null;
-  const chips = [cap(intensity), paceLabel].filter(Boolean) as string[];
+  const chips = [
+    cap(intensity),
+    paceLabel,
+    isDone && completed?.perceivedEffort != null ? `RPE ${completed.perceivedEffort}/10` : null,
+  ].filter(Boolean) as string[];
 
   const stats = isDone
     ? [{ v: compare?.pace.actual ?? '—', l: 'pace' }, { v: tssActual != null ? `${tssActual}` : '—', l: 'TSS' }]
