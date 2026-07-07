@@ -3,6 +3,7 @@ import {
   getWellnessCacheRow, saveWellnessCacheRow, markWellnessCacheStale,
 } from '@/data/wellness-cache';
 import { upsertWellnessDays, type WellnessDay } from '@/data/wellness-days';
+import { setPerceivedEffortByStravaId } from '@/data/plan-sessions';
 
 const ATHLETE_ID = 'i330821';
 const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
@@ -309,6 +310,70 @@ export async function syncWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): 
   const written = await upsertWellnessDays(rows);
   const latest = rows.length ? rows[rows.length - 1].date : null;
   return { ok: true, days: written, latest };
+}
+
+// ── RPE sync (PB-campaign wave 3) ─────────────────────────────
+//
+// Garmin's 1–10 RPE rides on the intervals.icu *activity* as `perceived_exertion`
+// (distinct from `feel`). We pull it and stamp it onto the matching completion by
+// Strava id, so completed runs show the RPE the athlete logged on their watch.
+
+interface IntervalsActivity {
+  id?: string | number;
+  strava_id?: number | string | null;
+  perceived_exertion?: number | null;
+}
+
+// The Strava id an intervals activity maps to: the explicit `strava_id`, else the
+// activity `id` when it's a bare number (intervals ids for Strava imports).
+function stravaIdOf(a: IntervalsActivity): number | null {
+  const raw = a.strava_id ?? a.id;
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw);
+  return null;
+}
+
+async function fetchActivityRpe(windowDays: number): Promise<{ stravaId: number; rpe: number }[]> {
+  const today = new Date();
+  const newest = isoDay(today);
+  const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
+  const res = await fetch(
+    `${BASE}/activities?oldest=${oldest}&newest=${newest}`,
+    { headers: authHeaders(), cache: 'no-store' },
+  );
+  if (!res.ok) {
+    const body = (await res.text().catch(() => '')).slice(0, 160);
+    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
+  }
+  const acts = (await res.json()) as IntervalsActivity[];
+  const out: { stravaId: number; rpe: number }[] = [];
+  for (const a of acts) {
+    if (a.perceived_exertion == null) continue;
+    const stravaId = stravaIdOf(a);
+    if (stravaId == null) continue;
+    const rpe = Math.round(Number(a.perceived_exertion));
+    if (rpe >= 1 && rpe <= 10) out.push({ stravaId, rpe });
+  }
+  return out;
+}
+
+export interface RpeSyncResult { ok: boolean; updated: number; error?: string }
+
+// Pull recent activity RPE and stamp it onto matching completions. Idempotent —
+// re-writes the same value each run. Best-effort; called from the wellness sync.
+export async function syncActivityRpe(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<RpeSyncResult> {
+  if (!process.env.INTERVALS_API_KEY) return { ok: false, updated: 0, error: 'INTERVALS_API_KEY is not set' };
+  let items: { stravaId: number; rpe: number }[];
+  try {
+    items = await fetchActivityRpe(windowDays);
+  } catch (e) {
+    return { ok: false, updated: 0, error: `intervals.icu activities request failed — ${e instanceof Error ? e.message : String(e)}` };
+  }
+  let updated = 0;
+  for (const it of items) {
+    if (await setPerceivedEffortByStravaId(it.stravaId, it.rpe)) updated++;
+  }
+  return { ok: true, updated };
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
