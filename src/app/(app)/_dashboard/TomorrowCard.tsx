@@ -8,7 +8,7 @@ import { resolveSport } from '@/lib/sports/registry';
 import { normalizeStructure, type ZoneMap, type HrZoneMap } from '@/lib/plan-structure';
 import { normalizeCyclingStructure, type PowerZoneMap, type BikeHrZoneMap } from '@/lib/cycling';
 import { WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM } from '@/components/session-ui';
-import { CyclingDetailTable } from '@/components/CyclingRow';
+import { CyclingSegmentDetail } from '@/components/CyclingRow';
 import { StrengthDetailTable, type StrengthEx } from '@/components/StrengthRow';
 import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
 import { RUN, RIDE, STRENGTH, YOGA } from '@/lib/colors';
@@ -61,7 +61,7 @@ export default function TomorrowCard({
     const dur = humanHMM(session.estimated_duration);
     big = dur ?? (distKm != null ? kmStr(distKm) : '—');
     sub = [session.description, distKm != null ? kmStr(distKm) : null, tss != null ? `${tss} TSS` : null].filter(Boolean).join(' · ') || null;
-    if (segments.length > 0) detail = <CyclingDetailTable segments={segments} actual={null} />;
+    if (segments.length > 0) detail = <CyclingSegmentDetail segments={segments} actual={null} variant="card" />;
   } else if (sport === 'strength') {
     const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
     const focus = session.description ? session.description.split(/\s*[—–·]\s*/)[0].trim() : null;

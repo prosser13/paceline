@@ -1,21 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { ZoneChip, fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, buildRideCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
+import { fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, buildRideCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
-  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower, fmtHr,
+  normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower,
   type PowerZoneMap, type BikeHrZoneMap, type CyclingSegment,
 } from '@/lib/cycling';
-
-// Column grid for the ride segment table — mirrors the run segment table.
-export const CYCLING_COLS = '1fr 104px 84px 70px';
-
-// Whole minutes (may be fractional) → "61:24".
-function fmtMinSec(mins: number): string {
-  const total = Math.round(mins * 60);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
 
 function parseDurMins(str: string | null | undefined): number | null {
   if (!str) return null;
@@ -41,59 +32,55 @@ function CyclingDelta({ tss, dur }: { tss: WindowCmp | null; dur: WindowCmp | nu
   );
 }
 
-// One cell that shows the actual value (bold) over the planned target (small).
-function ActualCell({ value, target }: { value: string; target: string }) {
-  return (
-    <span className="text-right leading-tight">
-      <span className="font-mono text-[13.5px] text-ink tabular-nums block">{value}</span>
-      <span className="font-mono text-[11px] text-stone tabular-nums block mt-[1px]">{target}</span>
-    </span>
-  );
-}
-
-// The segment table body (header + one row per segment), shared by the ride row
-// and the dashboard CyclingHero. When `actual` is supplied for a single-segment
-// ride (no per-segment splits exist for rides), the row shows the whole-ride
-// actuals over the planned targets — mirroring the run segment table.
-export function CyclingDetailTable({ segments, actual = null }: {
+// Per-segment ride detail as clean, wrapping rows (name + target on the left,
+// duration/actual on the right) — the run's WorkoutDetail counterpart, so the
+// ride reads identically and fits narrow screens instead of a fixed-column grid
+// that clipped the last column on mobile. Shared by the plan-page ride row, the
+// dashboard CyclingHero and the Tomorrow card. When `actual` is supplied for a
+// single-segment ride (rides carry no per-segment splits), the row shows the
+// whole-ride actuals against the planned targets. `variant`: 'row' indents under
+// a row; 'card' breaks out to the card edge (hero / Tomorrow card).
+export function CyclingSegmentDetail({ segments, actual = null, variant = 'row' }: {
   segments: CyclingSegment[];
   actual?: { avgPower: number | null; avgHr: number | null; durationMins: number | null } | null;
+  variant?: 'row' | 'card';
 }) {
+  if (!segments.length) return null;
   const showActual = !!actual && segments.length === 1;
+  const wrap = variant === 'row'
+    ? `${DETAIL_WRAP} py-[2px]`
+    : '-mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]';
   return (
-    <>
-      <div
-        className="grid items-center gap-x-[10px] pb-[6px] mb-[2px] border-b border-fog/50"
-        style={{ gridTemplateColumns: CYCLING_COLS }}
-      >
-        {['Segment', 'Power', 'HR', 'Time'].map((h, i) => (
-          <span key={h} className={`font-mono text-[11.5px] tracking-[.1em] uppercase text-stone ${i === 0 ? '' : 'text-right'}`}>
-            {h}
-          </span>
-        ))}
-      </div>
-      {segments.map((seg, i) => (
-        <div key={i} className="py-[6px] grid items-start gap-x-[10px]" style={{ gridTemplateColumns: CYCLING_COLS }}>
-          <span className="text-[14.5px] font-medium text-ink flex items-center gap-[7px] min-w-0">
-            <span className="truncate">{seg.label}</span>
-            {seg.zoneKey && <ZoneChip zone={seg.zoneKey} />}
-          </span>
-          {showActual ? (
-            <>
-              <ActualCell value={actual!.avgPower != null ? `${actual!.avgPower} W` : '—'} target={fmtPower(seg.powerMin, seg.powerMax)} />
-              <ActualCell value={actual!.avgHr != null ? `${actual!.avgHr}` : '—'} target={fmtHr(seg.hrMin, seg.hrMax)} />
-              <ActualCell value={actual!.durationMins != null ? fmtMinSec(actual!.durationMins) : '—'} target={seg.durationMins ? fmtRideClock(seg.durationMins) : '—'} />
-            </>
-          ) : (
-            <>
-              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtPower(seg.powerMin, seg.powerMax)}</span>
-              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{fmtHr(seg.hrMin, seg.hrMax)}</span>
-              <span className="font-mono text-[13.5px] text-ink text-right tabular-nums">{seg.durationMins ? fmtRideClock(seg.durationMins) : '—'}</span>
-            </>
-          )}
-        </div>
-      ))}
-    </>
+    <div className={wrap}>
+      {segments.map((seg, i) => {
+        if (showActual && actual) {
+          const pwColor = actual.avgPower != null && seg.powerMin != null && seg.powerMax != null
+            ? rangeColor(actual.avgPower, seg.powerMin, seg.powerMax) : undefined;
+          const hrColor = actual.avgHr != null && seg.hrMin != null && seg.hrMax != null
+            ? rangeColor(actual.avgHr, seg.hrMin, seg.hrMax) : undefined;
+          return (
+            <DetailRow
+              key={i}
+              label={seg.label}
+              sub={`Plan ${fmtPower(seg.powerMin, seg.powerMax)}${seg.durationMins ? ` · ${fmtRideClock(seg.durationMins)}` : ''}`}
+              value={actual.avgPower != null ? `${actual.avgPower} W` : '—'}
+              valueColor={pwColor}
+              valueSub={actual.avgHr != null ? `${actual.avgHr} bpm` : null}
+              valueSubColor={hrColor}
+            />
+          );
+        }
+        return (
+          <DetailRow
+            key={i}
+            label={seg.label}
+            sub={fmtPower(seg.powerMin, seg.powerMax)}
+            value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
+            valueSub={seg.zoneKey ?? null}
+          />
+        );
+      })}
+    </div>
   );
 }
 
@@ -216,34 +203,10 @@ export default function CyclingRow({
               segment shows the actual power/HR (the ride has no per-segment
               splits); otherwise the planned target. */}
           {isDone && <CompareTable rows={rideCompareRows} />}
-          <div className={`${DETAIL_WRAP} ${isDone ? 'pt-0' : ''}`}>
-            {segments.map((seg, i) => {
-              const showActual = isDone && segments.length === 1;
-              const pwColor = showActual && completed?.avgPower != null && seg.powerMin != null && seg.powerMax != null
-                ? rangeColor(completed.avgPower, seg.powerMin, seg.powerMax) : undefined;
-              const hrColor = showActual && completed?.avgHr != null && seg.hrMin != null && seg.hrMax != null
-                ? rangeColor(completed.avgHr, seg.hrMin, seg.hrMax) : undefined;
-              return showActual ? (
-                <DetailRow
-                  key={i}
-                  label={seg.label}
-                  sub={`Plan ${fmtPower(seg.powerMin, seg.powerMax)}${seg.durationMins ? ` · ${fmtRideClock(seg.durationMins)}` : ''}`}
-                  value={completed?.avgPower != null ? `${completed.avgPower} W` : '—'}
-                  valueColor={pwColor}
-                  valueSub={completed?.avgHr != null ? `${completed.avgHr} bpm` : null}
-                  valueSubColor={hrColor}
-                />
-              ) : (
-                <DetailRow
-                  key={i}
-                  label={seg.label}
-                  sub={fmtPower(seg.powerMin, seg.powerMax)}
-                  value={seg.durationMins ? fmtRideClock(seg.durationMins) : null}
-                  valueSub={seg.zoneKey ?? null}
-                />
-              );
-            })}
-          </div>
+          <CyclingSegmentDetail
+            segments={segments}
+            actual={isDone && completed ? { avgPower: completed.avgPower ?? null, avgHr: completed.avgHr ?? null, durationMins: actualMins } : null}
+          />
         </>
       )}
     </div>

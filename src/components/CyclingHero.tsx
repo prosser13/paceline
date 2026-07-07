@@ -1,6 +1,6 @@
 import ProfileChart from './ProfileChart';
 import { buildCyclingBars } from '@/lib/profile';
-import { CyclingDetailTable } from './CyclingRow';
+import { CyclingSegmentDetail } from './CyclingRow';
 import { BikeGlyph } from './glyphs';
 import { RIDE, RIDE_B, READY } from '@/lib/colors';
 import { CompareTable, buildRideCompare, humanHMM, fmtClock } from './session-ui';
@@ -131,9 +131,10 @@ export default function CyclingHero({
         </div>
         {segments.length > 0 && (
           <div className="mt-[14px]">
-            <CyclingDetailTable
+            <CyclingSegmentDetail
               segments={segments}
               actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
+              variant="card"
             />
           </div>
         )}

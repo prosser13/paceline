@@ -88,9 +88,3 @@ export function fmtPower(min: number | null, max: number | null): string {
   if (min != null && max != null) return min === max ? `${min} W` : `${min}–${max} W`;
   return `${min ?? max} W`;
 }
-
-export function fmtHr(min: number | null, max: number | null): string {
-  if (min == null && max == null) return '—';
-  if (min != null && max != null) return min === max ? `${min}` : `${min}–${max}`;
-  return `${min ?? max}`;
-}
