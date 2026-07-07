@@ -56,14 +56,14 @@ export async function listRaceResultsSince(since: string): Promise<RaceResult[]>
   });
 }
 
-export interface LongRun { date: string; ngpMinKm: number; km: number; }
+export interface LongRun { date: string; ngpMinKm: number; km: number; decouplingPct: number | null; paceDecayPct: number | null; }
 
 // Completed long runs since `since` — planned LONG_RUN sessions OR any run ≥ 25 km
-// (the agreed "type OR distance" rule), with their NGP (grade-adjusted pace).
+// (the agreed "type OR distance" rule), with their NGP + long-run quality metrics.
 export async function listLongRunsSince(since: string): Promise<LongRun[]> {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_distance_km, plan_sessions!inner(session_type, activity_type, distance_km)')
+    .select('completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_distance_km, decoupling_pct, pace_decay_pct, plan_sessions!inner(session_type, activity_type, distance_km)')
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
 
@@ -77,7 +77,11 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
     const ngp = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km)
       : r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
     if (!ngp || !r.completed_date) return [];
-    return [{ date: r.completed_date as string, ngpMinKm: ngp, km }];
+    return [{
+      date: r.completed_date as string, ngpMinKm: ngp, km,
+      decouplingPct: r.decoupling_pct != null ? Number(r.decoupling_pct) : null,
+      paceDecayPct:  r.pace_decay_pct != null ? Number(r.pace_decay_pct) : null,
+    }];
   }).sort((a, b) => a.date.localeCompare(b.date));
 }
 

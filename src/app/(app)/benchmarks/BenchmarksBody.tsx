@@ -141,9 +141,53 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         )}
       </Card>
 
-      <p className="text-[11.5px] text-stone mt-[18px]">Long-run quality (aerobic decoupling, pace decay) and gear tracking arrive in a later update.</p>
+      {/* Long-run quality */}
+      <SecLabel>Long-run quality</SecLabel>
+      <Card>
+        {d.longRuns.length === 0 ? (
+          <p className="text-[13px] text-stone">No long runs in the last 12 weeks yet. Decoupling &amp; pace-decay populate from your Strava streams as long runs sync.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r']].map(([h, a]) => (
+                    <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {d.longRuns.map((r, i) => (
+                  <tr key={i}>
+                    <td className="py-[9px] border-b border-fog/60">{shortDate(r.date)}</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">{Math.round(r.km)} km</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">{fmtPace(r.ngpMinKm)}</td>
+                    <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.decouplingPct, 5, 8)}`}>{fmtPct(r.decouplingPct)}</td>
+                    <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.paceDecayPct, 2, 4)}`}>{fmtPct(r.paceDecayPct)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11.5px] text-stone mt-[8px]">Decoupling = HR drift vs pace (lower = more durable; &lt;5% is strong). Final-⅓ decay = grade-adjusted slowdown over the last third. Both grade-adjusted.</p>
+          </div>
+        )}
+      </Card>
+
+      <p className="text-[11.5px] text-stone mt-[18px]">Execution scoring, RPE, and gear tracking arrive in later updates.</p>
     </>
   );
+}
+
+// Green under `good`, amber under `warn`, red above — for "lower is better" drift metrics.
+function driftColor(v: number | null, good: number, warn: number): string {
+  if (v == null) return 'text-stone';
+  if (v <= good) return 'text-ready';
+  if (v <= warn) return 'text-strength';
+  return 'text-run';
+}
+function fmtPct(v: number | null): string {
+  if (v == null) return '—';
+  return `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
 }
 
 function Marker({ label, value, series, color, invert = false }: { label: string; value: string; series: Series[]; color: string; invert?: boolean }) {

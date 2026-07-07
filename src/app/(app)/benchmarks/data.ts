@@ -5,7 +5,7 @@
 // show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
-import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
+import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { danielsVdot, vdotToTimeMin } from '@/lib/prediction';
@@ -33,6 +33,7 @@ export interface BenchmarksData {
   vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
   races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number }[];
+  longRuns: { date: string; km: number; ngpMinKm: number; decouplingPct: number | null; paceDecayPct: number | null }[];
 }
 
 // Running VDOT implied by a marathon time (seconds), rounded to one decimal.
@@ -44,13 +45,14 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = new Date().toISOString().slice(0, 10);
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, goal, thresholdStr, snapshots, wellness, races] = await Promise.all([
+  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns] = await Promise.all([
     getCurrentPrediction(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
     listBenchmarkSnapshotsSince(isoWeekStart(since)),
     listRecentWellnessDays(WINDOW_DAYS),
     listRaceResultsSince(addDays(asOf, -365)),   // races are sparse milestones — wider window
+    listLongRunsSince(since),                     // rolling 12-week window
   ]);
 
   const rhrSeries: Series[] = wellness.flatMap(w => w.resting_hr != null ? [{ date: w.date, v: w.resting_hr }] : []);
@@ -78,5 +80,6 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
         const vdot = danielsVdot(r.distanceKm * 1000, r.seconds / 60);
         return { ...r, impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, 42195) * 60) };
       }),
+    longRuns: [...longRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
   };
 }
