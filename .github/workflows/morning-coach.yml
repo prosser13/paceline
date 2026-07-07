@@ -1,0 +1,46 @@
+# Morning briefing — pings /api/coach/morning across the waking window so the
+# briefing goes out shortly after the athlete's overnight wellness (sleep/HRV)
+# syncs from Garmin → intervals.icu. There is no intervals.icu wellness webhook,
+# so this polls: the route generates once the data has landed, and the final fire
+# sends anyway (with whatever's available) past the configured fallback time.
+#
+# The route is idempotent (one morning briefing per London day, DB-enforced), so
+# firing several times is safe: the first success posts, the rest skip.
+#
+# Setup: reuses CRON_SECRET (repo secret) + ANTHROPIC_API_KEY / TELEGRAM_* (Vercel).
+# Optional repo variable MORNING_COACH_URL if prod isn't https://paceline.run.
+# Scheduled workflows only run once this file is on the DEFAULT branch.
+#
+# Times are UTC. In BST (summer) the window below is 05:30–09:30 local; when the
+# clocks change to GMT, shift each cron up by 1h to hold the same local window.
+name: Morning briefing
+
+on:
+  schedule:
+    - cron: '30 4,5,6,7 * * *'   # 05:30 / 06:30 / 07:30 / 08:30 BST — poll for overnight wellness
+    - cron: '30 8 * * *'         # 09:30 BST — final fallback; sends anyway + alerts on failure
+  workflow_dispatch: {}          # manual "Run workflow" button
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger morning briefing
+        env:
+          URL: ${{ vars.MORNING_COACH_URL || 'https://paceline.run/api/coach/morning' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # The 09:30 BST run is the window's last attempt — tell the route to send
+          # with whatever's available and to alert (not fail silently) on error.
+          FINAL: ${{ github.event.schedule == '30 8 * * *' && '1' || '0' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET secret is not set — add it in repo Settings → Secrets → Actions"
+            exit 1
+          fi
+          code=$(curl -sS -o /tmp/resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" "$URL?final=$FINAL")
+          echo "POST $URL?final=$FINAL -> HTTP $code"
+          cat /tmp/resp.json; echo
+          # Fail the run on any non-200 so a broken morning is visible in Actions;
+          # the next scheduled fire will retry (the route is idempotent).
+          [ "$code" = "200" ]
