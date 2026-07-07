@@ -9,6 +9,7 @@
 
 import { syncWellnessDays } from '@/lib/intervals';
 import { getCurrentUser } from '@/lib/auth';
+import { writeBenchmarkSnapshot } from '@/data/benchmarks';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,8 @@ async function handle(request: Request): Promise<Response> {
   }
   try {
     const result = await syncWellnessDays();
+    // Refresh this week's marathon-prediction snapshot (best-effort; never throws).
+    await writeBenchmarkSnapshot(new Date().toISOString().slice(0, 10));
     return Response.json(result, { status: result.ok ? 200 : 502 });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });

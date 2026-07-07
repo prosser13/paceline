@@ -103,6 +103,11 @@ export default function Sidebar({
         Strength
       </Link>
 
+      <Link href="/benchmarks" onClick={go('/benchmarks')} className={topClass(activePrefix('/benchmarks'))}>
+        <span className={dot(activePrefix('/benchmarks'), 'bg-hard')} />
+        Benchmarks
+      </Link>
+
       <div className="mt-auto">
         <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
           <span className={dot(active('/settings'), 'bg-yoga')} />
