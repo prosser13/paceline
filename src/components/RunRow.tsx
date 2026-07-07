@@ -18,6 +18,7 @@ import ProfileChart from './ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
+import { computeExecutionScore, scoreColor } from '@/lib/execution-score';
 import {
   INTENSITY, MetricBlock, WorkoutDetail, CompareTable, PlannedDetail, RaceBadge,
   syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, parseDurationMins,
@@ -123,6 +124,10 @@ export default function RunRow({
   const rowKm   = done ? completed?.distanceKm ?? null : (session.distance_km != null ? Number(session.distance_km) : null);
   const kmLabel = rowKm != null ? `${rowKm % 1 === 0 ? rowKm : rowKm.toFixed(1)} km` : null;
 
+  // Execution score — how well the actual pacing hit the planned targets. Runs only,
+  // and only when there are scorable pace segments (never a meaningless 100).
+  const exec = done && completed && !isRace ? computeExecutionScore(detailSteps) : null;
+
   // Completed run → Plan / Actual / Δ comparison via the shared builder (the
   // same maths/wording as the dashboard hero). ovDur/ovTss feed the compact
   // "vs plan" slot so the glance and the expanded table always agree.
@@ -197,6 +202,17 @@ export default function RunRow({
                   {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
                   {kmLabel && session.description && ' · '}
                   {session.description}
+                </div>
+              )}
+              {exec && (
+                <div className="mt-[6px]">
+                  <span
+                    className="inline-flex items-center gap-[5px] font-mono text-[11px] font-bold rounded-[5px] border px-[6px] py-[1px]"
+                    style={{ color: scoreColor(exec.score), borderColor: `color-mix(in srgb, ${scoreColor(exec.score)} 45%, transparent)` }}
+                    title={exec.note}
+                  >
+                    {exec.score}<span className="text-stone font-medium">execution</span>
+                  </span>
                 </div>
               )}
               {session.race_slug && (

@@ -7,6 +7,7 @@
 import ProfileChart from '@/components/ProfileChart';
 import { buildProfileBars } from '@/lib/profile';
 import { normalizeStructure } from '@/lib/plan-structure';
+import { computeExecutionScore, scoreColor } from '@/lib/execution-score';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
@@ -55,6 +56,8 @@ export default function SessionHero({
   const distActual  = completed?.distanceKm ?? null;
   const tssActual   = completed?.tss ?? null;
   const isRace      = session.session_type === 'RACE';
+  // Execution score — pacing vs plan. Runs only (not races), when scorable.
+  const exec = isDone && !isRace ? computeExecutionScore(steps) : null;
 
   const compare = isDone ? buildRunCompare(steps, {
     planKm: distPlanned, actKm: distActual, actMins: completed?.mins ?? null,
@@ -105,7 +108,15 @@ export default function SessionHero({
               </div>
             )}
           </div>
-          <div className="flex shrink-0" style={{ gap: '22px', textAlign: 'right' }}>
+          <div className="flex shrink-0 items-center" style={{ gap: '22px', textAlign: 'right' }}>
+            {exec && (
+              <div className="flex flex-col items-center" title={exec.note}>
+                <div className="rounded-full grid place-items-center" style={{ width: '52px', height: '52px', background: `conic-gradient(${scoreColor(exec.score)} ${exec.score}%, ${light ? 'var(--color-fog)' : 'rgba(255,255,255,.16)'} 0)` }}>
+                  <div className="rounded-full grid place-items-center font-display font-bold" style={{ width: '40px', height: '40px', background: light ? 'var(--color-paper)' : 'var(--color-hero)', fontSize: '16px' }}>{exec.score}</div>
+                </div>
+                <div className="text-[10px] uppercase font-bold mt-[3px]" style={{ letterSpacing: '.04em', color: accent }}>exec</div>
+              </div>
+            )}
             {stats.map((s, i) => (
               <div key={i}>
                 <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
