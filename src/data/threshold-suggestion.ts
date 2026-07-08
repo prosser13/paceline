@@ -4,11 +4,12 @@
 // threshold_checks. Suggest freely, apply conservatively, never silently.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getThresholdPace, setThresholdPace, replacePaceZones } from '@/data/zones';
+import { getThresholdPace, setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 import { danielsVdot, vdotToThresholdPaceMinKm } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
-import { secondsToPace } from '@/lib/plan-structure';
+import { buildZoneMaps } from '@/lib/zone-builders';
+import { secondsToPace, normalizeStructure, paceToSeconds, type NormStep, type NormSegment } from '@/lib/plan-structure';
 
 // ── constants (all guardrails live here) ──────────────────────
 const RECENCY_HALFLIFE = 42;   // days — a race's weight halves every 6 weeks
@@ -54,8 +55,63 @@ function daysBetween(a: string, b: string): number {
   return (Date.parse(b) - Date.parse(a)) / 86400000;
 }
 
+// ── quality-segment evidence (P2) ─────────────────────────────
+// Between races, a sustained threshold/Z4 segment that comes in FASTER than its
+// prescribed window at a sane (non-redline) HR says the athlete is quicker than
+// the setting. Short interval reps run faster than 60-min threshold, so only
+// sustained blocks count; the median across recent qualifiers is one 0.6-weight
+// signal.
+function flattenSegs(steps: NormStep[]): NormSegment[] {
+  const out: NormSegment[] = [];
+  for (const s of steps) { if (s.kind === 'segment') out.push(s); else out.push(...s.steps); }
+  return out;
+}
+function isQualityZone(seg: NormSegment): boolean {
+  const z = (seg.zoneKey || '').toLowerCase();
+  return z === 'z4' || z === 'z5' || /threshold|tempo/i.test(seg.label || '');
+}
+
+async function qualitySegmentSignal(asOf: string): Promise<{ signal: ThresholdEvidence | null; newestDate: string | null }> {
+  const since = addDays(asOf, -42);
+  const [{ data: runs }, paceZoneRows, hrZoneRows, hrCfg] = await Promise.all([
+    supabaseAdmin.from('completed_workouts')
+      .select('completed_date, segment_actuals, segment_hr, plan_sessions!inner(structure, activity_type)')
+      .gte('completed_date', since).eq('plan_sessions.activity_type', 'running'),
+    listPaceZones(), listHrZones(), getHrConfig(),
+  ]);
+  const { zones, hrZones } = buildZoneMaps({ paceZones: paceZoneRows, hrZones: hrZoneRows, powerZones: [], bikeHrZones: [] });
+  const maxHr = (hrCfg?.max_hr as number | null | undefined) ?? null;
+
+  const implied: { minKm: number; date: string }[] = [];
+  for (const r of runs ?? []) {
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as { structure: unknown } | null;
+    if (!ps?.structure || !Array.isArray(ps.structure) || !ps.structure.length || !r.completed_date) continue;
+    const steps = normalizeStructure(
+      ps.structure as unknown[], zones,
+      (r.segment_actuals as (number | null)[] | null) ?? null, hrZones, (r.segment_hr as (number | null)[] | null) ?? null,
+    );
+    for (const seg of flattenSegs(steps)) {
+      if (!isQualityZone(seg) || seg.distanceKm < 2.5) continue;              // sustained only
+      if (seg.actualPaceSec == null || seg.actualPaceSec <= 0) continue;
+      if (maxHr && seg.actualHr != null && seg.actualHr > maxHr * 0.93) continue;   // redline → not sustainable threshold
+      const fastEdge = Math.min(paceToSeconds(seg.paceMin) ?? Infinity, paceToSeconds(seg.paceMax) ?? Infinity);
+      if (seg.actualPaceSec >= fastEdge) continue;                            // only faster-than-prescribed counts
+      implied.push({ minKm: seg.actualPaceSec / 60, date: r.completed_date as string });
+    }
+  }
+  if (implied.length < 2) return { signal: null, newestDate: null };
+  const sorted = [...implied].sort((a, b) => a.minKm - b.minKm);
+  const median = sorted[Math.floor(sorted.length / 2)].minKm;
+  const newestDate = implied.reduce((a, b) => (b.date > a ? b.date : a), implied[0].date);
+  const weight = 0.6 * Math.pow(0.5, Math.max(0, daysBetween(newestDate, asOf)) / RECENCY_HALFLIFE);
+  return {
+    signal: { label: `${implied.length} threshold segments (median ${fmtPace(median)})`, impliedThresholdMinKm: Math.round(median * 1000) / 1000, weight: Math.round(weight * 100) / 100 },
+    newestDate,
+  };
+}
+
 // ── the estimator ─────────────────────────────────────────────
-interface Estimate { estimateMinKm: number | null; signals: ThresholdEvidence[]; newestRaceDate: string | null; }
+interface Estimate { estimateMinKm: number | null; signals: ThresholdEvidence[]; newestEvidenceDate: string | null; }
 
 function raceLabel(km: number, seconds: number, date: string): string {
   const name = Math.abs(km - 42.195) < 0.5 ? 'Marathon' : Math.abs(km - 21.0975) < 0.4 ? 'HM'
@@ -66,7 +122,10 @@ function raceLabel(km: number, seconds: number, date: string): string {
 }
 
 async function estimateThreshold(asOf: string, currentMinKm: number): Promise<Estimate> {
-  const races = await listRaceResultsSince(addDays(asOf, -365));
+  const [races, quality] = await Promise.all([
+    listRaceResultsSince(addDays(asOf, -365)),
+    qualitySegmentSignal(asOf),
+  ]);
   const signals: ThresholdEvidence[] = [];
   let newestRaceDate: string | null = null;
 
@@ -80,6 +139,10 @@ async function estimateThreshold(asOf: string, currentMinKm: number): Promise<Es
     if (!newestRaceDate || r.date > newestRaceDate) newestRaceDate = r.date;
   }
 
+  // Quality-segment evidence (P2) between races.
+  if (quality.signal) signals.push(quality.signal);
+  const newestEvidenceDate = [newestRaceDate, quality.newestDate].filter(Boolean).sort().pop() ?? null;
+
   // Anchor term — the current setting, so the estimate moves toward the evidence
   // rather than jumping to it.
   const anchor: ThresholdEvidence = { label: `Current setting ${fmtPace(currentMinKm)}`, impliedThresholdMinKm: currentMinKm, weight: ANCHOR_WEIGHT };
@@ -89,7 +152,7 @@ async function estimateThreshold(asOf: string, currentMinKm: number): Promise<Es
     ? all.reduce((a, s) => a + s.impliedThresholdMinKm * s.weight, 0) / totalW
     : null;
 
-  return { estimateMinKm: estimateMinKm != null ? Math.round(estimateMinKm * 1000) / 1000 : null, signals, newestRaceDate };
+  return { estimateMinKm: estimateMinKm != null ? Math.round(estimateMinKm * 1000) / 1000 : null, signals, newestEvidenceDate };
 }
 
 // ── last change (for cooldown) — applied checks + manual edits ─
@@ -131,7 +194,7 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     if (!thrStr) return;
     const currentMinKm = parseThresholdPace(thrStr);
 
-    const { estimateMinKm, signals, newestRaceDate } = await estimateThreshold(today, currentMinKm);
+    const { estimateMinKm, signals, newestEvidenceDate } = await estimateThreshold(today, currentMinKm);
     const evidenceText = signals.length
       ? `Evidence: ${signals.map(s => `${s.label} implies ${fmtPace(s.impliedThresholdMinKm)}/km`).join('; ')}; current setting ${fmtPace(currentMinKm)} anchors the blend.`
       : '';
@@ -165,10 +228,10 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
         commentary: `${stamp} ${estText} — slower than your setting. A slower threshold needs a ≥${SLOWER_GAP_S}s gap sustained across several checks before it moves the plan. Watching, not suggesting.`, evidence: signals });
       return;
     }
-    // 4. Fresh evidence.
-    if (!newestRaceDate || daysBetween(newestRaceDate, today) > FRESH_RACE_DAYS) {
+    // 4. Fresh evidence — a recent race OR recent quality-segment evidence.
+    if (!newestEvidenceDate || daysBetween(newestEvidenceDate, today) > FRESH_RACE_DAYS) {
       await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'no_fresh_evidence', status: 'none',
-        commentary: `${stamp} ${estText}, ${Math.round(gapS)}s faster — but your newest race is over ${FRESH_RACE_DAYS} days old. A suggestion needs recent evidence. No change.`, evidence: signals });
+        commentary: `${stamp} ${estText}, ${Math.round(gapS)}s faster — but the newest evidence (race or threshold session) is over ${FRESH_RACE_DAYS} days old. A suggestion needs recent evidence. No change.`, evidence: signals });
       return;
     }
     // 5. Cooldown.
@@ -223,6 +286,44 @@ export async function listThresholdChecks(limit = 10): Promise<ThresholdCheck[]>
   return ((data ?? []) as Record<string, unknown>[]).map(mapRow);
 }
 
+// The most recent applied change, if it's still the current state and carries the
+// before-snapshot needed to undo it. Powers the one-click Revert.
+export interface RevertableChange { id: string; beforeThreshold: string; afterThreshold: string; }
+export async function getRevertableChange(): Promise<RevertableChange | null> {
+  const { data } = await supabaseAdmin.from('threshold_checks')
+    .select('id, current_min_km, evidence, status').eq('outcome', 'applied')
+    .order('checked_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data || (data.status as string) === 'reverted') return null;
+  const ev = data.evidence as { beforeThreshold?: string; afterThreshold?: string; beforeZones?: unknown } | null;
+  if (!ev?.beforeThreshold || !Array.isArray(ev.beforeZones)) return null;
+  const afterMinKm = ev.afterThreshold ? parseThresholdPace(ev.afterThreshold) : Number(data.current_min_km);
+  const current = await freshThresholdMinKm();
+  if (current == null || Math.abs(current - afterMinKm) > 0.001) return null;   // superseded → not revertable
+  return { id: data.id as string, beforeThreshold: ev.beforeThreshold, afterThreshold: ev.afterThreshold ?? fmtPace(Number(data.current_min_km)) };
+}
+
+// Undo an applied change: restore the pre-change threshold + zones and recompute TSS.
+export async function revertThresholdChange(checkId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data } = await supabaseAdmin.from('threshold_checks')
+    .select('id, evidence, status').eq('id', checkId).eq('outcome', 'applied').maybeSingle();
+  if (!data) return { ok: false, error: 'Not found' };
+  if ((data.status as string) === 'reverted') return { ok: false, error: 'Already reverted' };
+  const ev = data.evidence as { beforeThreshold?: string; beforeZones?: { zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[] } | null;
+  if (!ev?.beforeThreshold || !Array.isArray(ev.beforeZones) || !ev.beforeZones.length) return { ok: false, error: 'No revert data' };
+
+  await replacePaceZones(ev.beforeZones);
+  await setThresholdPace(ev.beforeThreshold);   // + TSS recompute
+
+  await supabaseAdmin.from('threshold_checks').update({ status: 'reverted', resolved_at: new Date().toISOString() }).eq('id', checkId);
+  const today = new Date().toISOString().slice(0, 10);
+  await supabaseAdmin.from('threshold_checks').insert({
+    week_start: isoWeekStart(today), current_min_km: parseThresholdPace(ev.beforeThreshold), outcome: 'applied', status: 'none',
+    commentary: `Reverted to ${ev.beforeThreshold}/km on ${fmtDay(today)} — threshold + zones restored, TSS recomputed.`,
+    evidence: { revertOf: checkId, restoredTo: ev.beforeThreshold },
+  });
+  return { ok: true };
+}
+
 // ── apply / dismiss ───────────────────────────────────────────
 function shiftPaceStr(p: string, deltaS: number): string {
   return secondsToPace(Math.max(1, Math.round(parseThresholdPace(p) * 60 + deltaS)));
@@ -252,10 +353,10 @@ export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: b
   const deltaS = Math.round((suggestedMinKm - currentMinKm) * 60);   // negative = faster
 
   const zones = await freshZones();
-  const before = zones.map(z => ({ name: z.name as string, pace_min: z.pace_min as string, pace_max: z.pace_max as string }));
+  const before = zones.map(z => ({ zone_key: z.zone_key, name: z.name, pace_min: z.pace_min, pace_max: z.pace_max, sort_order: z.sort_order }));
   const shifted = zones.map(z => ({
-    zone_key: z.zone_key as string, name: z.name as string, sort_order: z.sort_order as number,
-    pace_min: shiftPaceStr(z.pace_min as string, deltaS), pace_max: shiftPaceStr(z.pace_max as string, deltaS),
+    zone_key: z.zone_key, name: z.name, sort_order: z.sort_order,
+    pace_min: shiftPaceStr(z.pace_min, deltaS), pace_max: shiftPaceStr(z.pace_max, deltaS),
   }));
   await replacePaceZones(shifted);
   await setThresholdPace(fmtPace(suggestedMinKm));   // sets threshold across app_config + recomputes all TSS
@@ -290,10 +391,10 @@ export async function correctThreshold(targetMinKm: number, reason: string): Pro
   if (deltaS === 0) return { ok: false, error: 'Already at that pace' };
 
   const zones = await freshZones();
-  const before = zones.map(z => ({ name: z.name as string, pace_min: z.pace_min as string, pace_max: z.pace_max as string }));
+  const before = zones.map(z => ({ zone_key: z.zone_key, name: z.name, pace_min: z.pace_min, pace_max: z.pace_max, sort_order: z.sort_order }));
   const shifted = zones.map(z => ({
-    zone_key: z.zone_key as string, name: z.name as string, sort_order: z.sort_order as number,
-    pace_min: shiftPaceStr(z.pace_min as string, deltaS), pace_max: shiftPaceStr(z.pace_max as string, deltaS),
+    zone_key: z.zone_key, name: z.name, sort_order: z.sort_order,
+    pace_min: shiftPaceStr(z.pace_min, deltaS), pace_max: shiftPaceStr(z.pace_max, deltaS),
   }));
   await replacePaceZones(shifted);
   await setThresholdPace(fmtPace(targetMinKm));   // + TSS recompute

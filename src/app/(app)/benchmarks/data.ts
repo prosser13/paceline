@@ -9,7 +9,7 @@ import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listLongRu
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
-import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, type ThresholdCheck } from '@/data/threshold-suggestion';
+import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
 
@@ -32,7 +32,7 @@ export interface BenchmarksData {
   signals: { source: string; label: string; impliedSeconds: number }[];
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
-  thresholdCheck: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[] };
+  thresholdCheck: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[]; revertable: RevertableChange | null };
   vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
   races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number }[];
@@ -54,7 +54,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = new Date().toISOString().slice(0, 10);
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory] = await Promise.all([
+  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
@@ -66,6 +66,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
+    getRevertableChange(),
   ]);
 
   const rhrSeries: Series[] = wellness.flatMap(w => w.resting_hr != null ? [{ date: w.date, v: w.resting_hr }] : []);
@@ -85,7 +86,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
     thresholdMinKm: thresholdStr ? parseThresholdPace(thresholdStr) : null,
     thresholdTrend: snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []),
-    thresholdCheck: { latest: thrLatest, pending: thrPending, history: thrHistory },
+    thresholdCheck: { latest: thrLatest, pending: thrPending, history: thrHistory, revertable: thrRevertable },
     vdot: { current: vdotCurrent, series: vdotSeries },
     restingHr: { current: rhrCurrent, series: rhrSeries },
     races: races

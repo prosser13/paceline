@@ -2,7 +2,7 @@
 
 import { requireUser } from '@/lib/auth';
 import { addFuelProduct, saveRunFuel, type FuelItem, type FuelProduct } from '@/data/fuel';
-import { applyThresholdSuggestion, dismissThresholdSuggestion } from '@/data/threshold-suggestion';
+import { applyThresholdSuggestion, dismissThresholdSuggestion, revertThresholdChange } from '@/data/threshold-suggestion';
 import { revalidatePath } from 'next/cache';
 
 // ── threshold suggestion ──────────────────────────────────────
@@ -21,6 +21,15 @@ export async function dismissThreshold(checkId: string): Promise<{ ok: boolean }
   const res = await dismissThresholdSuggestion(checkId);
   revalidatePath('/benchmarks');
   revalidatePath('/settings');
+  return res;
+}
+
+export async function revertThreshold(checkId: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const res = await revertThresholdChange(checkId);
+  revalidatePath('/benchmarks');
+  revalidatePath('/settings');
+  revalidatePath('/');
   return res;
 }
 
