@@ -9,7 +9,7 @@ import {
 } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import {
-  listSessionsBetween, listSessionDistancesBetween, listCompletedBetween,
+  listSessionsBetween, listSessionDistancesBetween, listCompletedBetween, listSportLoadBetween,
   listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
   listCompletedTssBetween, listRunningDoneSince, listRecentRaces,
 } from '@/data/plan-sessions';
@@ -116,7 +116,10 @@ export interface DashboardData {
   weekToGoKm: number;
   weekDays: WeekDay[];
 
-  last7: { totalKm: number; sessions: number; h: number; m: number; totalTss: number };
+  last7: {
+    totalKm: number; sessions: number; h: number; m: number; totalTss: number;
+    loadSplit: { run: number; ride: number; other: number; phase: string | null } | null;
+  };
 
   offPlanToday: OffPlanActivity[];   // extras done today (shown under the Today node)
   offPlanRecent: OffPlanActivity[];  // extras in the last 7 days (excl. today)
@@ -201,6 +204,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     recentCompletedRaw,
     coachMessages,
     dailyNote,
+    sportLoad,
   ] = await Promise.all([
     getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -216,6 +220,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getMostRecentCompletedSession(todayStr),
     getLatestCoachMessages(),
     getDailyNote(todayStr),
+    listSportLoadBetween(weekAgoStr, todayStr),
   ]);
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
@@ -343,6 +348,24 @@ export async function loadDashboardData(): Promise<DashboardData> {
     const IF = threshMinKm / runPace;
     return s + (mins / 60) * IF * IF * 100;
   }, 0));
+
+  // Run-load share (trailing 7 days): stored TSS split by sport, so bike volume can
+  // be policed by phase. Percentages come from the split, so absolute totals need
+  // not match the pace-derived "Load" stat.
+  let loadRun = 0, loadRide = 0, loadOther = 0;
+  for (const w of sportLoad ?? []) {
+    const tss = w.tss != null ? Number(w.tss) : 0;
+    if (!(tss > 0)) continue;
+    const ps = (Array.isArray(w.plan_sessions) ? w.plan_sessions[0] : w.plan_sessions) as
+      { session_type: string | null; activity_type: string | null } | null;
+    const sport = resolveSport(ps ?? {});
+    if (sport === 'run') loadRun += tss;
+    else if (sport === 'cycling') loadRide += tss;
+    else loadOther += tss;
+  }
+  const loadSplit = (loadRun + loadRide + loadOther) > 0
+    ? { run: Math.round(loadRun), ride: Math.round(loadRide), other: Math.round(loadOther), phase: (weekRow?.phase as string | null) ?? null }
+    : null;
 
   const weekLabel   = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
   const weekPurpose = (weekRow?.purpose as string | null) ?? null;
@@ -505,7 +528,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     phaseSegments, todayPct, ringPct,
     daysToRace, raceName, raceDateStr, raceTargetTime: (raceRow?.target_time as string | null) ?? null, raceDistanceKm, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
-    last7: { totalKm, sessions, h, m, totalTss },
+    last7: { totalKm, sessions, h, m, totalTss, loadSplit },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
     coachMessages,

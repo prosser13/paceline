@@ -243,6 +243,16 @@ export async function listCompletedBetween(from: string, to: string) {
   return data ?? [];
 }
 
+// Stored TSS per completion + the sport it belongs to (for the run-load split).
+export async function listSportLoadBetween(from: string, to: string) {
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('tss, plan_sessions(session_type, activity_type)')
+    .gte('completed_date', from)
+    .lte('completed_date', to);
+  return data ?? [];
+}
+
 // The most recent completed *run/ride* (not strength/core/yoga) strictly
 // before `beforeDate`, paired with the planned session it belongs to. Powers
 // the dashboard's "Recently completed" card (typically yesterday's run).
