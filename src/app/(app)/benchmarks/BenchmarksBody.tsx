@@ -3,7 +3,7 @@
 // VO2max / eFTP / resting HR trends, and recent race results.
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
-import type { ExperimentalPrediction } from '@/lib/experimental-predictions';
+import type { ExperimentalPredictionView } from '@/data/benchmarks';
 import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from './FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
@@ -249,7 +249,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
 
 // Static copy for the experimental-model tiles — the name and the one-line
 // theory, keyed by model. The numbers come from the loader.
-const EXPERIMENTAL_META: Record<ExperimentalPrediction['key'], { name: string; theory: string }> = {
+const EXPERIMENTAL_META: Record<ExperimentalPredictionView['key'], { name: string; theory: string }> = {
   riegel: {
     name: 'Race scaling · Riegel',
     theory: 'Projects your most recent race to 42.2 km with a power law whose fatigue exponent is fitted to your own race history. Pure endurance scaling — no physiology.',
@@ -264,7 +264,15 @@ const EXPERIMENTAL_META: Record<ExperimentalPrediction['key'], { name: string; t
   },
 };
 
-function ExperimentalTile({ p }: { p: ExperimentalPrediction }) {
+// Trend-line colour per model — the same brand tokens the sport rows use, so the
+// three tiles read as three distinct ideas.
+const EXPERIMENTAL_COLOR: Record<ExperimentalPredictionView['key'], string> = {
+  riegel: 'var(--color-run)',
+  tanda: 'var(--color-ride)',
+  cardiac: 'var(--color-yoga)',
+};
+
+function ExperimentalTile({ p }: { p: ExperimentalPredictionView }) {
   const meta = EXPERIMENTAL_META[p.key];
   return (
     <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '14px 16px' }}>
@@ -279,6 +287,8 @@ function ExperimentalTile({ p }: { p: ExperimentalPrediction }) {
       </div>
       {p.detail && <div className="text-[11.5px] text-stone">{p.detail}</div>}
       {p.unavailableReason && <div className="text-[11.5px] text-stone">{p.unavailableReason}</div>}
+      {/* lower time = faster, so invert makes an improving trend read as up */}
+      <div className="mt-[10px]"><Sparkline series={p.trend} color={EXPERIMENTAL_COLOR[p.key]} invert /></div>
       <p className="text-[11px] text-stone/80 mt-auto pt-[10px]">{meta.theory}</p>
     </div>
   );

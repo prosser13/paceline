@@ -5,8 +5,7 @@
 // show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
-import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
-import type { ExperimentalPrediction } from '@/lib/experimental-predictions';
+import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
@@ -31,7 +30,7 @@ export interface BenchmarksData {
   targetSeconds: number | null;
   predictedSeconds: number | null;
   signals: { source: string; label: string; impliedSeconds: number }[];
-  experimental: ExperimentalPrediction[];   // the three alternative-model tiles
+  experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
   thresholdDeltaSec: number | null;  // change since first tracked week, seconds/km (negative = faster)
