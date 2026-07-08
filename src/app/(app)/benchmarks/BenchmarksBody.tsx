@@ -3,6 +3,7 @@
 // VO2max / eFTP / resting HR trends, and recent race results.
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
+import type { ExperimentalPrediction } from '@/lib/experimental-predictions';
 import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from './FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
@@ -97,6 +98,19 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
           </div>
         )}
       </Card>
+
+      {/* Experimental predictors — three independent models, deliberately NOT
+          blended into the main prediction, so they can (usefully) disagree. */}
+      <SecLabel>Experimental predictions</SecLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-[12px]">
+        {d.experimental.map(p => <ExperimentalTile key={p.key} p={p} />)}
+      </div>
+      <p className="text-[11.5px] text-stone mt-[8px]">
+        Three alternative models, each reading your data through a different theory — race scaling, the
+        training log, and heart-rate economy. They&rsquo;re experimental and intentionally kept out of the main
+        blend: when they agree the prediction is trustworthy; when one diverges, it says something about
+        where your fitness is coming from.
+      </p>
 
       {/* Threshold pace */}
       <SecLabel>Threshold pace</SecLabel>
@@ -230,6 +244,43 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
 
       <p className="text-[11.5px] text-stone mt-[18px]">Execution scoring, RPE, and gear tracking arrive in later updates.</p>
     </>
+  );
+}
+
+// Static copy for the experimental-model tiles — the name and the one-line
+// theory, keyed by model. The numbers come from the loader.
+const EXPERIMENTAL_META: Record<ExperimentalPrediction['key'], { name: string; theory: string }> = {
+  riegel: {
+    name: 'Race scaling · Riegel',
+    theory: 'Projects your most recent race to 42.2 km with a power law whose fatigue exponent is fitted to your own race history. Pure endurance scaling — no physiology.',
+  },
+  tanda: {
+    name: 'Training log · Tanda',
+    theory: 'Regression from your last 8 weeks of running — weekly volume and habitual pace (Tanda, 2011). Ignores races entirely: what does the work you’ve actually logged imply?',
+  },
+  cardiac: {
+    name: 'Cardiac economy · EF',
+    theory: 'Median grade-adjusted speed per heartbeat on long runs, projected to expected marathon heart rate. Reads your aerobic engine, not your pace performances.',
+  },
+};
+
+function ExperimentalTile({ p }: { p: ExperimentalPrediction }) {
+  const meta = EXPERIMENTAL_META[p.key];
+  return (
+    <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '14px 16px' }}>
+      <div className="flex items-center justify-between gap-2">
+        <Eyebrow>{meta.name}</Eyebrow>
+        <span className="text-[9.5px] uppercase font-bold text-stone border border-fog rounded-full shrink-0" style={{ letterSpacing: '.05em', padding: '2px 8px' }}>
+          Experimental
+        </span>
+      </div>
+      <div className="font-display font-bold text-[24px] leading-none my-[8px]">
+        {p.predictedSeconds != null ? fmtHms(p.predictedSeconds) : '—'}
+      </div>
+      {p.detail && <div className="text-[11.5px] text-stone">{p.detail}</div>}
+      {p.unavailableReason && <div className="text-[11.5px] text-stone">{p.unavailableReason}</div>}
+      <p className="text-[11px] text-stone/80 mt-auto pt-[10px]">{meta.theory}</p>
+    </div>
   );
 }
 
