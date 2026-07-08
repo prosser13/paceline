@@ -180,6 +180,21 @@ export function runTss(
   return Math.round((durationMins / 60) * intensity * intensity * 100);
 }
 
+// Efficiency Factor — grade-adjusted metres/min per heartbeat. A whole-run aerobic
+// efficiency proxy: how much (grade-adjusted) speed you get per bpm. Rising over a
+// block = fitter. Unlike aerobic decoupling it is NOT distorted by a within-run
+// negative split (it's a single aggregate), so it's the right durability signal for
+// a block of prescribed negative-split long runs.
+//
+//   EF = grade-adjusted speed (m/min) / avg HR = 1000 / (paceMinKm × avgHr)
+//
+// `paceMinKm` is NGP when available (grade-adjusted), else average pace. Needs HR.
+// Returns null when either input is missing. Rounded to 2 dp.
+export function efficiencyFactor(paceMinKm: number | null, avgHr: number | null): number | null {
+  if (!paceMinKm || paceMinKm <= 0 || !avgHr || avgHr <= 0) return null;
+  return Math.round((1000 / (paceMinKm * avgHr)) * 100) / 100;
+}
+
 // Parse a threshold-pace string ("m:ss" per km) to a numeric pace in min/km.
 // e.g. "3:40" → 3.6667. Tolerates a missing seconds component.
 export function parseThresholdPace(str: string): number {
