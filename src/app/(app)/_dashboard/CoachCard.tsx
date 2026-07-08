@@ -4,9 +4,9 @@ import { useState } from 'react';
 import type { CoachMessage } from '@/data/coach';
 
 // "From your coach" card. When both a morning briefing and an evening review
-// exist it shows them as two tabs (active tab defaults by time of day — morning
-// before noon, evening after); with only one, it shows that one. body_md is light
-// markdown (paragraphs + **bold**), rendered without a lib.
+// exist it shows them as two tabs (the most recent is active by default); with
+// only one, it shows that one. body_md is light markdown (paragraphs + **bold**),
+// rendered without a lib.
 function renderBody(md: string) {
   return md.split(/\n\n+/).map((para, i) => (
     <p
@@ -35,10 +35,10 @@ const LABEL: Record<Kind, string> = { morning: 'Morning briefing', evening: 'Eve
 
 export default function CoachCard({ morning, evening }: { morning: CoachMessage | null; evening: CoachMessage | null }) {
   const both = !!morning && !!evening;
-  // Default tab: morning before noon (local), evening after — but only to a tab
-  // that exists.
-  const preferMorning = new Date().getHours() < 12;
-  const initial: Kind = morning && (preferMorning || !evening) ? 'morning' : 'evening';
+  // Default tab: whichever message is most recent (falling back to the one that exists).
+  const initial: Kind = both
+    ? (Date.parse(morning!.created_at) >= Date.parse(evening!.created_at) ? 'morning' : 'evening')
+    : (morning ? 'morning' : 'evening');
   const [tab, setTab] = useState<Kind>(initial);
   const [open, setOpen] = useState(false);
 
