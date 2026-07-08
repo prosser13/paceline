@@ -426,14 +426,33 @@ export async function updateCompletedWorkout(
 
 // Stamp the Garmin RPE (perceived_exertion, 1–10) onto the completion for a Strava
 // activity. Returns whether a row was updated. intervals.icu is the source of truth
-// for run RPE, so this overwrites unconditionally.
+// for RUN RPE — but non-run activities (ride / strength / yoga) are manual-only
+// (§6E), so the sync must NOT overwrite them or it would clobber a hand-entered
+// value. Only stamp run completions (and off-plan/unknown, assumed runs).
 export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number): Promise<boolean> {
+  const { data: rows } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, plan_sessions(session_type, activity_type)')
+    .eq('strava_activity_id', stravaId);
+  const ids = (rows ?? []).filter(r => {
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+      { session_type: string | null; activity_type: string | null } | null;
+    if (!ps) return true;   // off-plan / unknown → assume a run
+    const nonRun = ps.activity_type === 'cycling' || ps.session_type === 'STRENGTH' || ps.session_type === 'CORE' || ps.session_type === 'YOGA';
+    return !nonRun;
+  }).map(r => r.id);
+  if (!ids.length) return false;
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .update({ perceived_effort: rpe })
-    .eq('strava_activity_id', stravaId)
+    .in('id', ids)
     .select('id');
   return !!(data && data.length);
+}
+
+// Manual RPE (1–10) for a completed non-run session, keyed by plan_session_id.
+export async function setSessionEffort(planSessionId: string, rpe: number): Promise<void> {
+  await supabaseAdmin.from('completed_workouts').update({ perceived_effort: rpe }).eq('plan_session_id', planSessionId);
 }
 
 // Long runs (run = has a pace; ≥20 km) that carry HR but no decoupling yet — the

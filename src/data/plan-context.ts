@@ -99,6 +99,9 @@ export interface PlanContext {
   threshold_suggestion: {                        // a pending threshold auto-suggestion, if any (read-only for the coach)
     current: string; suggested: string; commentary: string;
   } | null;
+  rpe_overreach: {                               // an easy run that felt disproportionately hard — early fatigue signal
+    date: string; session: string; session_type: string; rpe: number; note: string;
+  } | null;
   reference: {                                   // static — how to author edits (no need to search the code)
     session_schemas: typeof SESSION_SCHEMAS;
     exercise_catalog: typeof EXERCISE_CATALOG;
@@ -116,7 +119,8 @@ export interface RecentSession {
   planned: { distance_km: number | null; target_pace: string | null; estimated_tss: number | null; estimated_duration: string | null };
   actual: {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
-    ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null; source: string | null;
+    ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
+    rpe: number | null; source: string | null;
   } | null;
 }
 
@@ -192,7 +196,29 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     threshold_suggestion: thresholdSuggestion && thresholdSuggestion.suggested_min_km != null
       ? { current: fmtPaceMinKm(thresholdSuggestion.current_min_km), suggested: fmtPaceMinKm(thresholdSuggestion.suggested_min_km), commentary: thresholdSuggestion.commentary }
       : null,
+    rpe_overreach: detectRpeOverreach(recent),
     reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
+  };
+}
+
+// Earliest overreach signal: a run that was meant to be easy but felt
+// disproportionately hard by RPE (1–10). Quality sessions are meant to feel hard,
+// so they don't count; long runs get a higher bar than recovery/easy. Returns the
+// most recent flagged run, or null. RPE for runs comes from Garmin — dormant until
+// that data flows.
+function detectRpeOverreach(recent: RecentSession[]): PlanContext['rpe_overreach'] {
+  const flag = (s: RecentSession): boolean => {
+    if (s.adherence !== 'done' || s.actual?.rpe == null) return false;
+    const rpe = s.actual.rpe, t = s.session_type;
+    if (t === 'REC' || t === 'GA') return rpe >= 7;     // easy → shouldn't feel hard
+    if (t === 'MLR' || t === 'LR') return rpe >= 8;     // long → moderate is fine; flag only if very hard
+    return false;                                        // VO2 / LT / MP / RACE are meant to be hard
+  };
+  const hit = recent.filter(flag).sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date))[0];
+  if (!hit || hit.actual?.rpe == null) return null;
+  return {
+    date: hit.scheduled_date, session: hit.name, session_type: hit.session_type, rpe: hit.actual.rpe,
+    note: `${hit.name} (${hit.session_type}, an easy session) came back at RPE ${hit.actual.rpe}/10 — disproportionately hard, an early sign of accumulated fatigue.`,
   };
 }
 
@@ -245,7 +271,7 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
       .order('scheduled_date'),
     supabaseAdmin
       .from('completed_workouts')
-      .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, source')
+      .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, source')
       .gte('completed_date', from)
       .lte('completed_date', to),
   ]);
@@ -279,6 +305,7 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
         ngp_min_km: c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null,
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
+        rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         source: (c.source as string | null) ?? null,
       } : null,
     };
