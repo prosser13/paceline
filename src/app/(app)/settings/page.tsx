@@ -7,6 +7,7 @@ import {
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
+import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks } from '@/data/threshold-suggestion';
 import { getProgressionMode } from '@/data/strength-progression';
 import { listPlanPrefs } from '@/data/plans';
 import { listAdjustments } from '@/data/plan-mutations';
@@ -31,6 +32,7 @@ export default async function SettingsPage() {
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
     constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
+    thrLatest, thrPending, thrHistory,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -48,6 +50,9 @@ export default async function SettingsPage() {
     listAdjustments(),
     getProgressionMode(),
     getWeatherConfig(),
+    getLatestThresholdCheck(),
+    getPendingThresholdSuggestion(),
+    listThresholdChecks(10),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -165,7 +170,8 @@ export default async function SettingsPage() {
 
         <SettingsCard cat="Running" color="var(--color-run)" title="Pace zones"
           subtitle="Planned runs are built from zones — the paces across your plan derive from these windows, so editing a zone updates every session.">
-          <ZonesClient initialThreshold={threshold} initialZones={zones} />
+          <ZonesClient initialThreshold={threshold} initialZones={zones}
+            thresholdCheck={{ latest: thrLatest, pending: thrPending, history: thrHistory }} />
         </SettingsCard>
 
         <SettingsCard cat="Running" color="var(--color-run)" title="Heart-rate zones"

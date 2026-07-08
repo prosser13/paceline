@@ -50,6 +50,21 @@ export function vdotToTimeMin(vdot: number, distanceM: number): number {
   return (lo + hi) / 2;
 }
 
+// The threshold pace (min/km) implied by a VDOT — the pace sustainable for a
+// ~60-minute effort. Inverse of the forward threshold→VDOT map used in the
+// prediction, so a race's VDOT can be read back as "what your threshold is now".
+export function vdotToThresholdPaceMinKm(vdot: number): number | null {
+  if (!(vdot > 0)) return null;
+  // Bisect the distance covered in 60 min at this VDOT (more distance → higher VDOT).
+  let lo = 3000, hi = 30000;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (danielsVdot(mid, 60) < vdot) lo = mid; else hi = mid;
+  }
+  const distanceM = (lo + hi) / 2;
+  return 60 / (distanceM / 1000);   // min/km
+}
+
 // A single input performance and its predicted marathon time (seconds).
 export interface PredictionSignal {
   source: 'race' | 'threshold' | 'long_run';
