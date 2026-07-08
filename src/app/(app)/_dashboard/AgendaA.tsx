@@ -5,10 +5,11 @@
 // content width on mobile. Anchor IDs (`spine-<iso>`) are kept so the week
 // strip's tap-to-scroll still lands on the right day.
 
-import { Fragment } from 'react';
+import { Fragment, Suspense } from 'react';
 import { intraDayOrder } from '@/lib/session-order';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import ActivityHero from './ActivityHero';
+import RunWeatherAsync from './RunWeatherAsync';
 import TomorrowCard from './TomorrowCard';
 import StrengthHero from '@/components/StrengthHero';
 import YogaHero from '@/components/YogaHero';
@@ -52,6 +53,13 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   // todaySessions via the shared session-order helper). This is the single
   // source of truth — the Today node no longer hardcodes its own ordering.
   const doneIds = new Set(d.todayDoneIds);
+
+  // Today's headline upcoming run (not a ride/strength/yoga, not yet done, has a
+  // pace target) — the one the heat-adjusted-pace widget previews.
+  const NON_RUN = new Set(['STRENGTH', 'CORE', 'YOGA', 'REST']);
+  const todayRun = d.todaySessions.find(s =>
+    !doneIds.has(s.id) && s.target_pace &&
+    !NON_RUN.has(s.session_type ?? '') && (s.activity_type ?? 'running') !== 'cycling');
   const renderTodayBlock = (s: PlanSession) => {
     const done  = doneIds.has(s.id);
     const label = done ? 'Done' : 'Today';
@@ -68,6 +76,12 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         {d.todaySessions.length === 0
           ? restBox
           : d.todaySessions.map(s => <Fragment key={s.id}>{renderTodayBlock(s)}</Fragment>)}
+        {todayRun?.target_pace && (
+          <Suspense fallback={null}>
+            <RunWeatherAsync dateISO={d.windowDays[0].iso} planPace={todayRun.target_pace}
+              planPaceEnd={(todayRun as PlanSession & { target_pace_end?: string | null }).target_pace_end ?? null} />
+          </Suspense>
+        )}
         {d.offPlanToday.length > 0 && (
           <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
             <div className="divide-y divide-fog/50">

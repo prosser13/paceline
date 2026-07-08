@@ -6,6 +6,7 @@ import {
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
+import { getWeatherConfig } from '@/data/weather-config';
 import { getProgressionMode } from '@/data/strength-progression';
 import { listPlanPrefs } from '@/data/plans';
 import { listAdjustments } from '@/data/plan-mutations';
@@ -18,6 +19,7 @@ import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
+import TrainingLocationClient from './TrainingLocationClient';
 import ChangeLogClient from './ChangeLogClient';
 import {
   saveBikeHrZones,
@@ -28,7 +30,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs, adjustments, progressionMode,
+    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -45,6 +47,7 @@ export default async function SettingsPage() {
     listPlanPrefs(),
     listAdjustments(),
     getProgressionMode(),
+    getWeatherConfig(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -125,6 +128,15 @@ export default async function SettingsPage() {
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Constraints"
           subtitle="Hard limits the coach must respect — recurring days off, travel blackouts, or a free-text rule it should always work around.">
           <ConstraintsClient initialConstraints={constraintInputs} />
+        </SettingsCard>
+
+        <SettingsCard cat="Training" color="var(--color-hard)" title="Training location"
+          subtitle="Where you train, so the dashboard can heat-adjust today's run pace from the local forecast.">
+          <TrainingLocationClient
+            initialHomeLabel={(weatherConfig?.home_label as string | null) ?? null}
+            initialDefaultHour={weatherConfig?.default_hour ?? 7}
+            initialOverrideLabel={(weatherConfig?.override_label as string | null) ?? null}
+          />
         </SettingsCard>
 
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
