@@ -170,6 +170,22 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
   } catch { /* snapshot is a nice-to-have; a sync failure here must not break the sync */ }
 }
 
+// The predicted marathon finish we were carrying into a race — the latest weekly
+// snapshot on/before the race date. Powers the post-race "predicted vs actual"
+// header. FUTURE (multi-distance): snapshots hold the marathon prediction; once they
+// store VDOT (or per-distance predictions), take a target distance and derive it.
+export async function getPredictedAtRace(raceDate: string): Promise<number | null> {
+  const { data } = await supabaseAdmin
+    .from('benchmark_snapshots')
+    .select('predicted_seconds, week_start')
+    .lte('week_start', raceDate)
+    .not('predicted_seconds', 'is', null)
+    .order('week_start', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.predicted_seconds != null ? Number(data.predicted_seconds) : null;
+}
+
 // ── dashboard trajectory view (predicted vs target + verdict) ──
 
 export type Verdict = 'Closing' | 'Holding' | 'Slipping' | 'On track' | 'Building';

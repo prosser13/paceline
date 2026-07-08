@@ -17,6 +17,23 @@
 
 const MARATHON_M = 42195;
 
+// Race distances the prediction engine can currently produce a target for. Today
+// only the marathon: the blend, snapshots and loadTrajectory are all marathon-keyed.
+//
+// FUTURE (multi-distance, 5k/10k/HM): add [5000, 10000, 21097] here, then make
+// predictMarathon → predictRace(inputs, distanceM), store VDOT (not just marathon
+// seconds) in benchmark_snapshots so any distance can be derived on read, and pass a
+// target distance through loadTrajectory + getPredictedAtRace. The race page + card
+// already route through predictableDistanceM(), so they'll light up automatically.
+export const PREDICTABLE_DISTANCES_M: number[] = [MARATHON_M];
+
+// The canonical predictable distance a race maps to (within tolerance), or null.
+export function predictableDistanceM(distanceKm: number | null): number | null {
+  if (distanceKm == null) return null;
+  const m = distanceKm * 1000;
+  return PREDICTABLE_DISTANCES_M.find(d => Math.abs(d - m) < Math.max(300, d * 0.03)) ?? null;
+}
+
 // ── Daniels' VDOT model ───────────────────────────────────────
 // Oxygen cost of running at velocity v (m/min), in ml/kg/min.
 function vo2Cost(vMetresPerMin: number): number {

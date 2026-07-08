@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { readFile } from 'fs/promises';
 import path from 'path';
+import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-graphics';
@@ -16,6 +17,9 @@ import { RACE_PRIORITY_COLOR } from '@/lib/colors';
 import { getRaceForecast } from '@/lib/weather';
 import { getWellnessCached } from '@/lib/intervals';
 import { projectFitness, readinessFromProjection } from '@/lib/fitness-projection';
+import { predictableDistanceM } from '@/lib/prediction';
+import { getPredictedAtRace } from '@/data/benchmarks';
+import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
 import RouteMap from './RouteMap';
 import ElevationProfile from './ElevationProfile';
@@ -134,6 +138,13 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // Past race → post-race mode: lead with the result, tuck prep into a reference accordion.
   const isPast = daysToGo != null && daysToGo < 0;
 
+  // Does this race have a prediction target? Marathon-only today (§6C). FUTURE
+  // (multi-distance): predictableDistanceM widens to 5k/10k/HM and this lights up
+  // their pages automatically — the trajectory card + predicted-vs-actual below are
+  // already distance-agnostic in shape.
+  const predictable = predictableDistanceM(distanceKm);
+  let actualFinishSecs: number | null = null;
+
   // Post-race extras (coach analysis, full results, notes) + the completion actuals
   // for the header stats and the flat-equivalent estimate.
   let post: { analysis: Awaited<ReturnType<typeof getRaceAnalysis>>; result: Awaited<ReturnType<typeof getRaceResult>>; note: string; canAnalyse: boolean } | null = null;
@@ -150,6 +161,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     if (row) {
       const secs = row.actual_duration_secs != null ? Number(row.actual_duration_secs)
         : row.actual_duration_mins != null ? Number(row.actual_duration_mins) * 60 : null;
+      actualFinishSecs = secs;
       const dist = row.actual_distance_km != null ? Number(row.actual_distance_km) : null;
       const ngpMinKm = row.actual_ngp_min_km != null ? Number(row.actual_ngp_min_km) : null;
       actual = {
@@ -165,6 +177,15 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
       if (secs != null) raceDurationMins = Math.round(secs / 60);
     }
   }
+  // Post-race predicted-vs-actual: how did the finish compare to the prediction we
+  // carried into the race (the latest snapshot on/before race day)? Marathon-only
+  // today; hides gracefully when no snapshot pre-dates the race.
+  let predictedVsActual: { predicted: number; actual: number } | null = null;
+  if (isPast && predictable && raceDate && actualFinishSecs != null) {
+    const predictedAtRace = await getPredictedAtRace(raceDate);
+    if (predictedAtRace != null) predictedVsActual = { predicted: predictedAtRace, actual: actualFinishSecs };
+  }
+
   // Fall back to the target time for the weather window if there's no actual yet.
   if (raceDurationMins == null && targetTime) {
     const tp = String(targetTime).split(':').map(Number);
@@ -278,6 +299,23 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         {/* Post-race: the result + per-km splits lead, then weather, coach, results, notes. */}
         {isPast && post && (
           <div className="mt-[24px] flex flex-col gap-[24px]">
+            {predictedVsActual && (() => {
+              const diff = predictedVsActual.actual - predictedVsActual.predicted;   // <0 = beat prediction
+              const beat = diff <= 0;
+              return (
+                <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[14px]">
+                  <div className="text-[11px] uppercase font-bold text-race mb-[6px]" style={{ letterSpacing: '.07em' }}>Predicted vs actual</div>
+                  <div className="flex flex-wrap items-baseline gap-x-[16px] gap-y-[4px]">
+                    <span className="text-[14px] text-ink">predicted <b className="font-display text-[19px]">{fmtHMS(predictedVsActual.predicted)}</b></span>
+                    <span className="text-[14px] text-ink">ran <b className="font-display text-[19px]">{fmtHMS(predictedVsActual.actual)}</b></span>
+                    <span className="font-bold text-[14px]" style={{ color: beat ? 'var(--color-ready)' : 'var(--color-run)' }}>
+                      {beat ? '−' : '+'}{fmtHMS(Math.abs(diff))} {beat ? 'faster than predicted' : 'slower than predicted'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-stone mt-[6px]">Prediction carried into race day, from the fitness trend across the block.</div>
+                </div>
+              );
+            })()}
             <RaceResult slug={slug} />
             {flat && (
               <div className="border border-fog rounded-[14px] bg-paper px-[18px] py-[14px] -mt-[12px]">
@@ -336,6 +374,17 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
             Race prep · reference
             <span className="inline-block ml-[6px] group-open:rotate-90 transition-transform">▸</span>
           </summary>
+
+        {/* Predicted finish trajectory — the campaign scoreboard, stacked above the
+            fitness/form readiness (§6C). Marathon-only today; streams independently.
+            FUTURE (multi-distance): a distance-parameterised loader replaces this. */}
+        {!isPast && predictable && (
+          <div className="mt-[24px]">
+            <Suspense fallback={null}>
+              <TargetTrajectoryAsync />
+            </Suspense>
+          </div>
+        )}
 
         {/* ── Targets & readiness ── */}
         <div className="grid lg:grid-cols-2 gap-[14px] mt-[24px]">
