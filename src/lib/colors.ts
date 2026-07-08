@@ -42,6 +42,7 @@ export const RACE_PRIORITY_BADGE: Record<string, { bg: string; fg: string }> = {
 export const PHASE_COLOR: Record<string, string> = {
   Base:  '#2f6f9e',
   Build: '#b07d12',
+  Peak:  '#d2691e',
   Taper: '#2f8f7a',
 };
 

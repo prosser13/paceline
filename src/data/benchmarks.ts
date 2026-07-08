@@ -10,11 +10,14 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getThresholdPace } from '@/data/zones';
+import { listPlanPhaseWeeks } from '@/data/plans';
 import {
-  predictMarathon, parseHmsToSeconds, fmtHms,
+  predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
   type MarathonPrediction, type PredictionInputs,
 } from '@/lib/prediction';
 import { parseThresholdPace, efficiencyFactor } from '@/lib/run-tss';
+
+const MARATHON_M = 42195;
 
 // ── date helpers ──────────────────────────────────────────────
 
@@ -171,6 +174,17 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
 
 export type Verdict = 'Closing' | 'Holding' | 'Slipping' | 'On track' | 'Building';
 
+export interface PhaseBand { phase: string; from: string; to: string; }
+
+export interface TuneUp {
+  name: string;
+  date: string;
+  distanceKm: number;
+  needSeconds: number;                     // equivalent time that validates the marathon target
+  actualSeconds: number | null;            // set once the tune-up is run
+  passed: boolean | null;                  // actual ≤ need (null until run)
+}
+
 export interface Trajectory {
   predictedSeconds: number | null;
   targetSeconds: number | null;
@@ -181,6 +195,72 @@ export interface Trajectory {
   raceDate: string | null;
   signals: MarathonPrediction['signals'];
   trend: { weekStart: string; predictedSeconds: number | null }[];   // last ~12 weeks incl. now
+  // Chart frame (PB-campaign wave 6B): the plan span + phases behind the line, the
+  // NOW position, and a dashed projection to race day.
+  asOf: string;
+  planStart: string | null;
+  phaseBands: PhaseBand[];
+  projectedRaceSeconds: number | null;     // predicted finish at race day (damped extrapolation)
+  tuneUp: TuneUp | null;
+}
+
+// Merge consecutive same-phase weeks into date-range bands for the chart backdrop.
+function mergePhaseBands(weeks: { phase: string; date_from: string; date_to: string }[]): PhaseBand[] {
+  const bands: PhaseBand[] = [];
+  for (const w of weeks) {
+    const last = bands[bands.length - 1];
+    if (last && last.phase === w.phase) last.to = w.date_to;
+    else bands.push({ phase: w.phase, from: w.date_from, to: w.date_to });
+  }
+  return bands;
+}
+
+// The tune-up race that gates the marathon target. A marathon validator is a
+// road race in the ~8–30 km range (a 5 k is too speed-dependent, an ultra isn't a
+// marathon predictor). Prefer a recently-run one (immediate pass/fail feedback),
+// else the next upcoming, else the most recent run. `needSeconds` is the
+// VDOT-equivalent of the marathon target at that distance.
+export async function getTuneUpValidation(asOf: string, marathonDate: string | null, targetSeconds: number | null): Promise<TuneUp | null> {
+  if (!marathonDate || targetSeconds == null) return null;
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, name, scheduled_date, distance_km')
+    .eq('session_type', 'RACE')
+    .lt('scheduled_date', marathonDate)
+    .gte('scheduled_date', addDays(asOf, -120))
+    .order('scheduled_date');
+  const races = (data ?? [])
+    .map(r => ({ id: r.id as string, name: r.name as string, date: r.scheduled_date as string, km: r.distance_km != null ? Number(r.distance_km) : 0 }))
+    .filter(r => r.km >= 8 && r.km <= 30);
+  if (!races.length) return null;
+
+  // Actual times for any that have been run.
+  const { data: cws } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('plan_session_id, actual_duration_secs, actual_duration_mins')
+    .in('plan_session_id', races.map(r => r.id));
+  const doneBy = new Map<string, number>();
+  for (const c of cws ?? []) {
+    const s = c.actual_duration_secs != null ? Number(c.actual_duration_secs)
+      : c.actual_duration_mins != null ? Math.round(Number(c.actual_duration_mins) * 60) : null;
+    if (c.plan_session_id && s != null) doneBy.set(c.plan_session_id as string, s);
+  }
+  const withDone = races.map(r => ({ ...r, actualSeconds: doneBy.get(r.id) ?? null }));
+
+  const recentDone = withDone.filter(r => r.actualSeconds != null && r.date >= addDays(asOf, -42) && r.date <= asOf)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+  const upcoming = withDone.filter(r => r.date >= asOf).sort((a, b) => a.date.localeCompare(b.date))[0];
+  const anyDone = withDone.filter(r => r.actualSeconds != null).sort((a, b) => b.date.localeCompare(a.date))[0];
+  const pick = recentDone ?? upcoming ?? anyDone;
+  if (!pick) return null;
+
+  const vdot = danielsVdot(MARATHON_M, targetSeconds / 60);
+  const needSeconds = Math.round(vdotToTimeMin(vdot, pick.km * 1000) * 60);
+  return {
+    name: pick.name, date: pick.date, distanceKm: pick.km, needSeconds,
+    actualSeconds: pick.actualSeconds,
+    passed: pick.actualSeconds != null ? pick.actualSeconds <= needSeconds : null,
+  };
 }
 
 const VERDICT_TOLERANCE_S = 20;   // gap change smaller than this per 3wk reads as "Holding"
@@ -192,6 +272,16 @@ export async function loadTrajectory(asOf: string): Promise<Trajectory> {
     getGoalMarathon(asOf),
     listBenchmarkSnapshotsSince(twelveWeeksAgo),
   ]);
+
+  // Phase bands come from the GOAL MARATHON's own plan weeks (it has a dedicated
+  // block), not whatever short block is active today. Tune-up validation gates the
+  // marathon target off a nearby non-marathon race.
+  const [phaseWeeks, tuneUp] = await Promise.all([
+    goal ? listPlanPhaseWeeks(goal.id) : Promise.resolve([]),
+    getTuneUpValidation(asOf, goal?.raceDate ?? null, goal?.targetSeconds ?? null),
+  ]);
+  const phaseBands = mergePhaseBands(phaseWeeks);
+  const planStart = phaseWeeks[0]?.date_from ?? null;
 
   const predictedSeconds = prediction.predictedSeconds;
   const targetSeconds = goal?.targetSeconds ?? null;
@@ -220,16 +310,27 @@ export async function loadTrajectory(asOf: string): Promise<Trajectory> {
     verdict = gapSeconds <= 0 ? 'On track' : 'Building';
   }
 
+  // Dashed projection to race day: damp the recent slope (fitness gains flatten) and
+  // never project past the target — best case the line reaches it. Only when we have
+  // a measured slope (verdict Closing/Holding/Slipping).
+  let projectedRaceSeconds: number | null = null;
+  if (predictedSeconds != null && goal?.raceDate && slopePerWeek != null) {
+    const weeksToRace = Math.max(0, daysBetweenAbs(asOf, goal.raceDate) / 7);
+    const raw = predictedSeconds + 0.5 * slopePerWeek * weeksToRace;
+    projectedRaceSeconds = targetSeconds != null ? Math.max(targetSeconds, Math.round(raw)) : Math.round(raw);
+  }
+
   return {
     predictedSeconds, targetSeconds, gapSeconds, verdict, slopePerWeek,
     raceName: goal?.name ?? null, raceDate: goal?.raceDate ?? null,
     signals: prediction.signals, trend,
+    asOf, planStart, phaseBands, projectedRaceSeconds, tuneUp,
   };
 }
 
 // ── small internals ───────────────────────────────────────────
 
-export interface GoalMarathon { name: string; raceDate: string | null; targetSeconds: number | null; }
+export interface GoalMarathon { id: number; name: string; raceDate: string | null; targetSeconds: number | null; }
 
 // The goal marathon — the next upcoming race of marathon distance (~42.2 km).
 // The prediction is marathon-specific, so it must compare against the marathon's
@@ -238,7 +339,7 @@ export interface GoalMarathon { name: string; raceDate: string | null; targetSec
 export async function getGoalMarathon(asOf: string): Promise<GoalMarathon | null> {
   const { data } = await supabaseAdmin
     .from('plans')
-    .select('name, race_date, target_time')
+    .select('id, name, race_date, target_time')
     .eq('kind', 'race')
     .gte('distance_km', 41.5)
     .lte('distance_km', 43)
@@ -248,6 +349,7 @@ export async function getGoalMarathon(asOf: string): Promise<GoalMarathon | null
     .maybeSingle();
   if (!data) return null;
   return {
+    id: data.id as number,
     name: data.name as string,
     raceDate: (data.race_date as string | null) ?? null,
     targetSeconds: parseHmsToSeconds(data.target_time as string | null),
