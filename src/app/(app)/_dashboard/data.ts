@@ -118,7 +118,7 @@ export interface DashboardData {
 
   last7: {
     totalKm: number; sessions: number; h: number; m: number; totalTss: number;
-    loadSplit: { run: number; ride: number; other: number; phase: string | null } | null;
+    loadSplit: { run: number; ride: number; other: number } | null;
   };
 
   offPlanToday: OffPlanActivity[];   // extras done today (shown under the Today node)
@@ -349,9 +349,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     return s + (mins / 60) * IF * IF * 100;
   }, 0));
 
-  // Run-load share (trailing 7 days): stored TSS split by sport, so bike volume can
-  // be policed by phase. Percentages come from the split, so absolute totals need
-  // not match the pace-derived "Load" stat.
+  // Run-load share (trailing 7 days): stored TSS split by sport, shown as a plain
+  // indicator. Percentages come from the split, so absolute totals need not match
+  // the pace-derived "Load" stat.
   let loadRun = 0, loadRide = 0, loadOther = 0;
   for (const w of sportLoad ?? []) {
     const tss = w.tss != null ? Number(w.tss) : 0;
@@ -364,7 +364,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     else loadOther += tss;
   }
   const loadSplit = (loadRun + loadRide + loadOther) > 0
-    ? { run: Math.round(loadRun), ride: Math.round(loadRide), other: Math.round(loadOther), phase: (weekRow?.phase as string | null) ?? null }
+    ? { run: Math.round(loadRun), ride: Math.round(loadRide), other: Math.round(loadOther) }
     : null;
 
   const weekLabel   = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
