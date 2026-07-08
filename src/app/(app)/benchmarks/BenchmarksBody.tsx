@@ -3,6 +3,7 @@
 // VO2max / eFTP / resting HR trends, and recent race results.
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
+import FuelLogCell from './FuelLogCell';
 import type { BenchmarksData, Series } from './data';
 
 function SecLabel({ children }: { children: React.ReactNode }) {
@@ -151,19 +152,22 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r']].map(([h, a]) => (
+                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r'], ['Carbs/h', 'r']].map(([h, a]) => (
                     <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {d.longRuns.map((r, i) => (
-                  <tr key={i}>
+                {d.longRuns.map(r => (
+                  <tr key={r.id}>
                     <td className="py-[9px] border-b border-fog/60">{shortDate(r.date)}</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{Math.round(r.km)} km</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{fmtPace(r.ngpMinKm)}</td>
                     <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.decouplingPct, 5, 8)}`}>{fmtPct(r.decouplingPct)}</td>
                     <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.paceDecayPct, 2, 4)}`}>{fmtPct(r.paceDecayPct)}</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">
+                      <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

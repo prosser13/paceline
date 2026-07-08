@@ -56,14 +56,21 @@ export async function listRaceResultsSince(since: string): Promise<RaceResult[]>
   });
 }
 
-export interface LongRun { date: string; ngpMinKm: number; km: number; decouplingPct: number | null; paceDecayPct: number | null; }
+export interface LongRun {
+  id: string; date: string; ngpMinKm: number; km: number;
+  decouplingPct: number | null; paceDecayPct: number | null;
+  movingSecs: number | null;
+  fuelCarbsPerH: number | null;
+  fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+}
 
 // Completed long runs since `since` — planned LONG_RUN sessions OR any run ≥ 25 km
-// (the agreed "type OR distance" rule), with their NGP + long-run quality metrics.
+// (the agreed "type OR distance" rule), with their NGP + long-run quality metrics
+// + fuel log.
 export async function listLongRunsSince(since: string): Promise<LongRun[]> {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_distance_km, decoupling_pct, pace_decay_pct, plan_sessions!inner(session_type, activity_type, distance_km)')
+    .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, plan_sessions!inner(session_type, activity_type, distance_km)')
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
 
@@ -77,10 +84,15 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
     const ngp = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km)
       : r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
     if (!ngp || !r.completed_date) return [];
+    const movingSecs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
+      : r.actual_duration_mins != null ? Math.round(Number(r.actual_duration_mins) * 60) : null;
     return [{
-      date: r.completed_date as string, ngpMinKm: ngp, km,
+      id: r.id as string, date: r.completed_date as string, ngpMinKm: ngp, km,
       decouplingPct: r.decoupling_pct != null ? Number(r.decoupling_pct) : null,
       paceDecayPct:  r.pace_decay_pct != null ? Number(r.pace_decay_pct) : null,
+      movingSecs,
+      fuelCarbsPerH: r.fuel_carbs_per_h != null ? Number(r.fuel_carbs_per_h) : null,
+      fuelItems: (r.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
     }];
   }).sort((a, b) => a.date.localeCompare(b.date));
 }

@@ -8,6 +8,7 @@
 import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
+import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { danielsVdot, vdotToTimeMin } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
 
@@ -33,7 +34,13 @@ export interface BenchmarksData {
   vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
   races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number }[];
-  longRuns: { date: string; km: number; ngpMinKm: number; decouplingPct: number | null; paceDecayPct: number | null }[];
+  longRuns: {
+    id: string; date: string; km: number; ngpMinKm: number;
+    decouplingPct: number | null; paceDecayPct: number | null;
+    movingSecs: number | null; fuelCarbsPerH: number | null;
+    fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+  }[];
+  fuelProducts: FuelProduct[];
 }
 
 // Running VDOT implied by a marathon time (seconds), rounded to one decimal.
@@ -45,7 +52,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = new Date().toISOString().slice(0, 10);
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns] = await Promise.all([
+  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts] = await Promise.all([
     getCurrentPrediction(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
@@ -53,6 +60,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     listRecentWellnessDays(WINDOW_DAYS),
     listRaceResultsSince(addDays(asOf, -365)),   // races are sparse milestones — wider window
     listLongRunsSince(since),                     // rolling 12-week window
+    listFuelProducts(),
   ]);
 
   const rhrSeries: Series[] = wellness.flatMap(w => w.resting_hr != null ? [{ date: w.date, v: w.resting_hr }] : []);
@@ -81,5 +89,6 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
         return { ...r, impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, 42195) * 60) };
       }),
     longRuns: [...longRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
+    fuelProducts,
   };
 }
