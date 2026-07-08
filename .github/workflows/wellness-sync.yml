@@ -13,10 +13,7 @@
 name: Wellness sync
 
 on:
-  schedule:
-    # UTC. 07/11/15/19/23 = 08:00/12:00/16:00/20:00/00:00 BST — every 4h, no 04:00.
-    - cron: '0 7,11,15,19,23 * * *'
-  workflow_dispatch: {}   # manual "Run workflow" button for testing
+  workflow_dispatch: {}   # manual trigger — cron-job.org now drives the schedule
 
 jobs:
   sync:
