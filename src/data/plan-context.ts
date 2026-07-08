@@ -18,6 +18,7 @@ import {
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { getStrengthCoachSummary } from '@/data/strength-progression';
 import { listActiveNiggles } from '@/data/strength-niggles';
+import { getPendingThresholdSuggestion } from '@/data/threshold-suggestion';
 
 // Static reference an agent needs to author edits, bundled into the briefing so a
 // fresh session has it without searching the codebase. `structure` is shaped
@@ -59,6 +60,12 @@ function addDays(iso: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// min/km → "m:ss" for the coach briefing.
+function fmtPaceMinKm(minKm: number): string {
+  const m = Math.floor(minKm), s = Math.round((minKm - m) * 60);
+  return s === 60 ? `${m + 1}:00` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
 // Planning fields the agent reasons over / may change. `id` is the address for a
 // later change; `structure` is the per-segment prescription.
 const SESSION_FIELDS =
@@ -89,6 +96,9 @@ export interface PlanContext {
     active_niggles: Record<string, unknown>[];
     summary: Record<string, unknown>;
   };
+  threshold_suggestion: {                        // a pending threshold auto-suggestion, if any (read-only for the coach)
+    current: string; suggested: string; commentary: string;
+  } | null;
   reference: {                                   // static — how to author edits (no need to search the code)
     session_schemas: typeof SESSION_SCHEMAS;
     exercise_catalog: typeof EXERCISE_CATALOG;
@@ -130,7 +140,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
     wellness, threshold, paceZones, hrConfig, hrZones, powerConfig, powerZones,
-    constraints, coaching, recentChanges, strengthSummary, activeNiggles,
+    constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
@@ -149,6 +159,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getRecentChanges(),
     getStrengthCoachSummary(),
     listActiveNiggles(),
+    getPendingThresholdSuggestion(),
   ]);
 
   return {
@@ -178,6 +189,9 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
       active_niggles: activeNiggles as unknown as Record<string, unknown>[],
       summary: strengthSummary as unknown as Record<string, unknown>,
     },
+    threshold_suggestion: thresholdSuggestion && thresholdSuggestion.suggested_min_km != null
+      ? { current: fmtPaceMinKm(thresholdSuggestion.current_min_km), suggested: fmtPaceMinKm(thresholdSuggestion.suggested_min_km), commentary: thresholdSuggestion.commentary }
+      : null,
     reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
   };
 }

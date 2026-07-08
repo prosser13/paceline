@@ -102,7 +102,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
           </div>
           <Sparkline series={d.thresholdTrend} color="var(--color-run)" invert />
         </div>
-        <ThresholdSuggestion latest={d.thresholdCheck.latest} pending={d.thresholdCheck.pending} history={d.thresholdCheck.history} />
+        <ThresholdSuggestion latest={d.thresholdCheck.latest} pending={d.thresholdCheck.pending} history={d.thresholdCheck.history} revertable={d.thresholdCheck.revertable} />
       </Card>
 
       {/* Running VDOT + resting HR. Garmin's wellness VO2max is the athlete's cycling

@@ -3,12 +3,12 @@
 import { useState, useTransition } from 'react';
 import { savePaceZones, correctThresholdAction, type ZoneInput } from './actions';
 import ThresholdSuggestion from '../benchmarks/ThresholdSuggestion';
-import type { ThresholdCheck } from '@/data/threshold-suggestion';
+import type { ThresholdCheck, RevertableChange } from '@/data/threshold-suggestion';
 
 interface Props {
   initialThreshold: string;
   initialZones: ZoneInput[];
-  thresholdCheck?: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[] };
+  thresholdCheck?: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[]; revertable: RevertableChange | null };
 }
 
 const INPUT =
@@ -83,7 +83,7 @@ export default function ZonesClient({ initialThreshold, initialZones, thresholdC
 
       {/* Auto-suggestion — commentary + Apply/Dismiss, mirrored from Benchmarks */}
       {thresholdCheck && (
-        <ThresholdSuggestion latest={thresholdCheck.latest} pending={thresholdCheck.pending} history={thresholdCheck.history} />
+        <ThresholdSuggestion latest={thresholdCheck.latest} pending={thresholdCheck.pending} history={thresholdCheck.history} revertable={thresholdCheck.revertable} />
       )}
 
       {/* One-time re-base */}

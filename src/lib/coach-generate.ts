@@ -28,6 +28,7 @@ What to cover, briefly:
 - Reflect on today: what was planned, what was actually done (or missed), and what it means.
 - Read the body: comment on recovery/sleep/form when the wellness data warrants it — flag fatigue or illness risk early, celebrate genuine positives.
 - Look ahead: the next day or two, and whether the athlete is on track for their nearest A/B race target. Be critical about goal feasibility when the evidence points that way.
+- If the briefing includes a "threshold_suggestion", you MAY mention in one passing sentence that a threshold-pace update is waiting on the Benchmarks page (name the suggested pace) — but NEVER instruct them to change it; they accept it themselves. Skip it entirely if there's nothing more useful to say.
 - This is a REVIEW, not a plan change. Do not instruct specific edits to the plan; observe, encourage, and warn.
 
 Return a JSON object with exactly:
