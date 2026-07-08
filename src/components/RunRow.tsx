@@ -56,6 +56,7 @@ export interface RunRowCompleted {
   decouplingPct?: number | null;
   paceDecayPct?: number | null;
   fuelCarbsPerH?: number | null;
+  efficiencyFactor?: number | null;
 }
 
 const toneClass = (t?: string) =>
@@ -137,7 +138,7 @@ export default function RunRow({
   // OR ≥25 km), when the durability metrics were computed at sync.
   const isLongRun = !isRace && (session.session_type === 'LR' || (rowKm != null && rowKm >= 25));
   const showQuality = done && isLongRun && completed != null &&
-    (completed.decouplingPct != null || completed.paceDecayPct != null);
+    (completed.efficiencyFactor != null || completed.decouplingPct != null || completed.paceDecayPct != null);
 
   // Completed run → Plan / Actual / Δ comparison via the shared builder (the
   // same maths/wording as the dashboard hero). ovDur/ovTss feed the compact
@@ -258,6 +259,7 @@ export default function RunRow({
           {showQuality && completed && (
             <div className={`${DETAIL_WRAP} py-[8px]`}>
               <LongRunQuality
+                efficiencyFactor={completed.efficiencyFactor ?? null}
                 decouplingPct={completed.decouplingPct ?? null}
                 paceDecayPct={completed.paceDecayPct ?? null}
                 fuelCarbsPerH={completed.fuelCarbsPerH ?? null}

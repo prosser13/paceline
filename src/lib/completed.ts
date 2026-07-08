@@ -9,7 +9,7 @@
 // `durationMins` field rather than `mins`. The plan boundary adapts the name; the
 // row-prop rename is deliberately deferred to keep this extraction low-risk.
 
-import { parseThresholdPace, sessionTss } from '@/lib/run-tss';
+import { parseThresholdPace, sessionTss, efficiencyFactor } from '@/lib/run-tss';
 
 export interface CompletedActuals {
   durationStr: string;
@@ -26,6 +26,7 @@ export interface CompletedActuals {
   decouplingPct: number | null;
   paceDecayPct: number | null;
   fuelCarbsPerH: number | null;
+  efficiencyFactor: number | null;   // grade-adj m/min per bpm (NGP + avg HR)
 }
 
 export interface CompletedRow {
@@ -76,6 +77,8 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
     decouplingPct: cw.decoupling_pct != null ? Number(cw.decoupling_pct) : null,
     paceDecayPct: cw.pace_decay_pct != null ? Number(cw.pace_decay_pct) : null,
     fuelCarbsPerH: cw.fuel_carbs_per_h != null ? Number(cw.fuel_carbs_per_h) : null,
+    // EF from the grade-adjusted pace (NGP preferred, else avg pace) + avg HR.
+    efficiencyFactor: efficiencyFactor(ngp ?? pace, cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null),
   };
 }
 

@@ -4,6 +4,7 @@
 // the weekly snapshots accumulate. Presentational; data from loadTrajectory().
 
 import { fmtHms } from '@/lib/prediction';
+import MetricTrendChart from '@/components/MetricTrendChart';
 import type { Trajectory, Verdict } from '@/data/benchmarks';
 
 const VERDICT_STYLE: Record<Verdict, { color: string; blurb: (gap: number | null, slope: number | null) => string }> = {
@@ -65,7 +66,17 @@ export default function TargetTrajectoryCard({ t }: { t: Trajectory }) {
         </div>
       </div>
 
-      <TrendChart points={points} targetSeconds={t.targetSeconds} raceDate={t.raceDate} />
+      <MetricTrendChart
+        points={points.map(p => ({ key: p.weekStart, value: p.predictedSeconds }))}
+        color="var(--color-race)"
+        invert
+        guide={{ value: t.targetSeconds, label: `TARGET ${fmtHms(t.targetSeconds)}` }}
+        endLabel={points.length >= 2 ? fmtHms(points[points.length - 1].predictedSeconds) : null}
+        footerLeft={points.length >= 2 ? shortDate(points[0].weekStart) : null}
+        footerRight={t.raceDate ? `race ${shortDate(t.raceDate)}` : null}
+        ariaLabel="Predicted marathon time trending toward target"
+        emptyHint="The predicted-time trend fills in each week — one point so far. Come back after a few weeks to watch the line move toward target."
+      />
 
       {t.signals.length > 0 && (
         <div className="flex flex-wrap gap-[7px] mt-[12px]">
@@ -77,55 +88,6 @@ export default function TargetTrajectoryCard({ t }: { t: Trajectory }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// Predicted-time trend: y inverted so faster (lower time) sits higher. Target as a
-// dashed guide line. Degrades to a single point + hint when history is sparse.
-function TrendChart({ points, targetSeconds, raceDate }: {
-  points: { weekStart: string; predictedSeconds: number }[];
-  targetSeconds: number;
-  raceDate: string | null;
-}) {
-  if (points.length < 2) {
-    return (
-      <div className="mt-[12px] text-[12px] text-stone border-t border-fog pt-[10px]">
-        The predicted-time trend fills in each week — one point so far. Come back after a few weeks to watch the line move toward target.
-      </div>
-    );
-  }
-
-  const W = 680, H = 150, padL = 46, padR = 14, padT = 14, padB = 22;
-  const times = points.map(p => p.predictedSeconds);
-  const lo = Math.min(targetSeconds, ...times);
-  const hi = Math.max(targetSeconds, ...times);
-  const span = Math.max(60, hi - lo);
-  const yLo = lo - span * 0.15, yHi = hi + span * 0.15;
-  const x = (i: number) => padL + (i / (points.length - 1)) * (W - padL - padR);
-  const y = (secs: number) => padT + ((secs - yLo) / (yHi - yLo)) * (H - padT - padB);   // higher time → lower on screen
-  const yTarget = y(targetSeconds);
-
-  const line = points.map((p, i) => `${x(i)},${y(p.predictedSeconds)}`).join(' ');
-
-  return (
-    <div className="mt-[12px] overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} className="max-w-full" role="img" aria-label="Predicted marathon time trending toward target">
-        {/* target line */}
-        <line x1={padL} y1={yTarget} x2={W - padR} y2={yTarget} stroke="var(--color-ink)" strokeWidth="1.3" strokeDasharray="2 4" />
-        <text x={W - padR} y={yTarget - 5} fill="var(--color-ink)" fontSize="10" fontWeight="700" textAnchor="end">TARGET {fmtHms(targetSeconds)}</text>
-        {/* predicted line + points */}
-        <polyline points={line} fill="none" stroke="var(--color-race)" strokeWidth="2.4" />
-        {points.map((p, i) => (
-          <circle key={i} cx={x(i)} cy={y(p.predictedSeconds)} r={i === points.length - 1 ? 4.5 : 2.6} fill="var(--color-race)" />
-        ))}
-        {/* endpoint label */}
-        <text x={x(points.length - 1)} y={y(points[points.length - 1].predictedSeconds) - 8} fill="var(--color-race)" fontSize="10" fontWeight="700" textAnchor="end">
-          {fmtHms(points[points.length - 1].predictedSeconds)}
-        </text>
-        {raceDate && <text x={W - padR} y={H - 5} fill="var(--color-stone)" fontSize="9" textAnchor="end">race {shortDate(raceDate)}</text>}
-        <text x={padL} y={H - 5} fill="var(--color-stone)" fontSize="9">{shortDate(points[0].weekStart)}</text>
-      </svg>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import {
   predictMarathon, parseHmsToSeconds, fmtHms,
   type MarathonPrediction, type PredictionInputs,
 } from '@/lib/prediction';
-import { parseThresholdPace } from '@/lib/run-tss';
+import { parseThresholdPace, efficiencyFactor } from '@/lib/run-tss';
 
 // ── date helpers ──────────────────────────────────────────────
 
@@ -59,6 +59,7 @@ export async function listRaceResultsSince(since: string): Promise<RaceResult[]>
 export interface LongRun {
   id: string; date: string; ngpMinKm: number; km: number;
   decouplingPct: number | null; paceDecayPct: number | null;
+  efficiencyFactor: number | null;   // grade-adj m/min per bpm (NGP + avg HR)
   movingSecs: number | null;
   fuelCarbsPerH: number | null;
   fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
@@ -70,7 +71,7 @@ export interface LongRun {
 export async function listLongRunsSince(since: string): Promise<LongRun[]> {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, plan_sessions!inner(session_type, activity_type, distance_km)')
+    .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_avg_hr, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, plan_sessions!inner(session_type, activity_type, distance_km)')
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
 
@@ -90,6 +91,7 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
       id: r.id as string, date: r.completed_date as string, ngpMinKm: ngp, km,
       decouplingPct: r.decoupling_pct != null ? Number(r.decoupling_pct) : null,
       paceDecayPct:  r.pace_decay_pct != null ? Number(r.pace_decay_pct) : null,
+      efficiencyFactor: efficiencyFactor(ngp, r.actual_avg_hr != null ? Number(r.actual_avg_hr) : null),
       movingSecs,
       fuelCarbsPerH: r.fuel_carbs_per_h != null ? Number(r.fuel_carbs_per_h) : null,
       fuelItems: (r.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,

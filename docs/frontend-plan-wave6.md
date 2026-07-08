@@ -35,6 +35,66 @@ pace_decay_pct,fuel_items,fuel_carbs_per_h,perceived_effort}`, plan phase segmen
   `src/components/LongRunQuality.tsx`, `src/components/RunRow.tsx`,
   `src/app/(app)/_dashboard/SessionHero.tsx`.
 
+### 6A.1 · Efficiency Factor (EF) + decoupling guard — P1 · size S/M
+*Follow-on to 6A. For a block of prescribed **negative-split** long runs, raw
+decoupling is dominated by the intended surge (it reads the speed-up, not fatigue),
+so it's a poor durability signal. EF is the right primary metric: it rewards
+finishing faster for the same HR and is comparable run-to-run.*
+
+**The metric (migration-free — derived from stored fields):**
+```
+EF = 1000 / (NGP_min_per_km × avg_HR)     → grade-adjusted metres/min per bpm
+```
+NGP (`actual_ngp_min_km`) is already the grade-adjusted pace and `actual_avg_hr` is
+stored on every completed run, so EF needs no streams and no new column; it
+backfills for free. Higher = fitter. Null when HR or NGP is missing (fall back to
+`actual_avg_pace_min_km` when NGP absent). Whole-run aggregate, so it is *not*
+distorted by the within-run negative split the way decoupling is.
+
+- **Shared helper** `efficiencyFactor(paceMinKm, avgHr)` in `run-tss.ts` (rounds to
+  2 dp). Expose `efficiencyFactor` on `CompletedActuals` (computed in
+  `buildCompletedActuals` from the NGP + avg-HR it already reads) so both session
+  surfaces get it free; add `avgHr` to `listLongRunsSince` + an `efficiencyFactor`
+  on the `LongRun` shape for the Benchmarks side.
+
+**Placement 1 — top metric on the long-run quality block (6A component).**
+Reorder `LongRunQuality`: **EF as the headline** (big number + "aerobic efficiency ·
+m/min per bpm, higher = fitter"), then the decoupling + decay row, then fuel. EF has
+no absolute good/bad colour on a single run — show it neutral (the trend widget
+carries the judgement).
+
+**Placement 2 — EF column in the Benchmarks long-run table.**
+Add an `EF` column to the table in `BenchmarksBody` (from `LongRun.efficiencyFactor`).
+
+**Placement 3 — EF trend widget on Benchmarks (reuses the prediction graph).**
+Extract the trajectory line-chart (`TargetTrajectoryCard`'s `TrendChart`) into a
+shared `MetricTrendChart` (points over time + line + endpoint emphasis; optional
+guide line; `invert` flag — EF is higher-better so **not** inverted). New "Aerobic
+efficiency" section on Benchmarks plots **one point per long run** across the block
+(from `d.longRuns`, dated), with a delta-since-first-long-run chip. This is the
+"is durability improving?" scoreboard the raw decoupling number can't be. Doing the
+extraction here gives 6B a ready-made chart to build its phase-band/projection
+version on.
+
+**Decoupling negative-split guard.**
+In `LongRunQuality` (and the Benchmarks table cell), when `paceDecayPct < −5`
+(strong negative split), render decoupling **muted with a note** ("inflated by
+negative split") instead of a red "faded" verdict — the number is unreliable there.
+Keep pace decay as the "was the negative split executed" signal.
+
+**Caveats (documented, not built):** EF drops in heat/when under-slept — read the
+*trend*, not single runs. Per-run weather isn't stored, so heat-annotating past runs
+is deferred; note it in the widget copy.
+
+- **Files:** `src/lib/run-tss.ts` (EF helper + optional add to
+  `computeLongRunQuality` return), `src/lib/completed.ts` (expose `efficiencyFactor`
+  + `ngpMinKm`), `src/data/benchmarks.ts` (`listLongRunsSince` avg-HR + EF on
+  `LongRun`), `src/app/(app)/benchmarks/{data.ts,BenchmarksBody.tsx}` (column + EF
+  series + widget), new `src/components/MetricTrendChart.tsx` (extracted),
+  `src/app/(app)/_dashboard/TargetTrajectoryCard.tsx` (use the extracted chart),
+  `src/components/LongRunQuality.tsx` (EF headline + decoupling guard).
+- **Migration-free.**
+
 ### 6B · Trajectory card completion — P1 · size M/L
 *Gap 1.1. The scoreboard the campaign is built around; the biggest single unit.*
 
@@ -132,7 +192,8 @@ pace_decay_pct,fuel_items,fuel_carbs_per_h,perceived_effort}`, plan phase segmen
 
 | Step | Unit | Why here |
 |------|------|----------|
-| 1 | 6A long-run quality block | Fastest P1; data ready; unblocks nothing but high value |
+| 1 | 6A long-run quality block | Fastest P1; data ready; unblocks nothing but high value ✅ done |
+| 1.5 | 6A.1 EF + decoupling guard | Right durability metric for a negative-split block; extracts the shared chart 6B reuses |
 | 2 | 6B trajectory completion | Core P1 scoreboard; owns the shared tune-up/equivalence helper |
 | 3 | 6C race-page trajectory | P1; reuses 6B's helper + snapshot reads |
 | 4 | 6D benchmarks polish | P2; small, self-contained |

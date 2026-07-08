@@ -60,6 +60,7 @@ interface CompletedData {
   decouplingPct?: number | null;
   paceDecayPct?: number | null;
   fuelCarbsPerH?: number | null;
+  efficiencyFactor?: number | null;
 }
 
 // ── Constants / helpers ────────────────────────────────────────

@@ -64,7 +64,7 @@ export default function SessionHero({
   // with durability metrics computed at sync.
   const isLongRun = !isRace && (session.session_type === 'LR' || (distActual != null && distActual >= 25));
   const showQuality = isDone && isLongRun && completed != null &&
-    (completed.decouplingPct != null || completed.paceDecayPct != null);
+    (completed.efficiencyFactor != null || completed.decouplingPct != null || completed.paceDecayPct != null);
 
   const compare = isDone ? buildRunCompare(steps, {
     planKm: distPlanned, actKm: distActual, actMins: completed?.mins ?? null,
@@ -146,6 +146,7 @@ export default function SessionHero({
         {showQuality && completed && (
           <div className="mb-[12px]">
             <LongRunQuality
+              efficiencyFactor={completed.efficiencyFactor}
               decouplingPct={completed.decouplingPct}
               paceDecayPct={completed.paceDecayPct}
               fuelCarbsPerH={completed.fuelCarbsPerH}

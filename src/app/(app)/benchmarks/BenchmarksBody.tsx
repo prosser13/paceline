@@ -3,9 +3,16 @@
 // VO2max / eFTP / resting HR trends, and recent race results.
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
+import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from './FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
 import type { BenchmarksData, Series } from './data';
+
+// A strong negative split inflates aerobic decoupling (it reads the intended
+// surge, not fatigue), so we flag it as unreliable rather than colour it red.
+function decoupleUnreliable(paceDecayPct: number | null): boolean {
+  return paceDecayPct != null && paceDecayPct < -5;
+}
 
 function SecLabel({ children }: { children: React.ReactNode }) {
   return <div className="text-[13px] uppercase font-bold" style={{ letterSpacing: '.06em', margin: '22px 0 12px' }}>{children}</div>;
@@ -144,6 +151,34 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         )}
       </Card>
 
+      {/* Aerobic efficiency (EF) — the durability scoreboard for a negative-split block */}
+      <SecLabel>Aerobic efficiency</SecLabel>
+      <Card>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <Eyebrow>EF · current</Eyebrow>
+            <div className="font-display font-bold text-[26px] leading-none mt-[4px]">
+              {d.ef.current != null ? <>{d.ef.current.toFixed(2)}<span className="text-[12px] text-stone"> m/min·bpm</span></> : '—'}
+            </div>
+          </div>
+          {efDelta(d) != null && (
+            <span className="text-[12px] font-bold" style={{ color: efDelta(d)! >= 0 ? 'var(--color-ready)' : 'var(--color-run)' }}>
+              {efDelta(d)! >= 0 ? '▲' : '▼'} {efDelta(d)! >= 0 ? '+' : ''}{efDelta(d)!.toFixed(2)} since first LR
+            </span>
+          )}
+        </div>
+        <MetricTrendChart
+          points={d.ef.series.map(s => ({ key: s.date, value: s.v }))}
+          color="var(--color-run)"
+          endLabel={d.ef.current != null ? d.ef.current.toFixed(2) : null}
+          footerLeft={d.ef.series.length >= 2 ? shortDate(d.ef.series[0].date) : null}
+          footerRight={d.ef.series.length >= 2 ? shortDate(d.ef.series[d.ef.series.length - 1].date) : null}
+          ariaLabel="Aerobic efficiency trending up over the block's long runs"
+          emptyHint="Your EF trend fills in as you log long runs with heart rate — one point so far."
+        />
+        <p className="text-[11.5px] text-stone mt-[8px]">Grade-adjusted metres/min per heartbeat — <b>higher = fitter</b>. Read the trend, not single runs (EF dips in heat or when under-slept). Unlike decoupling it isn’t distorted by a negative split, so it’s the durability signal to watch across the block.</p>
+      </Card>
+
       {/* Long-run quality */}
       <SecLabel>Long-run quality</SecLabel>
       <Card>
@@ -154,7 +189,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r'], ['Carbs/h', 'r']].map(([h, a]) => (
+                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['EF', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r'], ['Carbs/h', 'r']].map(([h, a]) => (
                     <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
                   ))}
                 </tr>
@@ -165,7 +200,10 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                     <td className="py-[9px] border-b border-fog/60">{shortDate(r.date)}</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{Math.round(r.km)} km</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{fmtPace(r.ngpMinKm)}</td>
-                    <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.decouplingPct, 5, 8)}`}>{fmtPct(r.decouplingPct)}</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{r.efficiencyFactor != null ? r.efficiencyFactor.toFixed(2) : '—'}</td>
+                    {decoupleUnreliable(r.paceDecayPct)
+                      ? <td className="py-[9px] border-b border-fog/60 text-right text-stone/60" title="Inflated by a negative split — read EF instead">{fmtPct(r.decouplingPct)}*</td>
+                      : <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.decouplingPct, 5, 8)}`}>{fmtPct(r.decouplingPct)}</td>}
                     <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.paceDecayPct, 2, 4)}`}>{fmtPct(r.paceDecayPct)}</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">
                       <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts} />
@@ -174,7 +212,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                 ))}
               </tbody>
             </table>
-            <p className="text-[11.5px] text-stone mt-[8px]">Decoupling = HR drift vs pace (lower = more durable; &lt;5% is strong). Final-⅓ decay = grade-adjusted slowdown over the last third. Both grade-adjusted.</p>
+            <p className="text-[11.5px] text-stone mt-[8px]">EF = grade-adj. m/min per bpm (higher = fitter). Decoupling = HR drift vs pace (lower = more durable; &lt;5% is strong) — <b>*</b> marks runs where a negative split inflates it, so read EF there. Final-⅓ decay = grade-adjusted slowdown over the last third.</p>
           </div>
         )}
       </Card>
@@ -182,6 +220,13 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
       <p className="text-[11.5px] text-stone mt-[18px]">Execution scoring, RPE, and gear tracking arrive in later updates.</p>
     </>
   );
+}
+
+// EF change since the block's first long run (current − first). Positive = fitter.
+function efDelta(d: BenchmarksData): number | null {
+  if (d.ef.current == null || d.ef.first == null) return null;
+  const delta = d.ef.current - d.ef.first;
+  return Math.round(delta * 100) / 100;
 }
 
 // Green under `good`, amber under `warn`, red above — for "lower is better" drift metrics.

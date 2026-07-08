@@ -39,15 +39,31 @@ export interface BenchmarksData {
   longRuns: {
     id: string; date: string; km: number; ngpMinKm: number;
     decouplingPct: number | null; paceDecayPct: number | null;
+    efficiencyFactor: number | null;
     movingSecs: number | null; fuelCarbsPerH: number | null;
     fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
   }[];
+  // Efficiency Factor trend across the block's long runs (one point per run).
+  ef: { current: number | null; first: number | null; series: Series[] };
   fuelProducts: FuelProduct[];
 }
 
 // Running VDOT implied by a marathon time (seconds), rounded to one decimal.
 function vdotOfMarathon(seconds: number): number {
   return Math.round(danielsVdot(42195, seconds / 60) * 10) / 10;
+}
+
+// EF trend across the block's long runs (chronological). first/current anchor the
+// delta chip; `series` (oldest→newest) feeds the trend chart.
+function efTrend(longRuns: { date: string; efficiencyFactor: number | null }[]): BenchmarksData['ef'] {
+  const series: Series[] = longRuns
+    .filter(r => r.efficiencyFactor != null)
+    .map(r => ({ date: r.date, v: r.efficiencyFactor as number }));
+  return {
+    first: series.length ? series[0].v : null,
+    current: series.length ? series[series.length - 1].v : null,
+    series,
+  };
 }
 
 export async function loadBenchmarksData(): Promise<BenchmarksData> {
@@ -96,6 +112,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
         return { ...r, impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, 42195) * 60) };
       }),
     longRuns: [...longRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
+    ef: efTrend(longRuns),
     fuelProducts,
   };
 }
