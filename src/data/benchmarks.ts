@@ -64,9 +64,9 @@ export interface LongRun {
   fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
 }
 
-// Completed long runs since `since` — planned LONG_RUN sessions OR any run ≥ 25 km
-// (the agreed "type OR distance" rule), with their NGP + long-run quality metrics
-// + fuel log.
+// Completed long runs since `since` — planned long runs (type 'LR') OR any run
+// ≥ 25 km (the agreed "type OR distance" rule), with their NGP + long-run quality
+// metrics + fuel log.
 export async function listLongRunsSince(since: string): Promise<LongRun[]> {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
@@ -79,7 +79,7 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
       { session_type: string | null; distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : 0;
-    const isLong = ps?.session_type === 'LONG_RUN' || km >= 25;
+    const isLong = ps?.session_type === 'LR' || km >= 25;
     if (!isLong) return [];
     const ngp = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km)
       : r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;

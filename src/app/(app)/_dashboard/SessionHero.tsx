@@ -13,6 +13,7 @@ import {
   INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
 } from '@/components/session-ui';
 import { RunGlyph } from '@/components/glyphs';
+import LongRunQuality from '@/components/LongRunQuality';
 import { RUN, RUN_B, READY } from '@/lib/colors';
 import type { PlanSession, CompletedToday } from './data';
 
@@ -58,6 +59,12 @@ export default function SessionHero({
   const isRace      = session.session_type === 'RACE';
   // Execution score — pacing vs plan. Runs only (not races), when scorable.
   const exec = isDone && !isRace ? computeExecutionScore(steps) : null;
+
+  // Long-run quality block — qualifying long runs (planned long run 'LR' OR ≥25 km)
+  // with durability metrics computed at sync.
+  const isLongRun = !isRace && (session.session_type === 'LR' || (distActual != null && distActual >= 25));
+  const showQuality = isDone && isLongRun && completed != null &&
+    (completed.decouplingPct != null || completed.paceDecayPct != null);
 
   const compare = isDone ? buildRunCompare(steps, {
     planKm: distPlanned, actKm: distActual, actMins: completed?.mins ?? null,
@@ -135,6 +142,15 @@ export default function SessionHero({
       <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
         {isDone && compare && compare.rows.length > 0 && (
           <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
+        )}
+        {showQuality && completed && (
+          <div className="mb-[12px]">
+            <LongRunQuality
+              decouplingPct={completed.decouplingPct}
+              paceDecayPct={completed.paceDecayPct}
+              fuelCarbsPerH={completed.fuelCarbsPerH}
+            />
+          </div>
         )}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
           {session.rationale && (
