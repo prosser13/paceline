@@ -57,6 +57,9 @@ interface CompletedData {
   avgPower?: number | null;
   segmentActuals?: (number | null)[] | null;
   segmentHr?: (number | null)[] | null;
+  decouplingPct?: number | null;
+  paceDecayPct?: number | null;
+  fuelCarbsPerH?: number | null;
 }
 
 // ── Constants / helpers ────────────────────────────────────────

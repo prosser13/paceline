@@ -20,10 +20,11 @@ import { normalizeStructure } from '@/lib/plan-structure';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import { computeExecutionScore, scoreColor } from '@/lib/execution-score';
 import {
-  INTENSITY, MetricBlock, WorkoutDetail, CompareTable, PlannedDetail, RaceBadge,
+  INTENSITY, MetricBlock, WorkoutDetail, CompareTable, PlannedDetail, RaceBadge, DETAIL_WRAP,
   syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, parseDurationMins,
   type CompareRow, type WindowCmp,
 } from './session-ui';
+import LongRunQuality from './LongRunQuality';
 import { RunGlyph } from './glyphs';
 
 export interface RunRowSession {
@@ -52,6 +53,9 @@ export interface RunRowCompleted {
   segmentActuals?: (number | null)[] | null;
   segmentHr?: (number | null)[] | null;
   perceivedEffort?: number | null;
+  decouplingPct?: number | null;
+  paceDecayPct?: number | null;
+  fuelCarbsPerH?: number | null;
 }
 
 const toneClass = (t?: string) =>
@@ -128,6 +132,12 @@ export default function RunRow({
   // Execution score — how well the actual pacing hit the planned targets. Runs only,
   // and only when there are scorable pace segments (never a meaningless 100).
   const exec = done && completed && !isRace ? computeExecutionScore(detailSteps) : null;
+
+  // Long-run quality block — shown on qualifying long runs (planned long run 'LR'
+  // OR ≥25 km), when the durability metrics were computed at sync.
+  const isLongRun = !isRace && (session.session_type === 'LR' || (rowKm != null && rowKm >= 25));
+  const showQuality = done && isLongRun && completed != null &&
+    (completed.decouplingPct != null || completed.paceDecayPct != null);
 
   // Completed run → Plan / Actual / Δ comparison via the shared builder (the
   // same maths/wording as the dashboard hero). ovDur/ovTss feed the compact
@@ -245,6 +255,15 @@ export default function RunRow({
         // Completed: whole-run summary, then the per-segment breakdown.
         <>
           <CompareTable rows={compareRows} />
+          {showQuality && completed && (
+            <div className={`${DETAIL_WRAP} py-[8px]`}>
+              <LongRunQuality
+                decouplingPct={completed.decouplingPct ?? null}
+                paceDecayPct={completed.paceDecayPct ?? null}
+                fuelCarbsPerH={completed.fuelCarbsPerH ?? null}
+              />
+            </div>
+          )}
           <WorkoutDetail steps={detailSteps} isRace={isRace} />
         </>
       ) : (

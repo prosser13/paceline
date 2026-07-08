@@ -21,6 +21,11 @@ export interface CompletedActuals {
   segmentActuals: (number | null)[] | null;
   segmentHr: (number | null)[] | null;
   perceivedEffort: number | null;   // Garmin RPE (1–10) from intervals.icu, when logged
+  // Long-run quality — computed at Strava sync, stored on the row. Null when not a
+  // long run / streams insufficient. Drives the LongRunQuality detail block.
+  decouplingPct: number | null;
+  paceDecayPct: number | null;
+  fuelCarbsPerH: number | null;
 }
 
 export interface CompletedRow {
@@ -35,6 +40,9 @@ export interface CompletedRow {
   segment_hr?: unknown;
   tss?: number | string | null;   // stored (recomputed on threshold/FTP change); null → compute live
   perceived_effort?: number | string | null;
+  decoupling_pct?: number | string | null;
+  pace_decay_pct?: number | string | null;
+  fuel_carbs_per_h?: number | string | null;
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
@@ -65,6 +73,9 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
     segmentActuals: (cw.segment_actuals as (number | null)[] | null) ?? null,
     segmentHr: (cw.segment_hr as (number | null)[] | null) ?? null,
     perceivedEffort: cw.perceived_effort != null ? Number(cw.perceived_effort) : null,
+    decouplingPct: cw.decoupling_pct != null ? Number(cw.decoupling_pct) : null,
+    paceDecayPct: cw.pace_decay_pct != null ? Number(cw.pace_decay_pct) : null,
+    fuelCarbsPerH: cw.fuel_carbs_per_h != null ? Number(cw.fuel_carbs_per_h) : null,
   };
 }
 
