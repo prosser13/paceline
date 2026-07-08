@@ -13,16 +13,28 @@ export interface FuelStop {
   dropBag: boolean;
 }
 
+// Fuel rehearsal readiness — derived from the long-run fuel log vs the race plan's
+// carb target. Purely computed; no new inputs on the race page.
+export interface FuelReadiness {
+  targetGPerH: number;
+  avgGPerH: number | null;
+  bestGPerH: number | null;
+  practiced: number;     // long runs with fuel logged
+  totalLongRuns: number;
+}
+
 export default function FuelPlan({
   fuel,
   schedule,
   fluidRange,
   fluidNote,
+  readiness = null,
 }: {
   fuel: FuelPlanData;
   schedule: FuelStop[];
   fluidRange: [number, number];
   fluidNote: string | null;
+  readiness?: FuelReadiness | null;
 }) {
   return (
     <div className={cardClass}>
@@ -36,6 +48,8 @@ export default function FuelPlan({
         <p className="font-mono text-[10px] text-stone mt-[8px] mb-[16px]">
           {fluidNote ?? 'Fluid is a starting point — it rises automatically once the race-day forecast lands.'}
         </p>
+
+        {readiness && <FuelReadinessStrip r={readiness} />}
 
         <div className="rounded-[10px] bg-fern-soft/60 border border-fern/20 px-[14px] py-[11px] mb-[16px]">
           <p className="font-mono text-[10px] uppercase tracking-[.08em] text-fern mb-[4px]">Before the start</p>
@@ -80,6 +94,48 @@ export default function FuelPlan({
             {fuel.note}
           </p>
         )}
+      </div>
+    </div>
+  );
+}
+
+// "Practiced X g/h on N of M long runs" vs the race-plan target, with a verdict.
+function FuelReadinessStrip({ r }: { r: FuelReadiness }) {
+  const { targetGPerH: target, avgGPerH: avg, bestGPerH: best, practiced, totalLongRuns } = r;
+  const ready = avg != null && avg >= target;
+  const hitOnce = !ready && best != null && best >= target;
+  const barPct = avg != null ? Math.min(100, Math.round((avg / target) * 100)) : 0;
+  const barColor = ready ? 'var(--color-fern)' : 'var(--color-strength)';
+  const verdict = practiced === 0
+    ? `Nothing rehearsed yet — practise the ${target} g/h plan on your long runs and log it.`
+    : ready
+      ? `Gut is trained for the ${target} g/h plan.`
+      : hitOnce
+        ? `You've hit ${target}+ once (best ${best}) — rehearse it on more long runs before race week.`
+        : `Plan is ${target} g/h; you've practised up to ${best ?? avg} — build toward it.`;
+
+  return (
+    <div className="rounded-[10px] border border-fog bg-bone/40 px-[14px] py-[11px] mb-[16px]">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[.08em] text-stone">Fuel rehearsal</span>
+        <span className="text-[12px] text-stone">race plan <b className="text-ink">{target} g/h</b></span>
+      </div>
+      {practiced > 0 && (
+        <>
+          <div className="text-[13px] text-ink mt-[5px]">
+            Practised <b className="font-display text-[15px]">{avg}</b> g/h on <b>{practiced} of {totalLongRuns}</b> long runs
+            {best != null && <span className="text-stone"> · best {best}</span>}
+          </div>
+          <div className="relative h-[8px] rounded-full bg-fog mt-[8px]">
+            <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${barPct}%`, background: barColor }} />
+          </div>
+        </>
+      )}
+      <div className="flex items-start gap-[6px] text-[12px] mt-[8px]">
+        <span className="font-bold" style={{ color: ready ? 'var(--color-fern)' : 'var(--color-strength)' }}>
+          {ready ? 'Ready' : practiced === 0 ? 'To do' : 'Rehearse'}
+        </span>
+        <span className="text-stone leading-snug">{verdict}</span>
       </div>
     </div>
   );

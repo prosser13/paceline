@@ -18,14 +18,14 @@ import { getRaceForecast } from '@/lib/weather';
 import { getWellnessCached } from '@/lib/intervals';
 import { projectFitness, readinessFromProjection } from '@/lib/fitness-projection';
 import { predictableDistanceM } from '@/lib/prediction';
-import { getPredictedAtRace } from '@/data/benchmarks';
+import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
 import RouteMap from './RouteMap';
 import ElevationProfile from './ElevationProfile';
 import WeatherPanel from './WeatherPanel';
 import PacingTable from './PacingTable';
-import FuelPlan, { type FuelStop } from './FuelPlan';
+import FuelPlan, { type FuelStop, type FuelReadiness } from './FuelPlan';
 import CoachNotes from './CoachNotes';
 import KitChecklist from './KitChecklist';
 import ReadinessChart from './ReadinessChart';
@@ -214,6 +214,27 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   const pacing = buildPacing(guide, targetTime);
   const targetTimeDisplay = formatTargetTime(targetTime);
+
+  // Fuel rehearsal readiness — for endurance races (≥30 km), compare logged
+  // long-run fuelling (last 16 weeks) against the plan's carb target. Derived only.
+  let fuelReadiness: FuelReadiness | null = null;
+  if ((distanceKm ?? 0) >= 30) {
+    const fuelTarget = guide.fuel.carbsPerHourG?.[1] ?? null;
+    if (fuelTarget != null && fuelTarget > 0) {
+      const since = new Date(Date.now() - 112 * 86400000).toISOString().slice(0, 10);
+      const longRuns = await listLongRunsSince(since);
+      if (longRuns.length > 0) {
+        const logged = longRuns.filter(r => r.fuelCarbsPerH != null).map(r => r.fuelCarbsPerH as number);
+        fuelReadiness = {
+          targetGPerH: fuelTarget,
+          avgGPerH: logged.length ? Math.round(logged.reduce((a, b) => a + b, 0) / logged.length) : null,
+          bestGPerH: logged.length ? Math.round(Math.max(...logged)) : null,
+          practiced: logged.length,
+          totalLongRuns: longRuns.length,
+        };
+      }
+    }
+  }
 
   // Checkpoint-by-checkpoint fuelling plan: zip the curated fuel notes with the
   // pacing arrival times. Skip the start row (no fuel note).
@@ -432,7 +453,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           <PacingTable rows={pacing} targetTime={targetTimeDisplay} note={guide.pacingNote} />
         </div>
         <div className="mt-[24px]">
-          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} />
+          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} readiness={fuelReadiness} />
         </div>
         <div className="mt-[24px]">
           <KitChecklist
