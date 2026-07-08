@@ -4,7 +4,7 @@
 // threshold_checks. Suggest freely, apply conservatively, never silently.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getThresholdPace, setThresholdPace, listPaceZones, replacePaceZones } from '@/data/zones';
+import { getThresholdPace, setThresholdPace, replacePaceZones } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 import { danielsVdot, vdotToThresholdPaceMinKm } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
@@ -228,17 +228,30 @@ function shiftPaceStr(p: string, deltaS: number): string {
   return secondsToPace(Math.max(1, Math.round(parseThresholdPace(p) * 60 + deltaS)));
 }
 
+// Fresh (uncached) reads — a mutation must compute its delta from the current DB
+// truth, not the tag-cached getThresholdPace / listPaceZones (which can lag a
+// just-applied change).
+async function freshThresholdMinKm(): Promise<number | null> {
+  const { data } = await supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle();
+  const s = data?.threshold_pace_per_km as string | null | undefined;
+  return s ? parseThresholdPace(s) : null;
+}
+async function freshZones(): Promise<{ zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[]> {
+  const { data } = await supabaseAdmin.from('pace_zones').select('zone_key, name, pace_min, pace_max, sort_order').order('sort_order');
+  return (data ?? []) as { zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[];
+}
+
 // Apply a pending suggestion: set threshold (→ TSS recompute), shift every pace-zone
 // boundary by the same delta (flat), and record the change for cooldown + history.
 export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: boolean; error?: string }> {
   const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS).eq('id', checkId).eq('status', 'pending').maybeSingle();
   if (!data || data.suggested_min_km == null) return { ok: false, error: 'No pending suggestion' };
   const check = mapRow(data);
-  const currentMinKm = check.current_min_km;
+  const currentMinKm = (await freshThresholdMinKm()) ?? check.current_min_km;   // fresh truth
   const suggestedMinKm = check.suggested_min_km!;
   const deltaS = Math.round((suggestedMinKm - currentMinKm) * 60);   // negative = faster
 
-  const zones = await listPaceZones();
+  const zones = await freshZones();
   const before = zones.map(z => ({ name: z.name as string, pace_min: z.pace_min as string, pace_max: z.pace_max as string }));
   const shifted = zones.map(z => ({
     zone_key: z.zone_key as string, name: z.name as string, sort_order: z.sort_order as number,
@@ -263,5 +276,37 @@ export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: b
 export async function dismissThresholdSuggestion(checkId: string): Promise<{ ok: boolean }> {
   await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() })
     .eq('id', checkId).eq('status', 'pending');
+  return { ok: true };
+}
+
+// A deliberate one-time correction (e.g. the setting was wrong) — distinct from the
+// progression ratchet, so it bypasses the step cap. Sets threshold to `target`,
+// shifts every pace zone by the matching flat delta, recomputes TSS, dismisses any
+// pending suggestion, and logs the change + reason. Resets the cooldown.
+export async function correctThreshold(targetMinKm: number, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const currentMinKm = await freshThresholdMinKm();
+  if (currentMinKm == null) return { ok: false, error: 'No threshold set' };
+  const deltaS = Math.round((targetMinKm - currentMinKm) * 60);
+  if (deltaS === 0) return { ok: false, error: 'Already at that pace' };
+
+  const zones = await freshZones();
+  const before = zones.map(z => ({ name: z.name as string, pace_min: z.pace_min as string, pace_max: z.pace_max as string }));
+  const shifted = zones.map(z => ({
+    zone_key: z.zone_key as string, name: z.name as string, sort_order: z.sort_order as number,
+    pace_min: shiftPaceStr(z.pace_min as string, deltaS), pace_max: shiftPaceStr(z.pace_max as string, deltaS),
+  }));
+  await replacePaceZones(shifted);
+  await setThresholdPace(fmtPace(targetMinKm));   // + TSS recompute
+
+  // A manual re-base supersedes any open suggestion.
+  await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() }).eq('status', 'pending');
+
+  const today = new Date().toISOString().slice(0, 10);
+  const cleanReason = reason.trim() || 'manual correction';
+  await supabaseAdmin.from('threshold_checks').insert({
+    week_start: isoWeekStart(today), current_min_km: targetMinKm, outcome: 'applied', status: 'none',
+    commentary: `Manual correction to ${fmtPace(targetMinKm)}/km on ${fmtDay(today)} — ${cleanReason}. Zones shifted ${deltaS < 0 ? deltaS : `+${deltaS}`}s, TSS recomputed.`,
+    evidence: { deltaS, beforeThreshold: fmtPace(currentMinKm), afterThreshold: fmtPace(targetMinKm), beforeZones: before, reason: cleanReason },
+  });
   return { ok: true };
 }

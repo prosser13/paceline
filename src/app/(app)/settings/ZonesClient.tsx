@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import { savePaceZones, type ZoneInput } from './actions';
+import { savePaceZones, correctThresholdAction, type ZoneInput } from './actions';
 import ThresholdSuggestion from '../benchmarks/ThresholdSuggestion';
 import type { ThresholdCheck } from '@/data/threshold-suggestion';
 
@@ -26,6 +26,22 @@ export default function ZonesClient({ initialThreshold, initialZones, thresholdC
   );
   const [saved, setSaved]   = useState(false);
   const [pending, start]    = useTransition();
+
+  // One-time re-base ("the setting was wrong") — shifts threshold + all zones
+  // together, bypassing the progression ratchet.
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [correctPace, setCorrectPace] = useState('');
+  const [correctReason, setCorrectReason] = useState('');
+  const [correctMsg, setCorrectMsg] = useState<string | null>(null);
+  const [correcting, startCorrect] = useTransition();
+  function runCorrection() {
+    startCorrect(async () => {
+      setCorrectMsg(null);
+      const r = await correctThresholdAction(correctPace, correctReason);
+      if (r.ok) { setThreshold(correctPace.trim()); setCorrectMsg('Re-based — threshold + zones shifted, TSS recomputed.'); setCorrectOpen(false); }
+      else setCorrectMsg(r.error ?? 'Failed');
+    });
+  }
 
   function update(i: number, field: keyof ZoneInput, value: string) {
     setZones(zs => zs.map((z, idx) => (idx === i ? { ...z, [field]: value } : z)));
@@ -69,6 +85,32 @@ export default function ZonesClient({ initialThreshold, initialZones, thresholdC
       {thresholdCheck && (
         <ThresholdSuggestion latest={thresholdCheck.latest} pending={thresholdCheck.pending} history={thresholdCheck.history} />
       )}
+
+      {/* One-time re-base */}
+      <div>
+        <button type="button" onClick={() => setCorrectOpen(o => !o)} className="font-mono text-[11.5px] text-stone hover:text-ink underline">
+          {correctOpen ? 'Cancel re-base' : 'Threshold was wrong? Re-base it'}
+        </button>
+        {correctOpen && (
+          <div className="flex flex-col gap-2 border border-fog rounded-[10px] bg-bone mt-2" style={{ padding: '10px 12px' }}>
+            <p className="text-[12px] text-stone">A deliberate correction — shifts threshold and every pace zone together, recomputes TSS, and logs the reason. Bypasses the progression cap.</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">New threshold</label>
+              <input value={correctPace} onChange={e => { setCorrectPace(e.target.value); setCorrectMsg(null); }} placeholder="3:35" className={`${INPUT} w-[72px] text-center`} />
+              <span className="font-mono text-[11px] text-stone">/km</span>
+            </div>
+            <input value={correctReason} onChange={e => { setCorrectReason(e.target.value); setCorrectMsg(null); }} placeholder="Reason (e.g. original figure was outdated)" className={`${INPUT} w-full font-sans`} />
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={runCorrection} disabled={correcting || !correctPace.trim() || !correctReason.trim()}
+                className="bg-oxblood text-bone text-[12.5px] font-medium px-3 py-[7px] rounded-[8px] disabled:opacity-50">
+                {correcting ? 'Applying…' : 'Re-base threshold'}
+              </button>
+              {correctMsg && <span className="font-mono text-[11px] text-stone">{correctMsg}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+      {correctMsg && !correctOpen && <span className="font-mono text-[11px] text-fern -mt-3">{correctMsg}</span>}
 
       {/* Zones */}
       <div className="flex flex-col gap-2">
