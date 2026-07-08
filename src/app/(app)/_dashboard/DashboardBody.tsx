@@ -13,6 +13,7 @@ import CoachCard from './CoachCard';
 import DailyNoteCard from './DailyNoteCard';
 import WellnessSection, { WellnessSkeleton } from './wellness/WellnessSection';
 import StandoutsBannerAsync from './wellness/StandoutsBannerAsync';
+import LifestyleInsightAsync from './wellness/LifestyleInsightAsync';
 import { fmtDate } from '@/lib/dates';
 
 // Shared section label — the mockup's `.seclab` (13px, uppercase, 700).
@@ -105,6 +106,11 @@ export default async function DashboardBody() {
       {/* Wellness — biometric tiles from wellness_days */}
       <Suspense fallback={<WellnessSkeleton />}>
         <WellnessSection />
+      </Suspense>
+
+      {/* Weekly lifestyle insight — a dismissible correlation card */}
+      <Suspense fallback={null}>
+        <LifestyleInsightAsync />
       </Suspense>
 
       {/* Trends + last 7 */}
