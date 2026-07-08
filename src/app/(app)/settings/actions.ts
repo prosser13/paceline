@@ -16,6 +16,7 @@ import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
 import { geocodePlace } from '@/lib/weather';
+import { correctThreshold } from '@/data/threshold-suggestion';
 import { revalidatePath } from 'next/cache';
 import { paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 
@@ -360,4 +361,20 @@ export async function clearTravelLocation(): Promise<{ ok: boolean }> {
   revalidatePath('/settings');
   revalidatePath('/');
   return { ok: true };
+}
+
+// ── Threshold correction (one-time re-base, bypasses the ratchet) ──
+
+export async function correctThresholdAction(pace: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const m = /^(\d{1,2}):([0-5]\d)$/.exec(pace.trim());
+  if (!m) return { ok: false, error: 'Enter a pace as m:ss (e.g. 3:35)' };
+  const targetMinKm = Number(m[1]) + Number(m[2]) / 60;
+  if (!(targetMinKm >= 2.5 && targetMinKm <= 8)) return { ok: false, error: 'That pace looks out of range' };
+  if (!reason.trim()) return { ok: false, error: 'Add a short reason' };
+  const res = await correctThreshold(targetMinKm, reason.trim());
+  revalidatePath('/settings');
+  revalidatePath('/benchmarks');
+  revalidatePath('/');
+  return res;
 }
