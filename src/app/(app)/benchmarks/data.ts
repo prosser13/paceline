@@ -5,7 +5,7 @@
 // show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
-import { getCurrentPrediction, getGoalMarathon, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart } from '@/data/benchmarks';
+import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
@@ -30,6 +30,7 @@ export interface BenchmarksData {
   targetSeconds: number | null;
   predictedSeconds: number | null;
   signals: { source: string; label: string; impliedSeconds: number }[];
+  experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
   thresholdDeltaSec: number | null;  // change since first tracked week, seconds/km (negative = faster)
@@ -72,8 +73,9 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = new Date().toISOString().slice(0, 10);
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
+    getExperimentalPredictions(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
     listBenchmarkSnapshotsSince(isoWeekStart(since)),
@@ -111,6 +113,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     targetSeconds: goal?.targetSeconds ?? null,
     predictedSeconds: prediction.predictedSeconds,
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
+    experimental,
     thresholdMinKm,
     thresholdTrend,
     thresholdDeltaSec,

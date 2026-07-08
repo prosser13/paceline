@@ -9,13 +9,18 @@
 // under multi-tenancy.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getThresholdPace } from '@/data/zones';
+import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
 import {
   predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
   type MarathonPrediction, type PredictionInputs,
 } from '@/lib/prediction';
+import {
+  riegelPrediction, tandaPrediction, cardiacPrediction, TANDA_WINDOW_DAYS,
+  type ExperimentalPrediction, type TrainingLogRun,
+} from '@/lib/experimental-predictions';
 import { parseThresholdPace, efficiencyFactor } from '@/lib/run-tss';
+import { activityKind } from '@/lib/activity-types';
 
 const MARATHON_M = 42195;
 
@@ -141,6 +146,99 @@ export async function buildPredictionInputs(asOf: string): Promise<PredictionInp
 
 export async function getCurrentPrediction(asOf: string): Promise<MarathonPrediction> {
   return predictMarathon(await buildPredictionInputs(asOf));
+}
+
+// ── experimental predictors (Benchmarks tiles) ────────────────
+
+// All synced running activities since `since` — planned and off-plan alike. This
+// is the raw training log the Tanda regression reads: it must see everything you
+// ran, not just sessions that matched the plan.
+async function listRunTrainingSince(since: string): Promise<TrainingLogRun[]> {
+  const { data } = await supabaseAdmin
+    .from('activities')
+    .select('activity_date, activity_type, distance_km, duration_mins, moving_time_secs')
+    .gte('activity_date', since);
+  return (data ?? []).flatMap(a => {
+    if (activityKind((a.activity_type as string) ?? '') !== 'run') return [];
+    const km = a.distance_km != null ? Number(a.distance_km) : 0;
+    const secs = a.moving_time_secs != null ? Number(a.moving_time_secs)
+      : a.duration_mins != null ? Math.round(Number(a.duration_mins) * 60) : 0;
+    if (!(km > 0) || !(secs > 0) || !a.activity_date) return [];
+    return [{ date: a.activity_date as string, km, secs }];
+  });
+}
+
+// An experimental prediction plus its weekly trend (oldest→newest) for the tile's
+// sparkline. `v` is the predicted marathon time in seconds (lower = faster).
+export interface ExperimentalPredictionView extends ExperimentalPrediction {
+  trend: { date: string; v: number }[];
+}
+
+const EXPERIMENTAL_TREND_WEEKS = 12;   // weekly trend points ending today
+const RIEGEL_LOOKBACK_D = 365;
+const CARDIAC_WINDOW_D = 84;           // EF window, matching the page's 12 weeks
+
+// Recompute all three predictors as-of one date from pre-fetched data, filtering
+// each model's inputs to its own trailing window ending at `d`. Pure over its
+// arrays — no I/O — so it drives both the current tiles and every trend point.
+// (Heart-rate config has no history, so the current threshold/max HR is used for
+// every week; a small approximation on the cardiac line.)
+function experimentalAsOf(
+  d: string,
+  races: RaceResult[],
+  training: TrainingLogRun[],
+  longRuns: LongRun[],
+  hr: { thresholdHr: number | null; maxHr: number | null },
+): ExperimentalPrediction[] {
+  const raceWin = races.filter(r => r.date <= d && r.date >= addDays(d, -RIEGEL_LOOKBACK_D));
+  const trainWin = training.filter(r => r.date <= d && r.date >= addDays(d, -TANDA_WINDOW_DAYS));
+  const lrWin = longRuns.filter(l => l.date <= d && l.date >= addDays(d, -CARDIAC_WINDOW_D));
+  return [
+    riegelPrediction(raceWin.map(r => ({
+      distanceM: r.distanceKm * 1000, timeSeconds: r.seconds, date: r.date,
+      label: `${raceLabel(r.distanceKm)} ${fmtHms(r.seconds)} · ${shortDate(r.date)}`,
+    }))),
+    tandaPrediction(trainWin),
+    cardiacPrediction({
+      efValues: lrWin.flatMap(l => l.efficiencyFactor != null ? [l.efficiencyFactor] : []),
+      thresholdHr: hr.thresholdHr, maxHr: hr.maxHr,
+    }),
+  ];
+}
+
+// The three experimental marathon predictors (src/lib/experimental-predictions.ts),
+// each assembled from its own data slice — deliberately independent of the main
+// blended prediction so they can disagree with it. Each also carries a 12-week
+// trend, recomputed as-of each past week from the same stored data so the tiles
+// show a line immediately rather than waiting for weekly snapshots to accumulate.
+export async function getExperimentalPredictions(asOf: string): Promise<ExperimentalPredictionView[]> {
+  const earliest = 7 * (EXPERIMENTAL_TREND_WEEKS - 1);   // oldest trend point's offset
+  const [races, longRuns, trainingLog, hrConfig] = await Promise.all([
+    listRaceResultsSince(addDays(asOf, -RIEGEL_LOOKBACK_D)),
+    listLongRunsSince(addDays(asOf, -(CARDIAC_WINDOW_D + earliest))),
+    listRunTrainingSince(addDays(asOf, -(TANDA_WINDOW_DAYS + earliest))),
+    getHrConfig(),
+  ]);
+  const hr = {
+    thresholdHr: hrConfig?.threshold_hr != null ? Number(hrConfig.threshold_hr) : null,
+    maxHr: hrConfig?.max_hr != null ? Number(hrConfig.max_hr) : null,
+  };
+
+  // Weekly as-of dates, oldest → newest, ending today.
+  const weekDates: string[] = [];
+  for (let i = EXPERIMENTAL_TREND_WEEKS - 1; i >= 1; i--) weekDates.push(addDays(asOf, -7 * i));
+  weekDates.push(asOf);
+
+  const perWeek = weekDates.map(d => experimentalAsOf(d, races, trainingLog, longRuns, hr));
+  const current = perWeek[perWeek.length - 1];
+
+  return current.map((pred, idx) => ({
+    ...pred,
+    trend: weekDates.flatMap((d, w) => {
+      const s = perWeek[w][idx].predictedSeconds;
+      return s != null ? [{ date: d, v: s }] : [];
+    }),
+  }));
 }
 
 // ── weekly snapshots ──────────────────────────────────────────
