@@ -10,6 +10,7 @@ import SeasonGoalCard from './SeasonGoalCard';
 import AcwrTile from './AcwrTile';
 import WeeklyLoadCard from './WeeklyLoadCard';
 import LongestRunCard from './LongestRunCard';
+import LoadSplitBar from '@/components/LoadSplitBar';
 import { fmtDate } from '@/lib/dates';
 import type { DashboardData } from './data';
 
@@ -92,6 +93,11 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
               </div>
             ))}
           </div>
+          {d.last7.loadSplit && (
+            <div className="mt-[12px]">
+              <LoadSplitBar {...d.last7.loadSplit} />
+            </div>
+          )}
         </>
       )}
     </>
