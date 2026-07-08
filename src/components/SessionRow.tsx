@@ -14,6 +14,9 @@ import StrengthRow, { type StrengthEx } from './StrengthRow';
 import YogaRow, { type YogaPose } from './YogaRow';
 import CyclingRow from './CyclingRow';
 import RunRow, { type RunRowCompleted, type RunRowSession } from './RunRow';
+import EffortScale from './EffortScale';
+import { DETAIL_WRAP } from './session-ui';
+import type { ReactNode } from 'react';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 
@@ -50,9 +53,20 @@ export interface SessionRowContext {
 }
 
 export default function SessionRow({ session, ctx }: { session: SessionRowSession; ctx: SessionRowContext }) {
-  switch (resolveSport(session)) {
+  const sport = resolveSport(session);
+
+  // Manual RPE lives on completed NON-run rows (runs pull it from Garmin). Appended
+  // below the row so it reads as part of the completion, indented to the detail rail.
+  const effort = ctx.done && sport !== 'run' ? (
+    <div className={`${DETAIL_WRAP} py-[7px]`}>
+      <EffortScale sessionId={session.id} value={ctx.completed?.perceivedEffort ?? null} />
+    </div>
+  ) : null;
+  const withEffort = (row: ReactNode) => effort ? <div>{row}{effort}</div> : row;
+
+  switch (sport) {
     case 'strength':
-      return (
+      return withEffort(
         <StrengthRow
           compact emphasis={ctx.emphasis}
           title={session.session_type === 'CORE' ? 'Core' : 'Strength'}
@@ -64,7 +78,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
         />
       );
     case 'yoga':
-      return (
+      return withEffort(
         <YogaRow
           compact emphasis={ctx.emphasis}
           focus={session.description ?? null}
@@ -75,7 +89,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
         />
       );
     case 'cycling':
-      return (
+      return withEffort(
         <CyclingRow
           compact emphasis={ctx.emphasis}
           session={session}
