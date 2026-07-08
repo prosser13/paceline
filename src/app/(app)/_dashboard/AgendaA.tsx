@@ -75,13 +75,18 @@ export default function AgendaA({ d }: { d: DashboardData }) {
         <SectionLabel>{todayDone ? 'Done today' : 'Today'}</SectionLabel>
         {d.todaySessions.length === 0
           ? restBox
-          : d.todaySessions.map(s => <Fragment key={s.id}>{renderTodayBlock(s)}</Fragment>)}
-        {todayRun?.target_pace && (
-          <Suspense fallback={null}>
-            <RunWeatherAsync dateISO={d.windowDays[0].iso} planPace={todayRun.target_pace}
-              planPaceEnd={(todayRun as PlanSession & { target_pace_end?: string | null }).target_pace_end ?? null} />
-          </Suspense>
-        )}
+          : d.todaySessions.map(s => (
+              <Fragment key={s.id}>
+                {renderTodayBlock(s)}
+                {/* Heat-adjusted pace sits directly under the run it's about. */}
+                {todayRun && s.id === todayRun.id && todayRun.target_pace && (
+                  <Suspense fallback={null}>
+                    <RunWeatherAsync dateISO={d.windowDays[0].iso} planPace={todayRun.target_pace}
+                      planPaceEnd={(todayRun as PlanSession & { target_pace_end?: string | null }).target_pace_end ?? null} />
+                  </Suspense>
+                )}
+              </Fragment>
+            ))}
         {d.offPlanToday.length > 0 && (
           <div className="border border-fog rounded-[18px] bg-paper overflow-hidden mb-[18px]">
             <div className="divide-y divide-fog/50">
