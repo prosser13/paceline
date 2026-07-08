@@ -32,6 +32,8 @@ export interface BenchmarksData {
   signals: { source: string; label: string; impliedSeconds: number }[];
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
+  thresholdDeltaSec: number | null;  // change since first tracked week, seconds/km (negative = faster)
+  predictedDeltaSec: number | null;  // change in predicted marathon since first tracked week (negative = faster)
   thresholdCheck: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[]; revertable: RevertableChange | null };
   vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
@@ -39,7 +41,7 @@ export interface BenchmarksData {
   longRuns: {
     id: string; date: string; km: number; ngpMinKm: number;
     decouplingPct: number | null; paceDecayPct: number | null;
-    efficiencyFactor: number | null;
+    efficiencyFactor: number | null; perceivedEffort: number | null;
     movingSecs: number | null; fuelCarbsPerH: number | null;
     fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
   }[];
@@ -93,6 +95,15 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const vdotSeries: Series[] = snapshots.flatMap(s => s.predicted_seconds != null ? [{ date: s.week_start, v: vdotOfMarathon(s.predicted_seconds) }] : []);
   const vdotCurrent = prediction.predictedSeconds != null ? vdotOfMarathon(prediction.predictedSeconds) : null;
 
+  // Delta since the first tracked week (needs ≥2 snapshots or there's no trend yet).
+  const thresholdTrend: Series[] = snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []);
+  const thresholdMinKm = thresholdStr ? parseThresholdPace(thresholdStr) : null;
+  const thresholdDeltaSec = thresholdTrend.length >= 2 && thresholdMinKm != null
+    ? Math.round((thresholdMinKm - thresholdTrend[0].v) * 60) : null;
+  const predSnaps = snapshots.filter(s => s.predicted_seconds != null);
+  const predictedDeltaSec = predSnaps.length >= 2 && prediction.predictedSeconds != null
+    ? Math.round(prediction.predictedSeconds - Number(predSnaps[0].predicted_seconds)) : null;
+
   return {
     asOf,
     raceName: goal?.name ?? null,
@@ -100,8 +111,10 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     targetSeconds: goal?.targetSeconds ?? null,
     predictedSeconds: prediction.predictedSeconds,
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
-    thresholdMinKm: thresholdStr ? parseThresholdPace(thresholdStr) : null,
-    thresholdTrend: snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []),
+    thresholdMinKm,
+    thresholdTrend,
+    thresholdDeltaSec,
+    predictedDeltaSec,
     thresholdCheck: { latest: thrLatest, pending: thrPending, history: thrHistory, revertable: thrRevertable },
     vdot: { current: vdotCurrent, series: vdotSeries },
     restingHr: { current: rhrCurrent, series: rhrSeries },
