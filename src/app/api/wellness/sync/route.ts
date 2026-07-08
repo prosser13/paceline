@@ -10,6 +10,7 @@
 import { syncWellnessDays, syncActivityRpe } from '@/lib/intervals';
 import { getCurrentUser } from '@/lib/auth';
 import { writeBenchmarkSnapshot } from '@/data/benchmarks';
+import { runThresholdCheck } from '@/data/threshold-suggestion';
 import { claimDailyAlert } from '@/data/sync-alerts';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
@@ -48,8 +49,11 @@ async function handle(request: Request): Promise<Response> {
     // Stamp Garmin RPE onto matching completions (best-effort — a failure here must
     // not fail the wellness sync).
     const rpe = await syncActivityRpe().catch(() => ({ ok: false, updated: 0 }));
-    // Refresh this week's marathon-prediction snapshot (best-effort; never throws).
-    await writeBenchmarkSnapshot(new Date().toISOString().slice(0, 10));
+    // Refresh this week's marathon-prediction snapshot + run the weekly threshold
+    // check (both best-effort; never throw).
+    const today = new Date().toISOString().slice(0, 10);
+    await writeBenchmarkSnapshot(today);
+    await runThresholdCheck(today);
     return Response.json({ ...result, rpe_updated: rpe.updated }, { status: result.ok ? 200 : 502 });
   } catch (err) {
     return Response.json({ error: String(err) }, { status: 500 });

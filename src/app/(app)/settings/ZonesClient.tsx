@@ -2,10 +2,13 @@
 
 import { useState, useTransition } from 'react';
 import { savePaceZones, type ZoneInput } from './actions';
+import ThresholdSuggestion from '../benchmarks/ThresholdSuggestion';
+import type { ThresholdCheck } from '@/data/threshold-suggestion';
 
 interface Props {
   initialThreshold: string;
   initialZones: ZoneInput[];
+  thresholdCheck?: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[] };
 }
 
 const INPUT =
@@ -16,7 +19,7 @@ type ZoneRow = ZoneInput & { _key: number };
 let nextKey = 0;
 const withKey = (z: ZoneInput): ZoneRow => ({ ...z, _key: nextKey++ });
 
-export default function ZonesClient({ initialThreshold, initialZones }: Props) {
+export default function ZonesClient({ initialThreshold, initialZones, thresholdCheck }: Props) {
   const [threshold, setThreshold] = useState(initialThreshold);
   const [zones, setZones]         = useState<ZoneRow[]>(
     (initialZones.length ? initialZones : [{ name: '', pace_min: '', pace_max: '' }]).map(withKey),
@@ -61,6 +64,11 @@ export default function ZonesClient({ initialThreshold, initialZones }: Props) {
         />
         <span className="font-mono text-[11px] text-stone">/km</span>
       </div>
+
+      {/* Auto-suggestion — commentary + Apply/Dismiss, mirrored from Benchmarks */}
+      {thresholdCheck && (
+        <ThresholdSuggestion latest={thresholdCheck.latest} pending={thresholdCheck.pending} history={thresholdCheck.history} />
+      )}
 
       {/* Zones */}
       <div className="flex flex-col gap-2">

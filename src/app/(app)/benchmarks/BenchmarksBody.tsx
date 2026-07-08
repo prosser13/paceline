@@ -4,6 +4,7 @@
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
 import FuelLogCell from './FuelLogCell';
+import ThresholdSuggestion from './ThresholdSuggestion';
 import type { BenchmarksData, Series } from './data';
 
 function SecLabel({ children }: { children: React.ReactNode }) {
@@ -101,6 +102,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
           </div>
           <Sparkline series={d.thresholdTrend} color="var(--color-run)" invert />
         </div>
+        <ThresholdSuggestion latest={d.thresholdCheck.latest} pending={d.thresholdCheck.pending} history={d.thresholdCheck.history} />
       </Card>
 
       {/* Running VDOT + resting HR. Garmin's wellness VO2max is the athlete's cycling
