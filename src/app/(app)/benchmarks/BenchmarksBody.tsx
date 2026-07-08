@@ -73,6 +73,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
               {gap != null && <span> · gap {gap <= 0 ? '−' : '+'}{fmtGap(Math.abs(gap))}</span>}
             </div>
           )}
+          <DeltaChip deltaSec={d.predictedDeltaSec} kind="time" />
         </div>
         {d.signals.length > 0 && (
           <div className="mt-[14px] overflow-x-auto">
@@ -106,6 +107,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             <div className="font-display font-bold text-[26px] leading-none mt-[4px]">
               {d.thresholdMinKm != null ? <>{fmtPace(d.thresholdMinKm)}<span className="text-[13px] text-stone"> /km</span></> : '—'}
             </div>
+            <div className="mt-[4px]"><DeltaChip deltaSec={d.thresholdDeltaSec} kind="pace" /></div>
           </div>
           <Sparkline series={d.thresholdTrend} color="var(--color-run)" invert />
         </div>
@@ -179,6 +181,14 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         <p className="text-[11.5px] text-stone mt-[8px]">Grade-adjusted metres/min per heartbeat — <b>higher = fitter</b>. Read the trend, not single runs (EF dips in heat or when under-slept). Unlike decoupling it isn’t distorted by a negative split, so it’s the durability signal to watch across the block.</p>
       </Card>
 
+      {/* Aerobic decoupling trend — secondary to EF. Negative-split runs inflate it,
+          so they're greyed and excluded from the trend line. */}
+      <SecLabel>Aerobic decoupling</SecLabel>
+      <Card>
+        <DecouplingChart runs={d.longRuns} />
+        <p className="text-[11.5px] text-stone mt-[8px]">Pa:HR drift on long runs — lower = more durable (&lt;5% strong). <b>Negative-split runs (grey) inflate it</b>, so they’re excluded from the trend; EF is the primary durability metric.</p>
+      </Card>
+
       {/* Long-run quality */}
       <SecLabel>Long-run quality</SecLabel>
       <Card>
@@ -189,7 +199,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['EF', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r'], ['Carbs/h', 'r']].map(([h, a]) => (
+                  {[['Date', 'l'], ['Dist', 'r'], ['NGP', 'r'], ['EF', 'r'], ['Decouple', 'r'], ['Final-⅓ decay', 'r'], ['Carbs/h', 'r'], ['RPE', 'r']].map(([h, a]) => (
                     <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
                   ))}
                 </tr>
@@ -208,6 +218,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                     <td className="py-[9px] border-b border-fog/60 text-right">
                       <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts} />
                     </td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">{r.perceivedEffort != null ? r.perceivedEffort : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -219,6 +230,65 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
 
       <p className="text-[11.5px] text-stone mt-[18px]">Execution scoring, RPE, and gear tracking arrive in later updates.</p>
     </>
+  );
+}
+
+// Delta-since-first-week chip. Both threshold pace and predicted time are
+// "lower is better", so a negative delta is an improvement (green ▼).
+function DeltaChip({ deltaSec, kind }: { deltaSec: number | null; kind: 'pace' | 'time' }) {
+  if (deltaSec == null || deltaSec === 0) return null;
+  const better = deltaSec < 0;
+  const mag = Math.abs(deltaSec);
+  const label = kind === 'pace' ? `${mag}s/km` : fmtGap(mag);
+  return (
+    <span className="text-[11.5px] font-bold" style={{ color: better ? 'var(--color-ready)' : 'var(--color-stone)' }}>
+      {better ? '▼' : '▲'} {label} since W1
+    </span>
+  );
+}
+
+// Aerobic-decoupling dots over the block, oldest→newest, with a 5% guide and a
+// trend line fit through the "clean" (non-negative-split) runs only.
+function DecouplingChart({ runs }: { runs: BenchmarksData['longRuns'] }) {
+  const pts = [...runs].reverse().filter(r => r.decouplingPct != null)
+    .map(r => ({ date: r.date, v: r.decouplingPct as number, noisy: r.paceDecayPct != null && r.paceDecayPct < -5 }));
+  if (pts.length < 2) {
+    return <div className="text-[12px] text-stone">Decoupling dots fill in as long runs with heart rate sync — {pts.length} so far.</div>;
+  }
+  const W = 640, H = 150, padL = 30, padR = 14, padT = 12, padB = 24;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const vs = pts.map(p => p.v);
+  const hi = Math.max(8, ...vs), lo = Math.min(0, ...vs);
+  const x = (i: number) => padL + (i / (pts.length - 1)) * plotW;
+  const y = (v: number) => padT + (1 - (v - lo) / (hi - lo || 1)) * plotH;   // higher % lower on screen
+
+  // Trend line through clean points (least-squares on index).
+  const clean = pts.map((p, i) => ({ i, v: p.v, noisy: p.noisy })).filter(p => !p.noisy);
+  let trend: string | null = null;
+  if (clean.length >= 2) {
+    const n = clean.length, sx = clean.reduce((a, p) => a + p.i, 0), sy = clean.reduce((a, p) => a + p.v, 0);
+    const sxx = clean.reduce((a, p) => a + p.i * p.i, 0), sxy = clean.reduce((a, p) => a + p.i * p.v, 0);
+    const denom = n * sxx - sx * sx;
+    if (denom !== 0) {
+      const m = (n * sxy - sx * sy) / denom, b = (sy - m * sx) / n;
+      const x0 = clean[0].i, x1 = clean[clean.length - 1].i;
+      trend = `${x(x0)},${y(m * x0 + b)} ${x(x1)},${y(m * x1 + b)}`;
+    }
+  }
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} className="max-w-full" role="img" aria-label="Aerobic decoupling on long runs over the block">
+        {/* 5% guide */}
+        <line x1={padL} y1={y(5)} x2={W - padR} y2={y(5)} stroke="var(--color-ready)" strokeWidth="1" strokeDasharray="3 4" />
+        <text x={padL} y={y(5) - 4} fill="var(--color-ready)" fontSize="9" fontWeight="700">5%</text>
+        {trend && <polyline points={trend} fill="none" stroke="var(--color-stone)" strokeWidth="1.4" strokeDasharray="2 3" opacity="0.6" />}
+        {pts.map((p, i) => p.noisy
+          ? <circle key={i} cx={x(i)} cy={y(p.v)} r="4" fill="none" stroke="var(--color-stone)" strokeWidth="1.5" opacity="0.5" />
+          : <circle key={i} cx={x(i)} cy={y(p.v)} r="4.5" className={driftColor(p.v, 5, 8)} fill="currentColor" />)}
+        <text x={padL} y={H - 6} fill="var(--color-stone)" fontSize="9">{shortDate(pts[0].date)}</text>
+        <text x={W - padR} y={H - 6} fill="var(--color-stone)" fontSize="9" textAnchor="end">{shortDate(pts[pts.length - 1].date)}</text>
+      </svg>
+    </div>
   );
 }
 
