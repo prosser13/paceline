@@ -22,6 +22,7 @@ import { getPlanContext, type PlanContext } from '@/data/plan-context';
 import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered } from '@/data/coach';
 import { getCoachingPrefs } from '@/data/coaching';
 import { getLatestWellnessDay, listRecentWellnessDays, type WellnessDay } from '@/data/wellness-days';
+import { syncWellnessDays } from '@/lib/intervals';
 import { generateMorningBriefing } from '@/lib/coach-generate';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
@@ -143,6 +144,10 @@ async function handle(request: Request): Promise<Response> {
   }
 
   // ── gate: wait for the overnight wellness, but send anyway past the fallback time. ──
+  // Pull fresh from intervals.icu first — the gate reads wellness_days, and the
+  // scheduled wellness sync only runs every 4h, so without this the morning poll
+  // just re-reads a stale table and never sees sleep that landed since the last sync.
+  await syncWellnessDays().catch(() => { /* best-effort; fall through to whatever's stored */ });
   const [latest, recent] = await Promise.all([getLatestWellnessDay(), listRecentWellnessDays(30)]);
   const hasOvernight = !!latest && latest.date === forDate && (latest.sleep_secs != null || latest.hrv != null);
   const fallbackTime = (prefs?.morning_fallback_time as string | undefined) || '09:30';
