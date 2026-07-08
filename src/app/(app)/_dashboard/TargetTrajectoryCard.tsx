@@ -4,8 +4,17 @@
 // the weekly snapshots accumulate. Presentational; data from loadTrajectory().
 
 import { fmtHms } from '@/lib/prediction';
-import MetricTrendChart from '@/components/MetricTrendChart';
+import TrajectoryChart from '@/components/TrajectoryChart';
 import type { Trajectory, Verdict } from '@/data/benchmarks';
+
+const STALE_DAYS = 21;   // a signal older than this reads as stale (dimmed chip)
+
+function daysSince(dateIso: string | null, asOf: string): number | null {
+  if (!dateIso) return null;
+  const a = Date.parse(dateIso + 'T00:00:00Z'), b = Date.parse(asOf + 'T00:00:00Z');
+  if (Number.isNaN(a) || Number.isNaN(b)) return null;
+  return Math.round((b - a) / 86400000);
+}
 
 const VERDICT_STYLE: Record<Verdict, { color: string; blurb: (gap: number | null, slope: number | null) => string }> = {
   Closing:   { color: 'var(--color-ready)', blurb: (_g, s) => s != null ? `gap shrinking ~${fmtGap(Math.abs(s))}/wk` : 'gap shrinking' },
@@ -66,26 +75,61 @@ export default function TargetTrajectoryCard({ t }: { t: Trajectory }) {
         </div>
       </div>
 
-      <MetricTrendChart
-        points={points.map(p => ({ key: p.weekStart, value: p.predictedSeconds }))}
-        color="var(--color-race)"
-        invert
-        guide={{ value: t.targetSeconds, label: `TARGET ${fmtHms(t.targetSeconds)}` }}
-        endLabel={points.length >= 2 ? fmtHms(points[points.length - 1].predictedSeconds) : null}
-        footerLeft={points.length >= 2 ? shortDate(points[0].weekStart) : null}
-        footerRight={t.raceDate ? `race ${shortDate(t.raceDate)}` : null}
-        ariaLabel="Predicted marathon time trending toward target"
-        emptyHint="The predicted-time trend fills in each week — one point so far. Come back after a few weeks to watch the line move toward target."
+      <TrajectoryChart
+        history={points.map(p => ({ date: p.weekStart, seconds: p.predictedSeconds }))}
+        targetSeconds={t.targetSeconds}
+        asOf={t.asOf}
+        planStart={t.planStart}
+        raceDate={t.raceDate}
+        phaseBands={t.phaseBands}
+        predictedNow={t.predictedSeconds}
+        projectedRaceSeconds={t.projectedRaceSeconds}
       />
 
       {t.signals.length > 0 && (
         <div className="flex flex-wrap gap-[7px] mt-[12px]">
-          {t.signals.map((s, i) => (
-            <span key={i} className="inline-flex items-center gap-[6px] text-[11.5px] font-semibold border border-fog rounded-[8px] bg-bone text-stone" style={{ padding: '4px 9px' }}>
-              <span className="w-[6px] h-[6px] rounded-full" style={{ background: SIGNAL_LABEL[s.source].dot }} />
-              {s.label} → {fmtHms(s.impliedMarathonSeconds)}
-            </span>
-          ))}
+          {t.signals.map((s, i) => {
+            const age = daysSince(s.date, t.asOf);
+            const stale = age != null && age > STALE_DAYS;
+            return (
+              <span key={i}
+                className="inline-flex items-center gap-[6px] text-[11.5px] font-semibold border border-fog rounded-[8px] bg-bone text-stone"
+                style={{ padding: '4px 9px', opacity: stale ? 0.5 : 1 }}
+                title={stale && age != null ? `${age} days old — down-weighted in the blend` : undefined}>
+                <span className="w-[6px] h-[6px] rounded-full" style={{ background: SIGNAL_LABEL[s.source].dot }} />
+                {s.label} → {fmtHms(s.impliedMarathonSeconds)}{stale && <span className="text-stone/70"> · stale</span>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {t.tuneUp && <TuneUpStrip tuneUp={t.tuneUp} targetSeconds={t.targetSeconds} />}
+    </div>
+  );
+}
+
+// Tune-up validation strip: pre-race shows the time to beat; post-race flips to a
+// pass/fail verdict.
+function TuneUpStrip({ tuneUp, targetSeconds }: { tuneUp: NonNullable<Trajectory['tuneUp']>; targetSeconds: number }) {
+  const kmLabel = tuneUp.distanceKm % 1 === 0 ? `${tuneUp.distanceKm}` : tuneUp.distanceKm.toFixed(1);
+  return (
+    <div className="mt-[12px] pt-[12px] border-t border-fog flex items-center justify-between gap-3 flex-wrap text-[12.5px]">
+      <div>
+        <span className="font-semibold text-ink">{tuneUp.name}</span>
+        <span className="text-stone"> · {shortDate(tuneUp.date)} · {kmLabel}k</span>
+      </div>
+      {tuneUp.actualSeconds == null ? (
+        <div className="text-stone">
+          needs <b className="text-ink">≤ {fmtHms(tuneUp.needSeconds)}</b> to validate {fmtHms(targetSeconds)}
+          <span className="ml-[8px] inline-block border border-dashed border-fog rounded-[6px] text-stone" style={{ padding: '1px 7px' }}>awaiting result</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-[8px]">
+          <span className="text-stone">ran <b className="text-ink">{fmtHms(tuneUp.actualSeconds)}</b> · needed ≤ {fmtHms(tuneUp.needSeconds)}</span>
+          <span className="font-bold" style={{ color: tuneUp.passed ? 'var(--color-ready)' : 'var(--color-run)' }}>
+            {tuneUp.passed ? 'validated ✓' : 'short ✗'}
+          </span>
         </div>
       )}
     </div>
