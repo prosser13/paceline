@@ -10,6 +10,8 @@
 import { syncWellnessDays, syncActivityRpe } from '@/lib/intervals';
 import { getCurrentUser } from '@/lib/auth';
 import { writeBenchmarkSnapshot } from '@/data/benchmarks';
+import { claimDailyAlert } from '@/data/sync-alerts';
+import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,12 +20,31 @@ function isCronRequest(request: Request): boolean {
   return !!secret && request.headers.get('authorization') === `Bearer ${secret}`;
 }
 
+function londonDate(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+// Alert (once per London day) when intervals.icu rejects the API key — a rotated /
+// invalid key silently freezes wellness, RPE and the dashboard tiles otherwise.
+async function alertOnAuthFailure(error: string | undefined): Promise<void> {
+  if (!error || !/HTTP 40[13]|INTERVALS_API_KEY/i.test(error)) return;
+  if (!(await claimDailyAlert('wellness_auth', londonDate()))) return;
+  await sendTelegramMessage(
+    `⚠️ <b>Wellness sync auth failed</b>\nintervals.icu rejected the API key — update <b>INTERVALS_API_KEY</b> in Vercel (Production).\n${mdToTelegramHtml(error).slice(0, 200)}`,
+  ).catch(() => { /* alerting is best-effort */ });
+}
+
 async function handle(request: Request): Promise<Response> {
   if (!isCronRequest(request) && !(await getCurrentUser())) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
   try {
     const result = await syncWellnessDays();
+    // A rejected key freezes wellness silently — ping Telegram (once/day) so it
+    // doesn't go unnoticed.
+    if (!result.ok) await alertOnAuthFailure(result.error);
     // Stamp Garmin RPE onto matching completions (best-effort — a failure here must
     // not fail the wellness sync).
     const rpe = await syncActivityRpe().catch(() => ({ ok: false, updated: 0 }));
