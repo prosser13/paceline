@@ -81,6 +81,7 @@ interface RawPhase {
 
 const STRIDE_RE = /stride/i;
 const DRILLS_RE = /drill/i;
+const HILL_RE = /hill/i;
 
 function labelOf(raw: RawPhase | undefined): string {
   return String(raw?.label ?? raw?.phase ?? '');
@@ -104,23 +105,29 @@ function aimPace(raw: RawPhase | undefined): string | null {
   return raw.pace_per_km ?? null;                   // named phase's authored pace
 }
 
-// On-watch text for a step: a plain "Strides" for a stride rep (a precise pace is
-// unhelpful on a 100 m acceleration), else the coach's specific aim pace ("3:47/km"),
-// else nothing (zone/range steps already show their target).
-function promptText(raw: RawPhase | undefined): string | null {
-  if (STRIDE_RE.test(labelOf(raw))) return 'Strides';
+// How a step is annotated on the watch:
+//  - a hill sprint → "Hill sprint" text and NO pace (a GPS pace target is meaningless
+//    on a ~10 s max-effort uphill);
+//  - a stride → "Strides" text, keeping the loose pace band as a guide;
+//  - otherwise the coach's specific aim pace ("3:47/km") when there is one, else no
+//    text (zone/range steps already show their target).
+interface StepAnnotation { prompt: string | null; showPace: boolean }
+function stepAnnotation(raw: RawPhase | undefined): StepAnnotation {
+  const label = labelOf(raw);
+  if (HILL_RE.test(label))   return { prompt: 'Hill sprint', showPace: false };
+  if (STRIDE_RE.test(label)) return { prompt: 'Strides', showPace: true };
   const aimSec = paceToSeconds(aimPace(raw));
-  return aimSec != null ? `${secToPace(aimSec)}/km` : null;
+  return { prompt: aimSec != null ? `${secToPace(aimSec)}/km` : null, showPace: true };
 }
 
-// One "- [<text> <!> ]<dist> <fast>-<slow>/km Pace" step line (indent for repeat
-// sub-steps). null for zero-distance markers. `prompt` is the on-watch text, if any.
-function segLine(seg: NormSegment, prompt: string | null, thresholdSec: number, indent = ''): string | null {
+// One "- [<text> <!> ]<dist>[ <fast>-<slow>/km Pace]" step line (indent for repeat
+// sub-steps). null for zero-distance markers.
+function segLine(seg: NormSegment, ann: StepAnnotation, thresholdSec: number, indent = ''): string | null {
   const km = seg.distanceKm || 0;
   if (km <= 0) return null;
-  const range = paceRangeToken(seg.paceMin, seg.paceMax, thresholdSec);
+  const range = ann.showPace ? paceRangeToken(seg.paceMin, seg.paceMax, thresholdSec) : null;
   const spec = range ? `${distLabel(km)} ${range}/km Pace` : distLabel(km);
-  return `${indent}- ${prompt ? `${prompt} <!> ` : ''}${spec}`;
+  return `${indent}- ${ann.prompt ? `${ann.prompt} <!> ` : ''}${spec}`;
 }
 
 // Build the intervals.icu workout description from a run's raw structure + zones.
@@ -140,7 +147,7 @@ export function structureToWorkoutText(
     if (st.kind === 'repeat') {
       const rawSubs = rawItem?.steps ?? [];
       const sub = st.steps
-        .map((seg, j) => segLine(seg, promptText(rawSubs[j]), thresholdSec, '  '))
+        .map((seg, j) => segLine(seg, stepAnnotation(rawSubs[j]), thresholdSec, '  '))
         .filter(Boolean) as string[];
       if (sub.length) lines.push(`${st.count}x`, ...sub);
     } else if (rawItem && DRILLS_RE.test(labelOf(rawItem)) && (st.distanceKm || 0) <= 0) {
@@ -148,7 +155,7 @@ export function structureToWorkoutText(
       // ("1m" is one minute in intervals.icu; a bare distance would be wrong here).
       lines.push('4x', '  - Drills <!> 1m');
     } else {
-      const line = segLine(st, promptText(rawItem), thresholdSec);
+      const line = segLine(st, stepAnnotation(rawItem), thresholdSec);
       if (line) lines.push(line);
     }
   });
