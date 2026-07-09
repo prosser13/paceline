@@ -9,7 +9,7 @@ strength-session builder.
 - **Next.js 16** (App Router) · **React 19** · **TypeScript** (strict)
 - **Tailwind CSS v4** — configured in `globals.css` via `@theme`, no `tailwind.config.js`
 - **Supabase** — auth + Postgres (two clients: user-scoped `supabase-server`, RLS-bypassing `supabase-admin`)
-- **Strava** + **intervals.icu** integrations · **Resend** email
+- **Strava** + **intervals.icu** integrations · **Telegram** coach delivery
 - Deploys to **Vercel** (push to `master` auto-deploys)
 
 ## Getting started

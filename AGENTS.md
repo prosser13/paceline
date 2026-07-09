@@ -21,6 +21,22 @@ from the main checkout. Then `npm run dev` / the preview tool work as normal.
 
 See [`docs/architecture.md`](docs/architecture.md) for the codebase map: the data model
 (`plan_sessions` + `completed_workouts`, the two sport-dispatch axes), the **sport touch-point map**
-(where to edit when adding a sport/metric), the page data-loading & caching patterns, the shared-utility
-catalog (reuse these before writing new logic), and the multi-tenant migration recipe. Read it before
-adding a feature.
+(where to edit when adding a sport/metric), units & timezone conventions, the page data-loading &
+caching patterns, the shared-utility catalog (reuse these before writing new logic), the table→file
+map for `src/data/`, the API-route/cron inventory, and the multi-tenant migration recipe. Read it
+before adding a feature. Known bugs and agreed cleanups are in
+[`docs/improvement-backlog.md`](docs/improvement-backlog.md) — check it before re-diagnosing an issue.
+
+# Quick facts (save yourself the archaeology)
+
+- **Verify with:** `npx tsc --noEmit` · `npx eslint` · `npm run build`. There are **no tests and no CI**;
+  the Vercel deploy build (push to `master`) is the only automated gate.
+- **Pace units vary by layer** — min/km floats in `run-tss.ts`/`completed_workouts`, `"m:ss"` strings in
+  zone rows/settings, s/km integers in `segment_actuals`. Check before converting (architecture.md §2).
+- **Migrations:** applied to the live Supabase project via the Supabase MCP `apply_migration` tool;
+  `supabase/migrations/` files are documentation copies, not a replayable history — the live DB is ahead
+  of the repo. Query the live schema when it matters. Keep new migrations idempotent.
+- **Scheduled jobs** (wellness sync, morning/evening coach) run on cron-job.org hitting `/api/*` with a
+  `CRON_SECRET` bearer — not Vercel Cron, not GitHub Actions (those workflow files are manual-only relics).
+- **`scripts/*.mjs` mutate the production DB** with the service-role key; the `gen-*` generators
+  delete-and-reinsert whole plans. Don't run them casually.
