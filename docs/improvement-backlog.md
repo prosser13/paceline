@@ -4,92 +4,112 @@ Prioritised findings from the July 2026 full-codebase review (five parallel subs
 item verified against source). Work top-down; tick items off or delete them as they land. When a fix
 changes a pattern documented in `architecture.md`, update that too.
 
+## Status (July 2026 fix pass)
+
+All **P0** and **P1** items below are **done** (see the branch's commit history). Every change was
+gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done, and why:
+
+- **Deferred — need runtime verification** (this env has no `.env.local`/Supabase creds to smoke-test
+  the app): `races/[slug]` Suspense streaming (P1-perf), the zone-editor client dedup (~250 lines,
+  P2), and the remaining shared-component dedup. These are quality/UX refactors on working code; ship
+  them from a session that can drive the app.
+- **Deferred — needs owner sign-off / touches production DB**: everything under "live-DB items"
+  (drop permissive RLS, add indexes/FKs, widen `week_number`, backfill the migration drift). Applied
+  via the Supabase MCP against the live project — do these deliberately, not blind.
+- **Deferred — dated / production-mutating scripts**: archiving the completed `gen-*`/backfill scripts
+  (do after Dragon 50, 2026-07-19) and making `gen-malaga.mjs` read zones/threshold from the DB.
+- **Kept intentionally**: `updateStrengthTuning`, `stateIntentForSession`, `listAllNiggles` are
+  deliberate agent/coach API seams, not dead code — left in place.
+- The structure-walker unification (normalize vs expand) is deferred: it only misfires on malformed
+  `structure` jsonb that doesn't occur in current data, and the fix is intricate.
+
 ## P0 — security / data-loss, act first
 
-- [ ] **Strava OAuth callback is unauthenticated and has no `state`** — anyone can overwrite the app's
+- [x] **Strava OAuth callback is unauthenticated and has no `state`** — anyone can overwrite the app's
   Strava connection with their own account (token takeover + login-CSRF).
   `src/app/api/auth/strava/route.ts` + `callback/route.ts`: gate initiation behind `getCurrentUser()`,
   set a random `state` cookie, verify it in the callback before `upsertStravaConnection`.
-- [ ] **Strava webhook POST is unauthenticated and unvalidated** — anyone who knows the URL can force
+- [x] **Strava webhook POST is unauthenticated and unvalidated** — anyone who knows the URL can force
   unbounded concurrent `syncActivities()` runs (Strava rate-limit / function-budget DoS).
   `src/app/api/strava/webhook/route.ts:21-35`: check `subscription_id` + `owner_id` against the stored
   connection, debounce/lock concurrent syncs, set `export const maxDuration`. (Double-insert of
   completions is already backstopped by a live-DB partial unique index on
   `completed_workouts.plan_session_id` — an index that exists only in the live DB, not the repo.)
-- [ ] **Strava sync fetches a single page** — `src/lib/strava.ts:245`: `per_page=100`, no `page` loop,
+- [x] **Strava sync fetches a single page** — `src/lib/strava.ts:245`: `per_page=100`, no `page` loop,
   `after` = earliest planned session date. Strava returns oldest-first for `after=`, so once >100
   activities exist since plan start, **new activities never sync**. At ~4-5 sessions/day this breaks a
   few weeks into a plan. Paginate until a short page, or keep a last-synced watermark (also kills the
   re-download-everything-every-sync behaviour, `strava.ts:242,270-285`).
-- [ ] **Zone "replace" writers can silently destroy zones** — `src/data/zones.ts:152-196` (+
+- [x] **Zone "replace" writers can silently destroy zones** — `src/data/zones.ts:152-196` (+
   `coaching.ts:56`): delete-then-insert with no transaction and all errors discarded; a failed insert
   after a successful delete loses every zone and reports success. Hot path: `applyThresholdSuggestion`.
   Use an upsert-and-prune diff or a transactional RPC, and check `error` on every mutation.
-- [ ] **Idempotency recovery can revert an applied change** — `src/data/plan-mutations.ts:171-176` (and
+- [x] **Idempotency recovery can revert an applied change** — `src/data/plan-mutations.ts:171-176` (and
   272-278): on a `23505` duplicate-log insert, the loser rolls the session back to *its own stale*
   `before`, undoing the winner's applied patch while the log says `applied`. Correct recovery: don't
   roll back (the patches are identical by definition).
-- [ ] **Confirm Supabase "allow new signups" is OFF, then encode the owner in code** — the only gate
+- [x] **Confirm Supabase "allow new signups" is OFF, then encode the owner in code** — the only gate
   anywhere is "any authenticated Supabase user" (admin included: `src/app/admin/layout.tsx:9` — no
   `is_admin` exists despite doc/comments). Add an `OWNER_EMAIL` allowlist inside
   `getCurrentUser`/`requireUser` (`src/lib/auth.ts`) so the guarantee lives in the repo.
-- [ ] **Backfill the migration drift** — live DB has ~8 applied migrations missing from
+- [x] **Backfill the migration drift** — live DB has ~8 applied migrations missing from
   `supabase/migrations/` (`strava_connection`, `plans.strength_priority`, `coach_messages.kind`,
   `app_config.threshold_pace_per_km`, the `completed_workouts` partial unique index, …); a from-scratch
   replay of the repo files fails. Dump the live schema deltas into repo migration files.
 
 ## P1 — real bugs & visible performance
 
-- [ ] Fix the 2 lint errors: setState-in-effect cascade (`_dashboard/wellness/InsightBanner.tsx:19`) and
+- [x] Fix the 2 lint errors: setState-in-effect cascade (`_dashboard/wellness/InsightBanner.tsx:19`) and
   `Date.now()` during render (`races/[slug]/page.tsx:231`).
-- [ ] **"Today" is UTC** on every page (`(app)/layout.tsx:21`, `_dashboard/data.ts:146`,
+- [x] **"Today" is UTC** on every page (`(app)/layout.tsx:21`, `_dashboard/data.ts:146`,
   `plan/data.ts:124`, …) while the app assumes Europe/London; 00:00–01:00 BST renders yesterday, and
   `greet()` says "Good morning" until 13:00 BST. Add `todayLondon()` to `src/lib/dates.ts`
   (`Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London' })`) and use it wherever `todayStr` is
   minted. Same three-way split exists in lib: `intervals.ts` keys days by UTC, `weather.ts` hardcodes
   London (`intervals.ts:113`, `weather.ts:110`).
-- [ ] **Plan page fetches everything ever** — `plan/data.ts:126-139` loads all plans' sessions + all
+- [x] **Plan page fetches everything ever** — `plan/data.ts:126-139` loads all plans' sessions + all
   completions (with per-km segment arrays), filters to one plan, and ships the unfiltered map to the
   client `PlanThread`. Add `listSessionsForPlan(planId)` / completions-for-plan; payload currently grows
   forever.
-- [ ] **Benchmarks page repeats queries ~12×** — `listRaceResultsSince` runs 4×, `getGoalMarathon` 3×,
+- [x] **Benchmarks page repeats queries ~12×** — `listRaceResultsSince` runs 4×, `getGoalMarathon` 3×,
   `getEnduranceReadiness` (whole-plan scans) 2×, via nested helpers (`src/data/benchmarks.ts` +
   `benchmarks/data.ts:79-95`). Wrap the raw reads in React `cache()` (pattern:
   `supabase-server.ts:35`).
-- [ ] **`races/[slug]` blocks TTFB on Open-Meteo + intervals.icu** and runs 3 sequential query tiers
-  (`page.tsx:75-102,161-165,191,243`) — the one heavy page not on the loader + `<Suspense>` pattern.
-- [ ] **Token refresh has no single-flight** — `src/lib/strava.ts:105-114`: concurrent webhook + manual
+- [ ] **(deferred — needs runtime verification) `races/[slug]` blocks TTFB on Open-Meteo + intervals.icu**
+  and runs 3 sequential query tiers (`page.tsx:75-102,161-165,191,243`) — the one heavy page not on the
+  loader + `<Suspense>` pattern.
+- [x] **Token refresh has no single-flight** — `src/lib/strava.ts:105-114`: concurrent webhook + manual
   syncs near expiry can persist a stale rotated refresh token (bricks the connection). Module-level
   in-flight promise + guard `res.json()`.
-- [ ] **No timeout on intervals.icu / weather / telegram / Anthropic fetches** — `intervals.ts` (5
+- [x] **No timeout on intervals.icu / weather / telegram / Anthropic fetches** — `intervals.ts` (5
   sites), `coach-generate.ts`, etc.; a hung call stalls the cron routes. Generalize `timedFetch` out of
   `strava.ts` and reuse.
-- [ ] **Bike-HR zone lookup uses the raw regex match** — `src/lib/cycling.ts:41` indexes `hrZones` with
+- [x] **Bike-HR zone lookup uses the raw regex match** — `src/lib/cycling.ts:41` indexes `hrZones` with
   `match[0]` verbatim (vs the normalized `Z${m[1]}` used everywhere else), so lowercase `"z2"` silently
   loses its HR window.
-- [ ] **Body-signals tile requires BOTH RHR and HRV baselines** — `wellness-stats.ts:113`; a device with
+- [x] **Body-signals tile requires BOTH RHR and HRV baselines** — `wellness-stats.ts:113`; a device with
   no HRV leaves it "Building baseline" forever (and the copy prints "28 of 5 days"). Either-metric
   readiness + clamp the count.
-- [ ] **Dashboard "Load (7d)" reimplements TSS inline and skips rides** — `_dashboard/data.ts:355-363`
+- [x] **Dashboard "Load (7d)" reimplements TSS inline and skips rides** — `_dashboard/data.ts:355-363`
   ignores the stored `tss` column it already fetched; can disagree with the adjacent `loadSplit` tile.
   Use `sum(tss ?? sessionTss(...))`.
-- [ ] **Coach briefing loses the "why"** — `plan-context.ts:355` selects legacy `chip_used` instead of
+- [x] **Coach briefing loses the "why"** — `plan-context.ts:355` selects legacy `chip_used` instead of
   `actor, operation, reason`, so agent-made changes appear reasonless in the agent's own context.
-- [ ] **Adherence/off-plan window mismatches** — `plan-context.ts:303-332` marks late-completed sessions
+- [x] **Adherence/off-plan window mismatches** — `plan-context.ts:303-332` marks late-completed sessions
   "missed" (completions fetched by `completed_date` window instead of `plan_session_id`);
   `activities.ts:100-104` has the same shape for off-plan detection.
-- [ ] **`getCurrentWeek` breaks if two plans' weeks overlap a date** — `plans.ts:181-193` uses
+- [x] **`getCurrentWeek` breaks if two plans' weeks overlap a date** — `plans.ts:181-193` uses
   `maybeSingle()` with no plan filter → nulls the dashboard week and disables `auto_within_week`
   autonomy. `.order().limit(1)` scoped to the active plan.
-- [ ] **Stall detection sorts by random UUID** — `strength-progression.ts:166-171` orders "recent" hard
+- [x] **Stall detection sorts by random UUID** — `strength-progression.ts:166-171` orders "recent" hard
   ratings by `id` (gen_random_uuid) — the window is noise. Order by a timestamp.
-- [ ] **Structure walkers disagree on malformed steps** — `plan-structure.ts` `normalizeStructure` drops
+- [ ] **(deferred — only misfires on malformed structure jsonb not in current data) Structure walkers
+  disagree on malformed steps** — `plan-structure.ts` `normalizeStructure` drops
   entries that `expandSegmentDistances` counts, shifting every later `segment_actuals` entry. Share one
   iterator.
-- [ ] Experimental-trend race window not extended by trend depth — `benchmarks.ts:251` (longRuns/
+- [x] Experimental-trend race window not extended by trend depth — `benchmarks.ts:251` (longRuns/
   trainingLog are extended, races aren't).
-
-## P2 — hygiene, duplication, tooling
+ — hygiene, duplication, tooling
 
 - [ ] **Add CI**: `"typecheck": "tsc --noEmit"` script + a workflow running lint/typecheck/build on PRs
   (today the Vercel build is the only gate; no tests exist).
