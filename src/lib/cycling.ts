@@ -38,7 +38,10 @@ function resolvePowerZone(rawZone: string | null | undefined, zones: PowerZoneMa
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function segment(s: any, powerZones: PowerZoneMap, hrZones: BikeHrZoneMap): CyclingSegment {
   const pz = resolvePowerZone(s.zone, powerZones);
-  const hz = s.zone ? hrZones[(s.zone.match(/Z\s*([1-9])/i)?.[0] ?? '').replace(/\s/g, '')] : undefined;
+  // Normalise the zone key the same way resolvePowerZone does (`Z${digit}`), so a
+  // lowercase "z2" or spaced "Z 2" still resolves its HR window instead of missing.
+  const hm = s.zone ? String(s.zone).match(/Z\s*([1-9])/i) : null;
+  const hz = hm ? hrZones[`Z${hm[1]}`] ?? undefined : undefined;
   return {
     label: s.label ?? pz?.name ?? 'Ride',
     zoneKey: pz?.key ?? (s.zone ?? null),

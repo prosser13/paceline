@@ -353,9 +353,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const sessions  = recent?.length ?? 0;
   const h = Math.floor(totalMins / 60);
   const m = Math.round(totalMins % 60);
+  // Prefer the stored, never-stale tss column (recomputed on every sync/threshold
+  // change — the canonical value, and the only one that counts rides). Fall back to
+  // a live pace-derived rTSS only for a row that has no stored value yet (runs only).
   const totalTss = Math.round((recent ?? []).reduce((s, w) => {
+    if (w.tss != null) return s + Number(w.tss);
     const mins = w.actual_duration_mins ? Number(w.actual_duration_mins) : null;
-    // NGP-based rTSS when available, else average pace.
     const runPace = w.actual_ngp_min_km != null ? Number(w.actual_ngp_min_km)
       : w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
     if (mins == null || runPace == null || runPace <= 0) return s;

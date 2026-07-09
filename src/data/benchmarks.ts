@@ -8,6 +8,7 @@
 // Global (single-athlete) today; this is the one place that gains user scoping
 // under multi-tenancy.
 
+import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
@@ -46,7 +47,9 @@ export function isoWeekStart(iso: string): string {
 export interface RaceResult { date: string; name: string; distanceKm: number; seconds: number; }
 
 // Completed RACE sessions since `since`, with their actual distance + time.
-export async function listRaceResultsSince(since: string): Promise<RaceResult[]> {
+// cache()'d: the benchmarks page reaches this from ~4 call paths per load with the
+// same `since`, and cache() collapses those to one request-scoped read.
+export const listRaceResultsSince = cache(async (since: string): Promise<RaceResult[]> => {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_duration_secs, actual_duration_mins, actual_distance_km, plan_sessions!inner(name, session_type, distance_km)')
@@ -63,7 +66,7 @@ export async function listRaceResultsSince(since: string): Promise<RaceResult[]>
     if (!km || !secs || !r.completed_date) return [];
     return [{ date: r.completed_date as string, name: ps?.name ?? 'Race', distanceKm: km, seconds: secs }];
   });
-}
+});
 
 export interface LongRun {
   id: string; date: string; ngpMinKm: number; km: number;
@@ -78,7 +81,7 @@ export interface LongRun {
 // Completed long runs since `since` — planned long runs (type 'LR') OR any run
 // ≥ 25 km (the agreed "type OR distance" rule), with their NGP + long-run quality
 // metrics + fuel log.
-export async function listLongRunsSince(since: string): Promise<LongRun[]> {
+export const listLongRunsSince = cache(async (since: string): Promise<LongRun[]> => {
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_avg_hr, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, perceived_effort, plan_sessions!inner(session_type, activity_type, distance_km)')
@@ -108,14 +111,14 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
       fuelItems: (r.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
     }];
   }).sort((a, b) => a.date.localeCompare(b.date));
-}
+});
 
 // ── prediction assembly ───────────────────────────────────────
 
 // Build the engine inputs from the last 12 months of races + current threshold
 // pace. (The long-run NGP signal was removed from the blend — long-run endurance
 // enters through the endurance adjustment instead.)
-export async function buildPredictionInputs(asOf: string): Promise<PredictionInputs> {
+export const buildPredictionInputs = cache(async (asOf: string): Promise<PredictionInputs> => {
   const [thresholdStr, races] = await Promise.all([
     getThresholdPace(),
     listRaceResultsSince(addDays(asOf, -365)),
@@ -130,11 +133,11 @@ export async function buildPredictionInputs(asOf: string): Promise<PredictionInp
       label: `${raceLabel(r.distanceKm)} ${fmtHms(r.seconds)} · ${shortDate(r.date)}`,
     })),
   };
-}
+});
 
-export async function getCurrentPrediction(asOf: string): Promise<MarathonPrediction> {
+export const getCurrentPrediction = cache(async (asOf: string): Promise<MarathonPrediction> => {
   return predictMarathon(await buildPredictionInputs(asOf));
-}
+});
 
 // ── endurance readiness (feeds the HM/marathon adjustment) ────
 
@@ -145,7 +148,7 @@ export async function getCurrentPrediction(asOf: string): Promise<MarathonPredic
 const ENDURANCE_WINDOW_DAYS = 56;
 const FALLBACK_ANCHOR_KM = 90;
 
-export async function getEnduranceReadiness(asOf: string): Promise<EnduranceReadiness> {
+export const getEnduranceReadiness = cache(async (asOf: string): Promise<EnduranceReadiness> => {
   const goal = await getGoalMarathon(asOf);
 
   const [runs, anchorWeeklyKm] = await Promise.all([
@@ -164,10 +167,10 @@ export async function getEnduranceReadiness(asOf: string): Promise<EnduranceRead
     longestKm: Math.round(longestKm * 10) / 10,
     anchorWeeklyKm: Math.round(anchor),
   };
-}
+});
 
 // The goal plan's biggest planned run week (km) — the "fully ready" volume anchor.
-async function peakPlannedWeekKm(planId: number): Promise<number | null> {
+const peakPlannedWeekKm = cache(async (planId: number): Promise<number | null> => {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date, distance_km, session_type, activity_type')
@@ -182,14 +185,14 @@ async function peakPlannedWeekKm(planId: number): Promise<number | null> {
   }
   const peak = Math.max(0, ...weeks.values());
   return peak > 0 ? peak : null;
-}
+});
 
 // ── experimental predictors (Benchmarks tiles) ────────────────
 
 // All synced running activities since `since` — planned and off-plan alike. This
 // is the raw training log the Tanda regression reads: it must see everything you
 // ran, not just sessions that matched the plan.
-async function listRunTrainingSince(since: string): Promise<TrainingLogRun[]> {
+const listRunTrainingSince = cache(async (since: string): Promise<TrainingLogRun[]> => {
   const { data } = await supabaseAdmin
     .from('activities')
     .select('activity_date, activity_type, distance_km, duration_mins, moving_time_secs')
@@ -202,7 +205,7 @@ async function listRunTrainingSince(since: string): Promise<TrainingLogRun[]> {
     if (!(km > 0) || !(secs > 0) || !a.activity_date) return [];
     return [{ date: a.activity_date as string, km, secs }];
   });
-}
+});
 
 // An experimental prediction plus its weekly trend (oldest→newest) for the tile's
 // sparkline. `v` is the predicted marathon time in seconds (lower = faster).
@@ -250,7 +253,10 @@ function experimentalAsOf(
 export async function getExperimentalPredictions(asOf: string): Promise<ExperimentalPredictionView[]> {
   const earliest = 7 * (EXPERIMENTAL_TREND_WEEKS - 1);   // oldest trend point's offset
   const [races, longRuns, trainingLog, hrConfig] = await Promise.all([
-    listRaceResultsSince(addDays(asOf, -RIEGEL_LOOKBACK_D)),
+    // Extend the races window by `earliest` too (like longRuns/trainingLog): a trend
+    // point N weeks ago filters races to its own trailing RIEGEL_LOOKBACK_D, so races
+    // aged past (RIEGEL_LOOKBACK_D) from today were missing from early trend points.
+    listRaceResultsSince(addDays(asOf, -(RIEGEL_LOOKBACK_D + earliest))),
     listLongRunsSince(addDays(asOf, -(CARDIAC_WINDOW_D + earliest))),
     listRunTrainingSince(addDays(asOf, -(TANDA_WINDOW_DAYS + earliest))),
     getHrConfig(),
@@ -281,14 +287,14 @@ export async function getExperimentalPredictions(asOf: string): Promise<Experime
 
 export interface BenchmarkSnapshot { week_start: string; predicted_seconds: number | null; threshold_min_km: number | null; vdot: number | null; }
 
-export async function listBenchmarkSnapshotsSince(since: string): Promise<BenchmarkSnapshot[]> {
+export const listBenchmarkSnapshotsSince = cache(async (since: string): Promise<BenchmarkSnapshot[]> => {
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
     .select('week_start, predicted_seconds, threshold_min_km, vdot')
     .gte('week_start', since)
     .order('week_start');
   return ((data as BenchmarkSnapshot[] | null) ?? []);
-}
+});
 
 // The fitness VDOT a snapshot represents — its stored vdot, else derived from the
 // stored marathon prediction (they round-trip). Null when neither is present.
@@ -576,7 +582,7 @@ export interface GoalMarathon { id: number; name: string; raceDate: string | nul
 // The prediction is marathon-specific, so it must compare against the marathon's
 // target, not simply the chronologically-next race (which may be an ultra or a
 // tune-up of a different distance).
-export async function getGoalMarathon(asOf: string): Promise<GoalMarathon | null> {
+export const getGoalMarathon = cache(async (asOf: string): Promise<GoalMarathon | null> => {
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, race_date, target_time')
@@ -594,7 +600,7 @@ export async function getGoalMarathon(asOf: string): Promise<GoalMarathon | null
     raceDate: (data.race_date as string | null) ?? null,
     targetSeconds: parseHmsToSeconds(data.target_time as string | null),
   };
-}
+});
 
 function daysBetweenAbs(a: string, b: string): number {
   return Math.abs(Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000;

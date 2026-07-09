@@ -301,21 +301,26 @@ async function getUpcomingSessions(from: string, to: string): Promise<Record<str
 
 // Planned sessions in [from, to] annotated with their actuals (from completed_workouts).
 async function getRecentSessions(from: string, to: string): Promise<RecentSession[]> {
-  const [{ data: sessions }, { data: completed }] = await Promise.all([
-    supabaseAdmin
-      .from('plan_sessions')
-      .select('id, scheduled_date, session_type, name, priority, status, distance_km, target_pace, estimated_tss, estimated_duration')
-      .gte('scheduled_date', from)
-      .lte('scheduled_date', to)
-      .order('scheduled_date'),
-    supabaseAdmin
-      .from('completed_workouts')
-      .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, fuel_carbs_per_h, source')
-      .gte('completed_date', from)
-      .lte('completed_date', to),
-  ]);
+  const { data: sessions } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, session_type, name, priority, status, distance_km, target_pace, estimated_tss, estimated_duration')
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', to)
+    .order('scheduled_date');
 
-  const bySession = new Map<string, NonNullable<typeof completed>[number]>();
+  // Fetch completions by plan_session_id, NOT by completed_date window: a session
+  // done a day late (or synced across a date boundary) has its completion outside
+  // [from, to] and would be misreported as "missed" to the coach.
+  const ids = (sessions ?? []).map(s => s.id as string);
+  const completedRes = ids.length
+    ? await supabaseAdmin
+        .from('completed_workouts')
+        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, fuel_carbs_per_h, source')
+        .in('plan_session_id', ids)
+    : null;
+  const completed = completedRes?.data ?? [];
+
+  const bySession = new Map<string, (typeof completed)[number]>();
   for (const c of completed ?? []) {
     if (c.plan_session_id) bySession.set(c.plan_session_id as string, c);
   }
@@ -353,10 +358,12 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
 }
 
 // The tail of the change log — what prior coaching passes already did, and why.
+// Selects actor/operation/reason (the agent-era columns); chip_used is legacy and
+// always null for agent-made changes, so it carried no "why".
 async function getRecentChanges(): Promise<Record<string, unknown>[]> {
   const { data } = await supabaseAdmin
     .from('adjustment_logs')
-    .select('id, plan_session_id, chip_used, before_state, after_state, logged_at')
+    .select('id, plan_session_id, actor, operation, reason, before_state, after_state, logged_at')
     .order('logged_at', { ascending: false })
     .limit(CHANGE_LOG_LIMIT);
   return (data ?? []) as Record<string, unknown>[];

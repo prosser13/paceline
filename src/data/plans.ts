@@ -177,7 +177,10 @@ export async function updatePlanStrengthPriority(planId: number, value: boolean)
 
 // ── plan_weeks ───────────────────────────────────────────────
 
-// The plan week containing `onDate`, or null.
+// The plan week containing `onDate`, or null. If two plans' weeks overlap the date
+// (e.g. a supplementary block), maybeSingle() would error and null out the whole
+// dashboard week + disable plan autonomy — so order + limit to deterministically
+// take the most-recently-started plan's week instead.
 export const getCurrentWeek = unstable_cache(
   async (onDate: string) => {
     const { data } = await supabaseAdmin
@@ -185,6 +188,8 @@ export const getCurrentWeek = unstable_cache(
       .select('*')
       .lte('date_from', onDate)
       .gte('date_to', onDate)
+      .order('date_from', { ascending: false })
+      .limit(1)
       .maybeSingle();
     return data;
   },
