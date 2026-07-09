@@ -5,12 +5,12 @@
 // show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
-import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, getPredictedRaces, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView, type PredictedRace } from '@/data/benchmarks';
+import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, getPredictedRaces, getEnduranceReadiness, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView, type PredictedRace } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
-import { danielsVdot, vdotToTimeMin } from '@/lib/prediction';
+import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
 
 const WINDOW_DAYS = 84;   // rolling 12 weeks
@@ -28,7 +28,9 @@ export interface BenchmarksData {
   raceName: string | null;
   raceDate: string | null;
   targetSeconds: number | null;
-  predictedSeconds: number | null;
+  predictedSeconds: number | null;       // endurance-adjusted (the number of record)
+  rawPredictedSeconds: number | null;    // unadjusted VDOT-equivalent
+  endurance: { score: number; avgWeeklyKm: number; longestKm: number; anchorWeeklyKm: number };
   signals: { source: string; label: string; impliedSeconds: number }[];
   experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
   predictedRaces: PredictedRace[];              // 5k/10k/HM/marathon predictions + deltas
@@ -74,10 +76,11 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = new Date().toISOString().slice(0, 10);
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, predictedRaces, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, predictedRaces, endurance, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
     getPredictedRaces(asOf),
+    getEnduranceReadiness(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
     listBenchmarkSnapshotsSince(isoWeekStart(since)),
@@ -94,10 +97,18 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const rhrSeries: Series[] = wellness.flatMap(w => w.resting_hr != null ? [{ date: w.date, v: w.resting_hr }] : []);
   const rhrCurrent = rhrSeries.length ? rhrSeries[rhrSeries.length - 1].v : null;
 
-  // VDOT: current from the live prediction; the trend from each weekly snapshot's
-  // predicted time (so it grows as snapshots accumulate).
-  const vdotSeries: Series[] = snapshots.flatMap(s => s.predicted_seconds != null ? [{ date: s.week_start, v: vdotOfMarathon(s.predicted_seconds) }] : []);
-  const vdotCurrent = prediction.predictedSeconds != null ? vdotOfMarathon(prediction.predictedSeconds) : null;
+  // VDOT: current from the live blend's raw fitness score (NOT the endurance-
+  // adjusted time — VDOT is the speed-fitness marker); the trend prefers each
+  // snapshot's stored vdot, deriving from predicted time only for legacy rows.
+  const vdotSeries: Series[] = snapshots.flatMap(s =>
+    s.vdot != null ? [{ date: s.week_start, v: Math.round(Number(s.vdot) * 10) / 10 }]
+    : s.predicted_seconds != null ? [{ date: s.week_start, v: vdotOfMarathon(s.predicted_seconds) }] : []);
+  const vdotCurrent = prediction.vdot != null ? Math.round(prediction.vdot * 10) / 10 : null;
+
+  // Endurance-adjusted marathon headline (the number of record) + the raw ceiling.
+  const marathonMult = enduranceMultiplier(42195, endurance.score);
+  const adjustedPredictedSeconds = prediction.predictedSeconds != null
+    ? Math.round(prediction.predictedSeconds * marathonMult) : null;
 
   // Delta since the first tracked week (needs ≥2 snapshots or there's no trend yet).
   const thresholdTrend: Series[] = snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []);
@@ -105,15 +116,17 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const thresholdDeltaSec = thresholdTrend.length >= 2 && thresholdMinKm != null
     ? Math.round((thresholdMinKm - thresholdTrend[0].v) * 60) : null;
   const predSnaps = snapshots.filter(s => s.predicted_seconds != null);
-  const predictedDeltaSec = predSnaps.length >= 2 && prediction.predictedSeconds != null
-    ? Math.round(prediction.predictedSeconds - Number(predSnaps[0].predicted_seconds)) : null;
+  const predictedDeltaSec = predSnaps.length >= 2 && adjustedPredictedSeconds != null
+    ? Math.round(adjustedPredictedSeconds - Number(predSnaps[0].predicted_seconds)) : null;
 
   return {
     asOf,
     raceName: goal?.name ?? null,
     raceDate: goal?.raceDate ?? null,
     targetSeconds: goal?.targetSeconds ?? null,
-    predictedSeconds: prediction.predictedSeconds,
+    predictedSeconds: adjustedPredictedSeconds,
+    rawPredictedSeconds: prediction.predictedSeconds,
+    endurance: { score: endurance.score, avgWeeklyKm: endurance.avgWeeklyKm, longestKm: endurance.longestKm, anchorWeeklyKm: endurance.anchorWeeklyKm },
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
     experimental,
     predictedRaces,

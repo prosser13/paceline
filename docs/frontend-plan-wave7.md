@@ -70,6 +70,30 @@ existing rows — one UPDATE. Any historical distance prediction then derives on
 - Experimental models (Riegel/Tanda/cardiac stay marathon-only, per the ask).
 - PB tracking (a separate feature if wanted later).
 
+### 7A.1 · Model corrections (post-ship review, 9 Jul) — SHIPPED WITH 7A.1 PR
+
+Accuracy review against the fresh 34:02 10K exposed two issues:
+
+1. **Long-run NGP signal removed from the blend.** It mapped easy pace → MP with a
+   fixed ÷1.10 (mid-pack calibration); this athlete's easy:MP ratio is ~1.33, so the
+   signal implied VDOT ~50 against races at ~63, dragging every distance down
+   (~+40 s on the 10K, ~+3 min on the marathon). Long runs still inform the model —
+   through the endurance adjustment below, which is what they actually evidence.
+2. **Endurance adjustment for HM/marathon.** VDOT equivalence assumes full training
+   for each distance; it knows nothing about volume. New
+   `enduranceScore(avgWeeklyKm, longestKm, anchor)` = 0.6·(trailing 8-wk avg run km ÷
+   the goal block's own peak planned week) + 0.4·(longest recent run ÷ 32 km), and
+   `enduranceMultiplier(distanceM, score)` = up to **+6 %** time at marathon
+   (≥35 km), **+3 %** at HM (≥18 km), **0** below — decaying to zero as readiness
+   → 1. Anchor falls back to 90 km/wk with no goal plan.
+   - Applied to: trajectory card + snapshots (`predicted_seconds` is now the
+     adjusted number of record; `vdot` column stays raw fitness), Benchmarks
+     headline (with a transparent "speed alone implies X" note), predicted-races
+     table (HM/marathon rows). Deltas apply the CURRENT multiplier to past VDOTs so
+     they isolate fitness change.
+   - The VDOT marker now reads the blend's raw vdot directly (not derived from the
+     adjusted time).
+
 **Files:** `src/lib/prediction.ts` (VDOT blend + `predictRace`), migration
 (+`vdot` column + backfill), `src/data/benchmarks.ts` (snapshot write,
 `getPredictedAtRace(raceDate, distanceM)`, trajectory reads), Benchmarks

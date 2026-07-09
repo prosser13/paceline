@@ -131,24 +131,49 @@ function thresholdSignal(thresholdMinKm: number, date: string | null): Predictio
   };
 }
 
-// Easy long-run NGP (min/km) → implied marathon pace. Long runs are run easier
-// than race pace; a common heuristic is easy pace ≈ marathon pace × ~1.10, so
-// marathon pace ≈ NGP / 1.10. The implied marathon TIME (not the pace) is what maps
-// to a VDOT — round-tripping through VDOT is exact, so the marathon number is
-// unchanged; it just lets this signal join the VDOT blend. Softest signal (low base
-// weight keeps its effort-dependent noise from dominating).
-const EASY_TO_MP = 1.10;
-function longRunSignal(ngpMinKm: number, date: string | null): PredictionSignal | null {
-  if (!(ngpMinKm > 0)) return null;
-  const mpMinKm = ngpMinKm / EASY_TO_MP;
-  const impliedMarathonSeconds = Math.round(mpMinKm * (MARATHON_M / 1000) * 60);
-  const vdot = danielsVdot(MARATHON_M, impliedMarathonSeconds / 60);
-  if (!(vdot > 0)) return null;
-  return {
-    source: 'long_run', label: `Long-run NGP ${fmtPace(ngpMinKm)}/km`, date, vdot,
-    impliedMarathonSeconds,
-    weight: 0,
-  };
+// NOTE (9 Jul 2026): the long-run NGP signal was REMOVED from the blend. It mapped
+// easy pace → marathon pace with a fixed ÷1.10, calibrated for mid-pack runners;
+// this athlete's easy:MP ratio is ~1.33, so the signal implied a ~50 VDOT against
+// races at ~63 and dragged every prediction down (~+40s on the 10K). Long-run
+// endurance now enters the model through enduranceMultiplier() below instead —
+// which is both honest about WHAT long runs prove (durability, not speed) and
+// self-correcting as the block's volume builds.
+
+// ── endurance adjustment (HM / marathon) ──────────────────────
+//
+// VDOT equivalence assumes the athlete is fully trained for each distance — it
+// projects speed across distances with a fixed endurance curve and knows nothing
+// about weekly volume or long-run development. That barely matters for a 5k/10k
+// but dominates the marathon. So the LONG distances carry a time penalty scaled by
+// endurance readiness (0..1, from trailing volume vs the goal block's own peak week
+// + the longest recent run). Penalty decays to zero as the block builds — the
+// prediction then improves BECAUSE the volume went in, which is the honest story.
+
+const ENDURANCE_CAP: [number, number][] = [
+  [35000, 0.06],   // marathon-ish: up to +6% time when readiness is 0
+  [18000, 0.03],   // HM-ish: up to +3%
+];
+
+export interface EnduranceReadiness {
+  score: number;           // 0..1 — blended volume + long-run readiness
+  avgWeeklyKm: number;     // trailing 8-week average run volume
+  longestKm: number;       // longest run in the window
+  anchorWeeklyKm: number;  // "fully ready" volume — the goal block's peak planned week
+}
+
+// Blend: volume is the main driver (60%), the longest recent run the rest (40%).
+// The 32 km anchor is the classic marathon long-run benchmark.
+export function enduranceScore(avgWeeklyKm: number, longestKm: number, anchorWeeklyKm: number): number {
+  const vol = Math.max(0, Math.min(1, avgWeeklyKm / Math.max(1, anchorWeeklyKm)));
+  const lr = Math.max(0, Math.min(1, longestKm / 32));
+  return 0.6 * vol + 0.4 * lr;
+}
+
+// Time multiplier (≥1) for a distance at a given readiness. 5k/10k: none.
+export function enduranceMultiplier(distanceM: number, readinessScore: number): number {
+  const cap = ENDURANCE_CAP.find(([minM]) => distanceM >= minM)?.[1] ?? 0;
+  const r = Math.max(0, Math.min(1, readinessScore));
+  return 1 + cap * (1 - r);
 }
 
 // ── recency weighting + blend ─────────────────────────────────
@@ -172,8 +197,6 @@ export interface PredictionInputs {
   thresholdMinKm: number | null;
   thresholdDate?: string | null;                         // defaults to asOf (a current setting)
   races: { distanceM: number; timeSeconds: number; date: string | null; label: string }[];
-  longRunNgpMinKm: number | null;                        // aggregate (e.g. median of recent long runs)
-  longRunDate?: string | null;
 }
 
 // Blend the available signals into one predicted marathon time (seconds), plus the
@@ -187,10 +210,6 @@ export function predictMarathon(inputs: PredictionInputs): MarathonPrediction {
   }
   if (inputs.thresholdMinKm) {
     const s = thresholdSignal(inputs.thresholdMinKm, inputs.thresholdDate ?? inputs.asOf);
-    if (s) raw.push(s);
-  }
-  if (inputs.longRunNgpMinKm) {
-    const s = longRunSignal(inputs.longRunNgpMinKm, inputs.longRunDate ?? inputs.asOf);
     if (s) raw.push(s);
   }
 
