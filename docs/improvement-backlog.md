@@ -13,9 +13,11 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   the app): `races/[slug]` Suspense streaming (P1-perf), the zone-editor client dedup (~250 lines,
   P2), and the remaining shared-component dedup. These are quality/UX refactors on working code; ship
   them from a session that can drive the app.
-- **Deferred — needs owner sign-off / touches production DB**: everything under "live-DB items"
-  (drop permissive RLS, add indexes/FKs, widen `week_number`, backfill the migration drift). Applied
-  via the Supabase MCP against the live project — do these deliberately, not blind.
+- **Live-DB, applied** (migration `20260709120000`, via the Supabase MCP): dropped the ~29 unused
+  permissive RLS policies (all tables now RLS-on-no-policy / service-role-only), added hot-column
+  indexes on `completed_workouts`/`activities`/`session_matches`, added the plan-child FKs, and widened
+  the `week_number` cap to 52. **Still deferred**: backfilling the ~8 drifted migration files into repo
+  copies (documentation only, no prod change).
 - **Deferred — dated / production-mutating scripts**: archiving the completed `gen-*`/backfill scripts
   (do after Dragon 50, 2026-07-19) and making `gen-malaga.mjs` read zones/threshold from the DB.
 - **Kept intentionally**: `updateStrengthTuning`, `stateIntentForSession`, `listAllNiggles` are
@@ -120,7 +122,7 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   exports (`fmtRelative`, `segmentHrPerformance`, `predictRace` aliases, `stateIntentForSession`,
   `listAllNiggles`, `updateStrengthTuning`, `MARATHON_DATE`), stale top-level `workflows/` dir,
   `.claude/launch.json` third entry (dead Windows path).
-- [ ] **Drop the permissive RLS policies** — ~20 tables have `USING(true) TO authenticated` (`auth_all`)
+- [x] **Drop the permissive RLS policies** (migration 20260709120000) — ~20 tables have `USING(true) TO authenticated` (`auth_all`)
   that no code path uses (data layer is service-role); they only grant any authed user full write via
   the anon key. The 6 newest tables (RLS on, no policies) are the model.
 - [ ] **Dedupe the zone-editor clients** — `ZonesClient`/`HrZonesClient`/`PowerZonesClient` are the same
@@ -156,9 +158,10 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
 - [ ] Login page uses raw `gray-*` palette instead of theme tokens — only unthemed page.
 - [x] `gpx.ts:80` `Math.min(...lats)` stack-overflows on dense GPX (>~65k points); ascent is unsmoothed
   (over-reports 20–50%) yet consumed as fact by the coach.
-- [ ] `plan_sessions.week_number CHECK (1..20)` caps plans at 20 weeks; missing FKs on
-  `plan_weeks.plan_id` / `plan_sessions.plan_id` / `strength_sessions.plan_session_id`.
-- [ ] `completed_workouts` has no secondary indexes (fine at 58 rows; fold into multi-tenant milestone).
+- [x] `plan_sessions.week_number` widened to 1..52, and FKs added on `plan_weeks.plan_id` /
+  `plan_sessions.plan_id` (CASCADE) / `strength_sessions.plan_session_id` (SET NULL) — migration
+  `20260709120000`.
+- [x] `completed_workouts`/`activities`/`session_matches` hot-column indexes added (migration `20260709120000`).
 - [x] `claimDailyAlert` read-then-upsert race → occasional double Telegram alert (`sync-alerts.ts:8`).
 - [x] `runThresholdCheck` reads the tag-cached threshold while its own mutations use fresh reads
   (`threshold-suggestion.ts:232` vs `393`) — post-apply check can log a phantom "manual change".

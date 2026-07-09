@@ -278,10 +278,10 @@ one-offs.
 
 The app is **single-user today**: no table carries `user_id`, every `src/data/*` query uses
 `supabaseAdmin`, and external creds are global (Strava `strava_connection` row `id=1`; intervals.icu
-athlete id hardcoded in `intervals.ts`, API key in env). RLS is split-brain: ~20 older tables have
-permissive `USING(true) TO authenticated` policies (pure attack surface via the anon key — droppable
-now), while the 6 newest tables are RLS-enabled with *no* policies (service-role only — the better
-posture). The seams are in place: auth is centralized (`getCurrentUser`/`requireUser` in
+athlete id hardcoded in `intervals.ts`, API key in env). Every table now has RLS **enabled with no
+policy** (service-role only) — the old permissive `USING(true) TO authenticated` policies were dropped
+(migration `20260709120000`), so multi-tenant just adds `USING (user_id = auth.uid())` policies rather
+than replacing permissive ones. The seams are in place: auth is centralized (`getCurrentUser`/`requireUser` in
 `src/lib/auth.ts`) and all data access funnels through `src/data/*` (the old groundwork item of routing
 `strava.ts`/`intervals.ts` through the data layer is **done**).
 
@@ -290,11 +290,11 @@ When multi-user ships, one coordinated milestone:
 1. **Schema** — add `user_id uuid REFERENCES auth.users(id)` to `plans`, `plan_sessions`, `plan_weeks`,
    `completed_workouts`, `activities`, `session_matches`, `adjustment_logs`; per-user config rows for
    `app_config`/`*_config`/`*_zones`; change `strava_connection` + `intervals_wellness_cache` PK from
-   `id` to `user_id`; add `(user_id, …)` indexes (note: `completed_workouts` currently has *no*
-   secondary indexes — fold hot-column indexes in here).
+   `id` to `user_id`; add `(user_id, …)` indexes (migration `20260709120000` already added the
+   single-column hot indexes on `completed_workouts`/`activities`/`session_matches` + the plan-child FKs).
 2. **Creds** — new `user_integrations` table (Strava tokens, intervals athlete id + key), replacing the
    env vars and the global row.
-3. **RLS** — replace `USING(true)` with `USING (user_id = auth.uid())`.
+3. **RLS** — add `USING (user_id = auth.uid())` policies (tables are already RLS-on-no-policy).
 4. **Data layer** — thread `userId` through `src/data/*`; add it to every cache key.
 5. **Callers** — each page/action/route resolves `requireUser().id`; webhook routes by `owner_id`.
 6. **Backfill** — assign existing rows to the sole user.
