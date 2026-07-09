@@ -14,6 +14,8 @@ import {
 } from '@/components/session-ui';
 import { RunGlyph } from '@/components/glyphs';
 import LongRunQuality from '@/components/LongRunQuality';
+import { fuelTargetLabel } from '@/lib/fuel-progression';
+import type { FuelProduct } from '@/data/fuel';
 import { RUN, RUN_B, READY } from '@/lib/colors';
 import type { PlanSession, CompletedToday } from './data';
 
@@ -21,6 +23,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function SessionHero({
   label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false, defaultOpen,
+  fuelProducts = [],
 }: {
   label: string;
   session: PlanSession;
@@ -32,6 +35,7 @@ export default function SessionHero({
   showAdjust?: boolean;
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
   defaultOpen?: boolean;  // override the open state (post-race lead: show splits up front)
+  fuelProducts?: FuelProduct[];   // for the inline long-run fuel log
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   const { segActuals, segHr } = wholeRunActuals(
@@ -84,6 +88,8 @@ export default function SessionHero({
   const chips = [
     cap(intensity),
     paceLabel,
+    // Gut-training fuel guidance on the planned hero (7B).
+    !isDone && session.fuel_target ? fuelTargetLabel(session.fuel_target) : null,
     isDone && completed?.perceivedEffort != null ? `RPE ${completed.perceivedEffort}/10` : null,
   ].filter(Boolean) as string[];
 
@@ -150,6 +156,13 @@ export default function SessionHero({
               decouplingPct={completed.decouplingPct}
               paceDecayPct={completed.paceDecayPct}
               fuelCarbsPerH={completed.fuelCarbsPerH}
+              recommendedGph={session.fuel_target?.kind === 'progression' ? session.fuel_target.gph : null}
+              log={completed.workoutId ? {
+                workoutId: completed.workoutId,
+                movingSecs: completed.mins != null ? Math.round(completed.mins * 60) : null,
+                fuelItems: completed.fuelItems,
+                products: fuelProducts,
+              } : null}
             />
           </div>
         )}

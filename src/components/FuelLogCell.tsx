@@ -6,7 +6,7 @@
 // carbs/hour computed live from total carbs ÷ this run's moving time.
 
 import { useState } from 'react';
-import { logRunFuel, createFuelProduct } from './actions';
+import { logRunFuel, createFuelProduct } from '@/app/(app)/benchmarks/actions';
 import type { FuelProduct, FuelItem } from '@/data/fuel';
 
 interface Row { key: string; name: string; carbs_g: number; qty: number; }

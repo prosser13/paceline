@@ -12,6 +12,8 @@ import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedMap, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
+import { getFuelPlanForGoalBlock, type FuelTarget } from '@/data/fuel-plan';
+import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { MergedActivity } from './PlanThread';
@@ -35,6 +37,7 @@ export interface PlanSession {
   race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
+  fuel_target?: FuelTarget | null;   // gut-training guidance (goal-block sessions only)
 }
 
 export interface PlanWeek {
@@ -89,6 +92,7 @@ export interface PlanData {
     hrZones: HrZoneMap;
     powerZones: PowerZoneMap;
     bikeHrZones: BikeHrZoneMap;
+    fuelProducts: FuelProduct[];
   };
 }
 
@@ -119,7 +123,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
   const today    = new Date();
   const todayStr = today.toISOString().split('T')[0];
 
-  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches] = await Promise.all([
+  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
     listAllSessions(),
     listWeeksByNumber(),
     getThresholdPace(),
@@ -130,11 +134,18 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
     listBikeHrZones(),
     listPlansBySortOrder(),
     listUserMatches(),
+    getFuelPlanForGoalBlock(todayStr),
+    listFuelProducts(),
   ]);
 
   const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshMinKm   = parseThresholdPace(thresholdPace);
   const allSessions   = (sessions ?? []) as PlanSession[];
+  // Attach the gut-training fuel guidance to the goal block's sessions.
+  for (const s of allSessions) {
+    const t = fuelMap.get(s.id);
+    if (t) s.fuel_target = t;
+  }
   const allWeeks      = (weeks   ?? []) as PlanWeek[];
 
   const { zones, hrZones, powerZones, bikeHrZones, ftp } = buildZoneMaps({
@@ -318,6 +329,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
       hrZones,
       powerZones,
       bikeHrZones,
+      fuelProducts,
     },
   };
 }

@@ -5,16 +5,19 @@ import { humanHMM } from './session-ui';
 import { YogaGlyph } from './glyphs';
 import { COFFEE, FERN, BONE } from '@/lib/colors';
 import { type YogaPose, YogaDetailTable } from './YogaRow';
+import EffortScale from './EffortScale';
 
 // Dashboard hero for a yoga session — mirrors StrengthHero (coloured header,
 // title + descriptor, a "The flow" accordion with the poses) but rails in EMBER
 // and has no CTA: yoga is mobility/stretch guidance, not a tracked sets/reps
 // session, so completion comes from a matched Strava activity.
 export default function YogaHero({
-  label, focus, duration, note, poses, done = false,
+  label, focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null,
 }: {
   label: string; focus: string | null; duration: string | null;
   note: string | null; poses: YogaPose[]; done?: boolean;
+  planSessionId?: string | null;      // enables the manual RPE scale when done (7B)
+  perceivedEffort?: number | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -40,6 +43,9 @@ export default function YogaHero({
               <span style={{ color: COFFEE }}><YogaGlyph size={24} /></span>{focus ?? 'Yoga'}
             </h3>
             {note && <div className="text-[15px] text-stone">{note}</div>}
+            {done && planSessionId && (
+              <div className="mt-[8px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>
+            )}
           </div>
           <div className="shrink-0 text-right">
             <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>

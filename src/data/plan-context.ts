@@ -19,6 +19,8 @@ import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
 import { getStrengthCoachSummary } from '@/data/strength-progression';
 import { listActiveNiggles } from '@/data/strength-niggles';
 import { getPendingThresholdSuggestion } from '@/data/threshold-suggestion';
+import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { fuelTargetLabel } from '@/lib/fuel-progression';
 
 // Static reference an agent needs to author edits, bundled into the briefing so a
 // fresh session has it without searching the codebase. `structure` is shaped
@@ -102,6 +104,10 @@ export interface PlanContext {
   rpe_overreach: {                               // an easy run that felt disproportionately hard — early fatigue signal
     date: string; session: string; session_type: string; rpe: number; note: string;
   } | null;
+  fuel_guidance: {                               // today's gut-training fuel guidance (goal-block sessions)
+    session: string; kind: string; gph: number | null; label: string;
+  } | null;
+  log_nudge: string | null;                      // ONE consolidated "please log X" line for the evening review
   reference: {                                   // static — how to author edits (no need to search the code)
     session_schemas: typeof SESSION_SCHEMAS;
     exercise_catalog: typeof EXERCISE_CATALOG;
@@ -120,7 +126,7 @@ export interface RecentSession {
   actual: {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
-    rpe: number | null; source: string | null;
+    rpe: number | null; fuel_g_per_h: number | null; source: string | null;
   } | null;
 }
 
@@ -144,7 +150,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
     wellness, threshold, paceZones, hrConfig, hrZones, powerConfig, powerZones,
-    constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion,
+    constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
@@ -164,7 +170,37 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getStrengthCoachSummary(),
     listActiveNiggles(),
     getPendingThresholdSuggestion(),
+    getFuelPlanForGoalBlock(today),
   ]);
+
+  // Today's gut-training fuel guidance (for the morning briefing's session line) —
+  // the first of today's sessions that carries a target. Today lives in `upcoming`
+  // for the mid-day agent and in `recent` for the evening review.
+  const todaysAll: { id: string; name: string }[] = [
+    ...upcoming.filter(s => (s.scheduled_date as string) === today).map(s => ({ id: s.id as string, name: s.name as string })),
+    ...recent.filter(s => s.scheduled_date === today).map(s => ({ id: s.id, name: s.name })),
+  ];
+  let fuelGuidance: PlanContext['fuel_guidance'] = null;
+  for (const s of todaysAll) {
+    const t = fuelMap.get(s.id);
+    if (t) { fuelGuidance = { session: s.name, kind: t.kind, gph: t.gph, label: fuelTargetLabel(t) }; break; }
+  }
+
+  // ONE consolidated evening log-nudge: unlogged fuel on today's gut-training rep
+  // and/or an unrated non-run session. Never more than one line.
+  const nudges: string[] = [];
+  if (throughToday) {
+    for (const s of recent) {
+      if (s.scheduled_date !== today || s.adherence !== 'done') continue;
+      const t = fuelMap.get(s.id);
+      if (t?.kind === 'progression' && s.actual?.fuel_g_per_h == null) {
+        nudges.push(`log what you fuelled on ${s.name} (target was ${t.gph} g/h)`);
+      }
+      const nonRun = ['STRENGTH', 'CORE', 'YOGA'].includes(s.session_type);
+      if (nonRun && s.actual?.rpe == null) nudges.push(`rate the effort on ${s.name}`);
+    }
+  }
+  const logNudge = nudges.length ? nudges.join(' and ') : null;
 
   return {
     as_of: today,
@@ -197,6 +233,8 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
       ? { current: fmtPaceMinKm(thresholdSuggestion.current_min_km), suggested: fmtPaceMinKm(thresholdSuggestion.suggested_min_km), commentary: thresholdSuggestion.commentary }
       : null,
     rpe_overreach: detectRpeOverreach(recent),
+    fuel_guidance: fuelGuidance,
+    log_nudge: logNudge,
     reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
   };
 }
@@ -271,7 +309,7 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
       .order('scheduled_date'),
     supabaseAdmin
       .from('completed_workouts')
-      .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, source')
+      .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, fuel_carbs_per_h, source')
       .gte('completed_date', from)
       .lte('completed_date', to),
   ]);
@@ -306,6 +344,7 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
+        fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
       } : null,
     };

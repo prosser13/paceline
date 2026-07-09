@@ -26,6 +26,8 @@ import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
+import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
@@ -47,6 +49,7 @@ export interface PlanSession {
   intensity?: string | null;
   profile_shape?: string | null;
   structure?: Array<{ phase: string; description: string; pace_per_km?: string; duration_mins?: number }> | null;
+  fuel_target?: import('@/lib/fuel-progression').FuelTarget | null;   // gut-training guidance (goal block)
 }
 
 // Canonical completion shape lives in @/lib/completed; kept as a named alias so
@@ -129,6 +132,7 @@ export interface DashboardData {
   recentSession: PlanSession | null;
   recentCompleted: CompletedToday | null;
   recentLabel: string | null;
+  fuelProducts: FuelProduct[];   // fuel catalog for the inline long-run fuel log
 
   coachMessages: { morning: CoachMessage | null; evening: CoachMessage | null };  // latest of each kind
   dailyNote: string;                   // today's athlete note (for tonight's review)
@@ -205,6 +209,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
     coachMessages,
     dailyNote,
     sportLoad,
+    fuelMap,
+    fuelProducts,
   ] = await Promise.all([
     getCurrentUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -221,7 +227,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getLatestCoachMessages(),
     getDailyNote(todayStr),
     listSportLoadBetween(weekAgoStr, todayStr),
+    getFuelPlanForGoalBlock(todayStr),
+    listFuelProducts(),
   ]);
+  // Attach gut-training fuel guidance to any goal-block session in the window.
+  for (const s of (windowSessions ?? []) as PlanSession[]) {
+    const t = fuelMap.get(s.id);
+    if (t) s.fuel_target = t;
+  }
 
   const firstName = (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? '';
 
@@ -407,7 +420,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const todayDoneIds = todaySessions.filter(s => completionById.get(s.id)).map(s => s.id);
   const todayCompletedById: Record<string, CompletedToday> = {};
   for (const s of todaySessions) {
-    if (!sportSpec(s).isMain) continue;
+    // ALL sessions, not just the main run/ride — strength/yoga heroes need their
+    // completion for the manual RPE scale (7B).
     const row = completionById.get(s.id);
     if (row) todayCompletedById[s.id] = buildCompletedActuals(row, threshMinKm, ftp);
   }
@@ -422,6 +436,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
   if (recentCompletedRaw) {
     const { cw: rcw, ps } = recentCompletedRaw;
     recentSession = ps as unknown as PlanSession;
+    const rt = fuelMap.get(recentSession.id);
+    if (rt) recentSession.fuel_target = rt;
     recentCompleted = buildCompletedActuals(rcw, threshMinKm, ftp);
     const dateLabel = new Date(rcw.completed_date + 'T00:00:00')
       .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -531,6 +547,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     last7: { totalKm, sessions, h, m, totalTss, loadSplit },
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
+    fuelProducts,
     coachMessages,
     dailyNote,
   };

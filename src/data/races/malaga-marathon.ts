@@ -93,17 +93,19 @@ export const MALAGA_MARATHON: RaceGuide = {
     'if anything, run a touch quicker from halfway.',
 
   fuel: {
-    carbsPerHourG: [70, 80],
+    // Raised from 70–80 (9 Jul): the block's gut-training progression peaks at 90,
+    // so race day fuels at what was rehearsed.
+    carbsPerHourG: [80, 90],
     fluidPerHourMl: [400, 600],
     sodiumPerHourMg: 400,
     preStart:
       'Plain bagel (~50 g carbs) a couple of hours before, then sips of water or a weak carb drink up ' +
       'to the start so you line up topped off.',
     note:
-      'Carry 2 packs of Beta Fuel chews (46 g) + 3 Hi5 gels (23 g) — two Hi5 to use and one spare. Take ' +
-      'the first by ~8 km, then roughly one every 5 km, and grab 2× 226ers (55 g) at the 30 km gel ' +
-      'station. That lands you around 70–80 g of carbs an hour. Rehearse the exact line-up — especially ' +
-      'the 226ers — on a long run first.',
+      'Carry 2 packs of Beta Fuel chews (46 g) + 4 Hi5 gels (23 g) — three to use and one spare. Take ' +
+      'the first by ~6 km, then roughly one every 4–5 km, and grab 2× 226ers (55 g) at the 30 km gel ' +
+      'station. That lands you around 80–90 g of carbs an hour — the rate the block’s long runs ' +
+      'rehearsed. Practise the exact line-up — especially the 226ers — on a long run first.',
   },
 
   kitNote:
@@ -122,7 +124,7 @@ export const MALAGA_MARATHON: RaceGuide = {
   ],
   kitCarry: [
     { label: 'SIS Beta Fuel chews ×2', detail: '46 g carbs each — first half' },
-    { label: 'Hi5 gels ×3', detail: '23 g each — 2 to use, 1 spare' },
+    { label: 'Hi5 gels ×4', detail: '23 g each — 3 to use, 1 spare' },
     { label: 'Race number', detail: 'Pinned to the singlet the night before' },
   ],
   kitDropBag: [],

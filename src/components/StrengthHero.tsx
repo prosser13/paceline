@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { type StrengthEx, StrengthDetailTable } from './StrengthRow';
+import EffortScale from './EffortScale';
 import { humanHMM } from './session-ui';
 import { Dumbbell } from './glyphs';
 import { STRENGTH, READY } from '@/lib/colors';
@@ -13,10 +14,11 @@ import { startPlannedSession } from '@/app/(app)/strength/actions';
 // headline, a Start pill, and an expandable exercise table. Done sessions show a
 // ✓ and drop the Start button.
 export default function StrengthHero({
-  label, planSessionId, focus, duration, note, exercises, done = false,
+  label, planSessionId, focus, duration, note, exercises, done = false, perceivedEffort = null,
 }: {
   label: string; planSessionId: string; focus: string | null; duration: string | null;
   note: string | null; exercises: StrengthEx[]; done?: boolean;
+  perceivedEffort?: number | null;   // manual RPE (7B) — scale shows when done
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -63,6 +65,8 @@ export default function StrengthHero({
       </button>
 
       {note && <div className="text-[13px] text-stone leading-snug mt-[8px]">{note}</div>}
+
+      {done && <div className="mt-[10px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>}
 
       {open && (
         <div className="border-t border-fog mt-[14px] pt-[12px]">
