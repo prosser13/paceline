@@ -34,14 +34,19 @@ export default async function DashboardBody() {
   const d = await loadDashboardData();
   const noSessions = d.windowDays.every(x => x.sessions.length === 0);
 
+  // Horizontal padding is tight on mobile (16px, matching the top bar) so cards run
+  // close to the edge, and opens to 26px from md up.
   return (
-    <div className="mx-auto max-w-[1040px]" style={{ padding: '24px 26px 56px' }}>
+    <div className="mx-auto max-w-[1040px] px-4 md:px-[26px] pt-6 pb-14">
 
       {/* Date + greeting + settings */}
       <div className="flex items-start justify-between gap-3" style={{ marginBottom: '18px' }}>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>{fmtDate(d.todayStr, 'short')}</div>
-          <h2 className="font-display font-bold text-[38px] leading-[1.05]" style={{ letterSpacing: '-.01em' }}>{d.greeting}{d.firstName ? `, ${d.firstName}` : ''}</h2>
+          {/* Scale the greeting with viewport width (capped at the 38px design size)
+              and keep it on one line — truncates with an ellipsis only for an
+              unusually long name rather than wrapping. */}
+          <h2 className="font-display font-bold text-[clamp(20px,6vw,38px)] leading-[1.05] truncate" style={{ letterSpacing: '-.01em' }}>{d.greeting}{d.firstName ? `, ${d.firstName}` : ''}</h2>
         </div>
         <Link href="/settings" aria-label="Settings" className="shrink-0 text-ink/80 hover:text-ink active:scale-95 transition-[color,transform] mt-[6px]">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
