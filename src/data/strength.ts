@@ -83,13 +83,40 @@ export function equipmentLabel(ex: Exercise): 'barbell' | 'dumbbells' | null {
   return ex.weightType;
 }
 
+// Loaded single-side exercises held in ONE dumbbell (not one per hand): a
+// single-leg calf raise, a suitcase carry, a single-leg RDL. Everything else with
+// dumbbells is loaded per hand.
+const SINGLE_DUMBBELL_IDS = new Set<number>([40, 82, 52]);
+export function usesSingleDumbbell(ex: { id: number; weightType: 'barbell' | 'dumbbells' | null }): boolean {
+  return ex.weightType === 'dumbbells' && SINGLE_DUMBBELL_IDS.has(ex.id);
+}
+
+// The dumbbell equipment suffix — "one dumbbell" for single-side lifts, else the
+// default "per hand" (a pair).
+export function dumbbellSuffix(ex: { id: number; weightType: 'barbell' | 'dumbbells' | null }): string {
+  return usesSingleDumbbell(ex) ? 'one dumbbell' : 'per hand';
+}
+
 // Weight line with an equipment tag, e.g. "14 kg · per hand" (dumbbells),
-// "40 kg · barbell", or "12 kg". null when bodyweight / unloaded.
+// "18 kg · one dumbbell" (single-side), "40 kg · barbell", or "12 kg". null when
+// bodyweight / unloaded.
 export function formatWeight(ex: Exercise, weightKg: number | null | undefined): string | null {
   if (weightKg == null || Number(weightKg) <= 0) return null;
-  if (ex.weightType === 'dumbbells') return `${weightKg} kg · per hand`;
+  if (ex.weightType === 'dumbbells') return `${weightKg} kg · ${dumbbellSuffix(ex)}`;
   if (ex.weightType === 'barbell') return `${weightKg} kg · barbell`;
   return `${weightKg} kg`;
+}
+
+// Live elapsed seconds for the persistent session timer. Freezes at the accumulated
+// total once completed; otherwise adds the current running segment. Kept here (not
+// inline in a server component) so callers don't trip the "impure Date in render"
+// lint rule.
+export function timerElapsedSecs(
+  startedAtISO: string | null, accumSecs: number, completedAt: string | null,
+): number {
+  if (completedAt) return accumSecs;
+  const running = startedAtISO ? Math.max(0, Math.floor((Date.now() - Date.parse(startedAtISO)) / 1000)) : 0;
+  return accumSecs + running;
 }
 
 // One exercise as prescribed in a built session.
