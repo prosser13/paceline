@@ -2,6 +2,7 @@
 // to eat before the start, and a clear checkpoint-by-checkpoint fuelling plan.
 
 import { CardTitle, cardClass } from '@/components/dashboard-graphics';
+import { CheckpointLabel } from './CheckpointLabel';
 import type { FuelPlan as FuelPlanData } from '@/data/races/types';
 
 export interface FuelStop {
@@ -58,9 +59,9 @@ export default function FuelPlan({
           <p className="text-[13px] text-ink leading-snug">{fuel.preStart}</p>
         </div>
 
-        {/* checkpoint-by-checkpoint plan */}
-        <div className="border border-fog rounded-[12px] overflow-hidden">
-          <table className="w-full border-collapse text-[13px]">
+        {/* checkpoint-by-checkpoint plan — scrolls sideways on mobile */}
+        <div className="border border-fog rounded-[12px] overflow-x-auto">
+          <table className="w-full border-collapse text-[13px] min-w-[520px]">
             <thead>
               <tr className="text-stone font-mono text-[10px] uppercase tracking-[.08em] bg-bone/40">
                 <th className="text-left font-normal px-[14px] py-[8px]">Checkpoint</th>
@@ -71,16 +72,9 @@ export default function FuelPlan({
             <tbody>
               {schedule.map((s, i) => (
                 <tr key={i} className="border-t border-fog/70 align-top">
-                  <td className="px-[14px] py-[9px] whitespace-nowrap">
-                    <div className="text-ink leading-tight">
-                      {s.name}
-                      {s.dropBag && (
-                        <span className="ml-[6px] font-mono text-[9px] uppercase tracking-[.06em] text-marine border border-marine/40 rounded-[3px] px-[4px] py-[1px]">
-                          drop bag
-                        </span>
-                      )}
-                    </div>
-                    <div className="font-mono text-[10px] text-stone mt-[2px]">{s.distanceKm} km · {s.time}</div>
+                  <td className="px-[14px] py-[9px]">
+                    <CheckpointLabel name={s.name} dropBag={s.dropBag} />
+                    <div className="font-mono text-[10px] text-stone mt-[3px]">{s.distanceKm} km · {s.time}</div>
                   </td>
                   <td className="px-[12px] py-[9px] text-stone leading-snug">{s.between}</td>
                   <td className="px-[14px] py-[9px] text-ink leading-snug">{s.atStop}</td>
