@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { listPlansByEndDate } from '@/data/plans';
+import { todayISO } from '@/lib/dates';
 
 interface PlanRow {
   id: number;
@@ -22,7 +23,7 @@ function fmtRange(start: string | null, end: string | null): string {
 }
 
 export default async function PlanArchivePage() {
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
 
   const plans = await listPlansByEndDate();
 

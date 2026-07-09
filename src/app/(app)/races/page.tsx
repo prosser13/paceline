@@ -5,6 +5,7 @@ import { listRaceGuides } from '@/data/races';
 import { getPlanBySlug } from '@/data/plans';
 import { listRaceFinishes } from '@/data/plan-sessions';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
+import { todayISO } from '@/lib/dates';
 import type { RaceGuide } from '@/data/races/types';
 
 function daysUntil(dateStr: string): number {
@@ -30,7 +31,7 @@ export default async function RacesPage() {
   ]);
   const planBySlug = Object.fromEntries(plans.map(p => [p.slug, p.plan]));
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
   const cards: Card[] = guides.map(guide => ({
     guide,
     date: planBySlug[guide.slug]?.race_date ?? guide.date ?? null,

@@ -12,6 +12,7 @@ import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedMap, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
+import { todayISO } from '@/lib/dates';
 import { getFuelPlanForGoalBlock, type FuelTarget } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
@@ -120,8 +121,7 @@ function eachDate(from: string, to: string): string[] {
 }
 
 export async function loadPlanData(planParam: string | undefined): Promise<PlanData> {
-  const today    = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = todayISO();
 
   const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
     listAllSessions(),

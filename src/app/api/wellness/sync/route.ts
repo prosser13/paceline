@@ -13,6 +13,7 @@ import { writeBenchmarkSnapshot } from '@/data/benchmarks';
 import { runThresholdCheck } from '@/data/threshold-suggestion';
 import { claimDailyAlert } from '@/data/sync-alerts';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
+import { todayISO } from '@/lib/dates';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ async function handle(request: Request): Promise<Response> {
     const rpe = await syncActivityRpe().catch(() => ({ ok: false, updated: 0 }));
     // Refresh this week's marathon-prediction snapshot + run the weekly threshold
     // check (both best-effort; never throw).
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayISO();
     await writeBenchmarkSnapshot(today);
     await runThresholdCheck(today);
     return Response.json({ ...result, rpe_updated: rpe.updated }, { status: result.ok ? 200 : 502 });

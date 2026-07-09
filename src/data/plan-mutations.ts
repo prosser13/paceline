@@ -5,6 +5,7 @@
 // should UPDATE plan_sessions for planning reasons. See docs/plan-agent.md.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayISO } from '@/lib/dates';
 import { getCoachingPrefs } from '@/data/coaching';
 import { getCurrentWeek } from '@/data/plans';
 import { expandSegmentDistances } from '@/lib/plan-structure';
@@ -35,7 +36,7 @@ export type PlanChangeResult =
   | { ok: false; applied: false; status: 'rejected' | 'proposal_only'; reason: string };
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 // ISO date → ISO weekday 1..7 (Mon..Sun).

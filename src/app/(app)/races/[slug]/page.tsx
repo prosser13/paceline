@@ -21,6 +21,7 @@ import { predictableDistanceM } from '@/lib/prediction';
 import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { listCompletedForSessions } from '@/data/plan-sessions';
+import { todayISO } from '@/lib/dates';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
 import RouteMap from './RouteMap';
@@ -86,7 +87,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   const targetPace = plan?.target_pace ?? guide.targetPace ?? null;
   const distanceKm = plan?.distance_km ?? guide.distanceKm;
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
 
   const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions, kitOverride] = await Promise.all([
     loadGpx(guide.gpxPath),
@@ -228,7 +229,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   if ((distanceKm ?? 0) >= 30) {
     const fuelTarget = guide.fuel.carbsPerHourG?.[1] ?? null;
     if (fuelTarget != null && fuelTarget > 0) {
-      const since = new Date(Date.now() - 112 * 86400000).toISOString().slice(0, 10);
+      const since = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 112 * 86400000).toISOString().slice(0, 10);
       const [longRuns, fuelMap] = await Promise.all([
         listLongRunsSince(since),
         getFuelPlanForGoalBlock(todayStr),

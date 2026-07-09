@@ -8,6 +8,7 @@
 // adjustment path so every change is auditable and reversible.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayISO } from '@/lib/dates';
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
@@ -140,7 +141,7 @@ export interface RecentSession {
 // `upcoming` for the mid-day plan agent, where a not-yet-done session shouldn't
 // read as missed.
 export async function getPlanContext(asOf?: string, opts?: { throughToday?: boolean }): Promise<PlanContext> {
-  const today = asOf ?? new Date().toISOString().slice(0, 10);
+  const today = asOf ?? todayISO();
   const throughToday = opts?.throughToday ?? false;
   const upcomingTo = addDays(today, UPCOMING_DAYS);
   const upcomingFrom = throughToday ? addDays(today, 1) : today;

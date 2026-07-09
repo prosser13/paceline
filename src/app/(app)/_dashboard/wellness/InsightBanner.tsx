@@ -2,34 +2,41 @@
 
 // "Insight of the week" — a quiet, dismissible banner correlating a lifestyle
 // factor with performance/recovery. Dismissal is per-insight (keyed) in
-// localStorage, so a new week's insight resurfaces.
+// localStorage, so a new week's insight resurfaces. The dismissed-set is read
+// via useSyncExternalStore so there's no hydration mismatch and no setState in an
+// effect: the server snapshot is always "[]" (nothing dismissed) and the client
+// re-reads on mount.
 
-import { useState, useEffect } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { LifestyleInsight } from '@/data/insights';
 
 const STORE_KEY = 'paceline.dismissedInsights';
 
-export default function InsightBanner({ insight }: { insight: LifestyleInsight }) {
-  const [dismissed, setDismissed] = useState(false);
-  const [ready, setReady] = useState(false);
+// Return the raw JSON string (a stable value under Object.is when unchanged) —
+// returning a parsed array here would hand useSyncExternalStore a fresh reference
+// every render and loop forever.
+function readDismissed(): string {
+  try { return localStorage.getItem(STORE_KEY) || '[]'; } catch { return '[]'; }
+}
+function subscribe(cb: () => void): () => void {
+  window.addEventListener('storage', cb);
+  return () => window.removeEventListener('storage', cb);
+}
 
-  useEffect(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]') as string[];
-      if (raw.includes(insight.key)) setDismissed(true);
-    } catch { /* ignore */ }
-    setReady(true);
-  }, [insight.key]);
+export default function InsightBanner({ insight }: { insight: LifestyleInsight }) {
+  const raw = useSyncExternalStore(subscribe, readDismissed, () => '[]');
+  let dismissedKeys: string[] = [];
+  try { dismissedKeys = JSON.parse(raw) as string[]; } catch { /* ignore */ }
 
   function dismiss() {
-    setDismissed(true);
     try {
-      const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]') as string[];
-      localStorage.setItem(STORE_KEY, JSON.stringify([...new Set([...raw, insight.key])].slice(-40)));
+      const cur = JSON.parse(readDismissed()) as string[];
+      localStorage.setItem(STORE_KEY, JSON.stringify([...new Set([...cur, insight.key])].slice(-40)));
+      window.dispatchEvent(new Event('storage'));   // same-document listeners don't get native 'storage'
     } catch { /* ignore */ }
   }
 
-  if (!ready || dismissed) return null;
+  if (dismissedKeys.includes(insight.key)) return null;
 
   const max = Math.max(...insight.buckets.map(b => b.value), 1);
 

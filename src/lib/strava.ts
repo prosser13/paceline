@@ -12,6 +12,7 @@ import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds }
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
 import { computeNgp, computeLongRunQuality } from '@/lib/run-tss';
+import { timedFetch } from '@/lib/http';
 
 export interface StravaActivity {
   id: number;
@@ -36,49 +37,11 @@ interface TokenResponse {
 
 // ── Resilient fetch ──────────────────────────────────────────
 // Strava hangs, rate-limits (429) and 5xxs happen; without a timeout one stalled
-// request hangs the whole sync. timedFetch adds an abort timeout and a bounded
-// backoff retry (honouring Retry-After, capped so we never sleep a function out).
-
-const FETCH_TIMEOUT_MS = 15_000;
-const MAX_BACKOFF_MS = 30_000;
-const MAX_RETRIES = 2;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function timedFetch(url: string, init: RequestInit = {}): Promise<Response | null> {
-  for (let attempt = 0; ; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
-      clearTimeout(timer);
-      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
-        const retryAfter = Number(res.headers.get('retry-after'));
-        const waitMs = Math.min(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt,
-          MAX_BACKOFF_MS,
-        );
-        console.warn(`[strava] ${res.status} on ${url} — retry ${attempt + 1}/${MAX_RETRIES} in ${waitMs}ms`);
-        await sleep(waitMs);
-        continue;
-      }
-      return res;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt < MAX_RETRIES) {
-        await sleep(Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS));
-        continue;
-      }
-      console.warn(`[strava] fetch failed after ${MAX_RETRIES} retries: ${String(err)}`);
-      return null;
-    }
-  }
-}
+// request hangs the whole sync. The shared timedFetch (src/lib/http.ts) adds an
+// abort timeout and a bounded backoff retry (honouring Retry-After).
 
 function stravaGet(url: string, token: string): Promise<Response | null> {
-  return timedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  return timedFetch(url, { headers: { Authorization: `Bearer ${token}` } }, { label: 'strava' });
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
@@ -91,7 +54,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
       refresh_token: refreshToken,
       grant_type:    'refresh_token',
     }),
-  });
+  }, { label: 'strava' });
   if (!res || !res.ok) return null;
   const data: TokenResponse = await res.json();
   await updateStravaTokens({

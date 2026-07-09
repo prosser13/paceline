@@ -5,6 +5,7 @@
 // (the same tables getPlanContext reads), so no new data plumbing.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayISO } from '@/lib/dates';
 import { getCurrentWeek } from '@/data/plans';
 import {
   composeModifier, deriveSuggestion, fatigueLikely,
@@ -42,7 +43,7 @@ export interface StrengthContext {
 // Build the context for `asOf` (defaults to today, UTC). legs-feel is applied
 // client-side on top of the returned base modifier (see applyLegsFeel).
 export async function getStrengthContext(asOf?: string): Promise<StrengthContext> {
-  const today = asOf ?? new Date().toISOString().slice(0, 10);
+  const today = asOf ?? todayISO();
   const yesterday = addDays(today, -1);
 
   const [plan, week, { data: sessions }, { data: completed }] = await Promise.all([

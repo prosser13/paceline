@@ -26,6 +26,7 @@ import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
+import { todayISO, appHour } from '@/lib/dates';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
@@ -160,7 +161,7 @@ function eachDate(from: string, to: string): string[] {
   return out;
 }
 function greet(): string {
-  const h = new Date().getHours();
+  const h = appHour();
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
@@ -185,8 +186,8 @@ export function formatSpineDay(iso: string): { weekday: string; date: string } {
 }
 
 export async function loadDashboardData(): Promise<DashboardData> {
-  const today       = new Date();
-  const todayStr    = isoDate(today);
+  const todayStr    = todayISO();
+  const today       = new Date(todayStr + 'T00:00:00');
   const tomorrowStr = isoDate(addDays(today, 1));
   const weekAgoStr  = isoDate(addDays(today, -7));
   const weekEndStr  = isoDate(addDays(today, 7));
@@ -590,7 +591,7 @@ function paceToSec(p: string | null): number | null {
 // the tile and the banner. Each external read is best-effort (failures → skipped)
 // so standouts can never break the dashboard.
 export const loadStandouts = cache(async (): Promise<Standout[]> => {
-  const today = isoDate(new Date());
+  const today = todayISO();
   const { recent } = await loadWellnessDays();
   if (!recent.length) return [];
 
@@ -636,7 +637,7 @@ export interface WeekSeriesPoint {
   isRace: boolean;
 }
 export const loadWeeklyPlanSeries = cache(async (): Promise<WeekSeriesPoint[]> => {
-  const today = isoDate(new Date());
+  const today = todayISO();
   const weekRow = await getCurrentWeek(today);
   const planId = (weekRow?.plan_id as number | null) ?? null;
   if (!planId) return [];
