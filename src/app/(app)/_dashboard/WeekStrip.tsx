@@ -21,7 +21,6 @@ export default function WeekStrip({ days }: { days: WindowDay[] }) {
       {days.map(day => {
         const isRace  = day.sessions.some(s => s.session_type === 'RACE');
         const isToday = day.isToday;
-        const isRest  = !isRace && !day.hasRun && !day.hasRide && !day.hasStrength && !day.hasYoga;
 
         // Surface
         const surface = isRace

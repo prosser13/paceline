@@ -14,9 +14,9 @@ import { startPlannedSession } from '@/app/(app)/strength/actions';
 // headline, a Start pill, and an expandable exercise table. Done sessions show a
 // ✓ and drop the Start button.
 export default function StrengthHero({
-  label, planSessionId, focus, duration, note, exercises, done = false, perceivedEffort = null,
+  planSessionId, focus, duration, note, exercises, done = false, perceivedEffort = null,
 }: {
-  label: string; planSessionId: string; focus: string | null; duration: string | null;
+  label?: string; planSessionId: string; focus: string | null; duration: string | null;
   note: string | null; exercises: StrengthEx[]; done?: boolean;
   perceivedEffort?: number | null;   // manual RPE (7B) — scale shows when done
 }) {

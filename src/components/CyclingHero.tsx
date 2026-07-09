@@ -31,10 +31,10 @@ function parseDurMins(str: string | null | undefined): number | null {
 // (duration headline, descriptor chip, power/TSS stats); light expandable detail
 // with the colour-coded profile graph, plan-vs-actual table and segment targets.
 export default function CyclingHero({
-  label, session, powerZones, bikeHrZones, completed = null, light = false,
+  session, powerZones, bikeHrZones, completed = null, light = false,
   planSessionId = null, perceivedEffort = null,
 }: {
-  label: string;
+  label?: string;   // accepted for a uniform hero interface; unused here
   session: {
     name: string; description?: string | null; rationale?: string | null;
     estimated_duration?: string | null; estimated_tss?: number | null; distance_km?: number | null;

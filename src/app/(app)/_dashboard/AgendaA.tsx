@@ -119,7 +119,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
           return (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mb-[18px]">
               {tmrw.map(s => (
-                <TomorrowCard key={s.id} session={s} thresholdPace={d.thresholdPace}
+                <TomorrowCard key={s.id} session={s}
                   zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
               ))}
             </div>
