@@ -32,7 +32,7 @@ export default async function PlanArchivePage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[1040px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[1040px]">
         <h1 className="font-display font-semibold text-[26px] mb-[4px]">Archive</h1>
         <p className="font-mono text-[13px] text-stone mb-7">Completed plans</p>
 

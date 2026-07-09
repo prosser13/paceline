@@ -14,7 +14,7 @@ export default async function StrengthHistoryPage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[760px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[760px]">
         <div className="flex items-center justify-between mb-6">
           <h1 className="font-display font-semibold text-[24px]">Strength history</h1>
           <Link href="/strength" className="bg-oxblood text-bone text-[14px] font-medium px-4 py-[9px] rounded-[10px] hover:bg-oxblood-dark transition-colors">New session</Link>

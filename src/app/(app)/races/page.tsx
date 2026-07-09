@@ -46,7 +46,7 @@ export default async function RacesPage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[1040px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[1040px]">
         <h1 className="font-display font-semibold text-[26px] text-ink">Races</h1>
         <p className="text-[14px] text-stone mt-[4px] mb-[22px]">
           Race-day command centre — course, targets, weather, pacing, fuelling and kit for each event.

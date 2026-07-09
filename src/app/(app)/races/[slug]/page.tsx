@@ -299,7 +299,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[1040px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[1040px]">
         {/* breadcrumb */}
         <Link href="/races" className="font-mono text-[12px] text-stone hover:text-ink active:opacity-70 transition-colors">
           ← Races
