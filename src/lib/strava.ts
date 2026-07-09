@@ -214,18 +214,29 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
 
-  // Sync from the earliest planned session
+  // Sync from the earliest planned session. Strava returns `after=` results
+  // ascending by start date in pages of `per_page`, so we MUST paginate — fetching
+  // only the first page silently drops every activity beyond the oldest 100 once a
+  // plan's history outgrows one page.
   const afterDate = (await getEarliestSessionDate()) ?? '2026-06-15';
   const afterUnix = Math.floor(new Date(afterDate + 'T00:00:00Z').getTime() / 1000);
 
-  const res = await stravaGet(
-    `https://www.strava.com/api/v3/athlete/activities?after=${afterUnix}&per_page=100`,
-    token,
-  );
-  if (!res) throw new Error('Strava API unreachable');
-  if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
+  const PER_PAGE = 100;
+  const MAX_PAGES = 20;   // 2000 activities — a generous ceiling for one plan's window
+  const all: StravaActivity[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await stravaGet(
+      `https://www.strava.com/api/v3/athlete/activities?after=${afterUnix}&per_page=${PER_PAGE}&page=${page}`,
+      token,
+    );
+    if (!res) throw new Error('Strava API unreachable');
+    if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
+    const batch: StravaActivity[] = await res.json();
+    all.push(...batch);
+    if (batch.length < PER_PAGE) break;             // short page → done
+    if (page === MAX_PAGES) console.warn(`[strava] hit MAX_PAGES (${MAX_PAGES}); older activities may be unsynced`);
+  }
 
-  const all: StravaActivity[] = await res.json();
   const relevant = all.filter(a => activityKind(a.sport_type, a.type) !== null);
 
   if (!relevant.length) {
