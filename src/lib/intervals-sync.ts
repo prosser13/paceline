@@ -13,8 +13,14 @@ import { todayISO, APP_TZ } from '@/lib/dates';
 import { getThresholdPace, listPaceZones } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { listUpcomingRunsForSync, updatePlanSession } from '@/data/plan-sessions';
-import { normalizeStructure, paceToSeconds } from '@/lib/plan-structure';
+import { normalizeStructure, paceToSeconds, zoneMidSeconds } from '@/lib/plan-structure';
 import { normalizedToWorkoutText, easyRunText } from '@/lib/intervals-workout';
+
+// Default pace zone for a run that carries no structure and no target pace, keyed
+// by session type. Mirrors the app's own convention (src/data/sessions.ts): a
+// recovery run is Z1, every other easy/aerobic run (GA, long, medium-long) is Z2.
+const DEFAULT_ZONE_BY_TYPE: Record<string, string> = { REC: 'Z1' };
+const DEFAULT_RUN_ZONE = 'Z2';
 import { pushWorkoutEvent, deleteIntervalEvent } from '@/lib/intervals';
 
 export type SyncAction = 'pushed' | 'cleared' | 'skipped-synced' | 'skipped-empty' | 'error';
@@ -91,14 +97,17 @@ export async function syncUpcomingRunWorkouts(days = 3, force = false): Promise<
     }
 
     const steps = normalizeStructure(s.structure as unknown[] | null, zones);
-    // Fall back to a single easy step for runs with no structured segments (a plain
-    // distance, maybe a target pace), so unstructured easy runs still reach the watch.
+    // Fall back to a single step for runs with no structured segments, so every run
+    // reaches the watch with a pace: use the target pace if set, else the default
+    // zone for the session type (recovery→Z1, otherwise easy aerobic→Z2).
+    let fallbackSec = paceToSeconds(s.target_pace as string | null);
+    if (fallbackSec == null) {
+      const zKey = DEFAULT_ZONE_BY_TYPE[s.session_type as string] ?? DEFAULT_RUN_ZONE;
+      const z = zones[zKey];
+      if (z) fallbackSec = zoneMidSeconds(z);
+    }
     const text = normalizedToWorkoutText(steps, thresholdSec)
-      ?? easyRunText(
-        s.distance_km != null ? Number(s.distance_km) : 0,
-        paceToSeconds(s.target_pace as string | null),
-        thresholdSec,
-      );
+      ?? easyRunText(s.distance_km != null ? Number(s.distance_km) : 0, fallbackSec, thresholdSec);
 
     try {
       if (!text) {
