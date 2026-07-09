@@ -19,7 +19,9 @@ const STEP_CAP_S = 3;          // max change per suggestion — ratchet, don't j
 const COOLDOWN_DAYS = 21;      // min days between threshold changes (any source)
 const FRESH_RACE_DAYS = 42;    // a suggestion must be earned by a race this recent
 const TAPER_FREEZE_DAYS = 14;  // no suggestions this close to the A-race
-const SLOWER_GAP_S = 5;        // slower suggestions need a bigger, sustained gap (P2 confirms)
+const SLOWER_GAP_S = 5;        // slower suggestions need a bigger, sustained gap
+const SLOWER_CONFIRM_CHECKS = 3;   // …seen on this many consecutive weekly checks before suggesting
+const SLOWER_WINDOW_DAYS = 35;     // …all within this window (stale history can't confirm)
 
 // ── types ─────────────────────────────────────────────────────
 export type ThresholdOutcome =
@@ -155,6 +157,43 @@ async function estimateThreshold(asOf: string, currentMinKm: number): Promise<Es
   return { estimateMinKm: estimateMinKm != null ? Math.round(estimateMinKm * 1000) / 1000 : null, signals, newestEvidenceDate };
 }
 
+// ── slower-direction confirmation ─────────────────────────────
+// A slower threshold only moves the plan after SUSTAINED evidence: this check plus
+// the (SLOWER_CONFIRM_CHECKS − 1) weekly checks before it must ALL show a gap of
+// ≥ SLOWER_GAP_S slower, within SLOWER_WINDOW_DAYS, with no threshold change in
+// between (a change resets the streak — the gap recomputes against a new setting).
+// Pure so it's unit-testable; the caller feeds it the prior weekly checks.
+export function slowerConfirmed(
+  prior: { gap_s: number | null; week_start: string; current_min_km: number }[],   // newest first, weekly checks only
+  currentMinKm: number,
+  weekStart: string,
+): { confirmed: boolean; streak: number } {
+  let streak = 1;   // this week's check counts
+  for (const p of prior) {
+    if (streak >= SLOWER_CONFIRM_CHECKS) break;
+    const withinWindow = daysBetween(p.week_start, weekStart) <= SLOWER_WINDOW_DAYS;
+    const sameSetting = Math.abs(p.current_min_km - currentMinKm) < 0.001;
+    const slowEnough = p.gap_s != null && p.gap_s <= -SLOWER_GAP_S;
+    if (withinWindow && sameSetting && slowEnough) streak++;
+    else break;   // any non-qualifying check breaks the consecutive run
+  }
+  return { confirmed: streak >= SLOWER_CONFIRM_CHECKS, streak };
+}
+
+// The weekly checks before `weekStart` (newest first) — applied/reverted change
+// records are excluded; they're change markers, not weekly reads.
+async function priorWeeklyChecks(weekStart: string, limit = SLOWER_CONFIRM_CHECKS): Promise<{ gap_s: number | null; week_start: string; current_min_km: number }[]> {
+  const { data } = await supabaseAdmin.from('threshold_checks')
+    .select('gap_s, week_start, current_min_km, outcome')
+    .lt('week_start', weekStart)
+    .neq('outcome', 'applied')
+    .order('week_start', { ascending: false })
+    .limit(limit);
+  return ((data ?? []) as { gap_s: number | string | null; week_start: string; current_min_km: number | string }[]).map(r => ({
+    gap_s: r.gap_s != null ? Number(r.gap_s) : null, week_start: r.week_start, current_min_km: Number(r.current_min_km),
+  }));
+}
+
 // ── last change (for cooldown) — applied checks + manual edits ─
 async function lastThresholdChangeAt(currentMinKm: number): Promise<string | null> {
   const { data: latest } = await supabaseAdmin
@@ -222,16 +261,35 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
         commentary: `${stamp} ${estText}, gap ${Math.round(Math.abs(gapS))}s — within the ${MIN_GAP_S}s noise band. Your setting matches the evidence. No change needed.`, evidence: signals });
       return;
     }
-    // 3. Slower direction — never auto-suggest slower in P1; just watch.
+    // 3. Slower direction — needs a bigger gap, SUSTAINED across consecutive weekly
+    //    checks, before it can suggest (one bad race / hot day must not ratchet the
+    //    zones down). Below the slower gap: watch only. At the gap but streak not
+    //    yet met: count the confirmation weeks out loud. Confirmed: fall through to
+    //    the same fresh-evidence + cooldown guardrails, then suggest (step-capped).
+    let slowerNote = '';
     if (gapS < 0) {
-      await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'slower_pending_confirmation', status: 'none',
-        commentary: `${stamp} ${estText} — slower than your setting. A slower threshold needs a ≥${SLOWER_GAP_S}s gap sustained across several checks before it moves the plan. Watching, not suggesting.`, evidence: signals });
-      return;
+      if (Math.abs(gapS) < SLOWER_GAP_S) {
+        await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'slower_pending_confirmation', status: 'none',
+          commentary: `${stamp} ${estText} — ${Math.round(Math.abs(gapS))}s slower than your setting, under the ${SLOWER_GAP_S}s bar a slower change needs. Watching, not suggesting.`, evidence: signals });
+        return;
+      }
+      const prior = await priorWeeklyChecks(weekStart);
+      const { confirmed, streak } = slowerConfirmed(prior, currentMinKm, weekStart);
+      if (!confirmed) {
+        await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'slower_pending_confirmation', status: 'none',
+          commentary: `${stamp} ${estText} — ${Math.round(Math.abs(gapS))}s slower than your setting. Slower confirmation week ${streak} of ${SLOWER_CONFIRM_CHECKS}: ` +
+            `${SLOWER_CONFIRM_CHECKS} consecutive checks must agree before a slower threshold is suggested (an off week must not slow your zones). Watching.`, evidence: signals });
+        return;
+      }
+      slowerNote = ` Confirmed across ${SLOWER_CONFIRM_CHECKS} consecutive checks — this isn't an off week; your setting reads stale-fast, and training to it means every session runs hot.`;
     }
+    const absGapS = Math.abs(gapS);
+    const dirWord = gapS > 0 ? 'faster' : 'slower';
+
     // 4. Fresh evidence — a recent race OR recent quality-segment evidence.
     if (!newestEvidenceDate || daysBetween(newestEvidenceDate, today) > FRESH_RACE_DAYS) {
       await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'no_fresh_evidence', status: 'none',
-        commentary: `${stamp} ${estText}, ${Math.round(gapS)}s faster — but the newest evidence (race or threshold session) is over ${FRESH_RACE_DAYS} days old. A suggestion needs recent evidence. No change.`, evidence: signals });
+        commentary: `${stamp} ${estText}, ${Math.round(absGapS)}s ${dirWord} — but the newest evidence (race or threshold session) is over ${FRESH_RACE_DAYS} days old. A suggestion needs recent evidence. No change.`, evidence: signals });
       return;
     }
     // 5. Cooldown.
@@ -239,16 +297,16 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     if (lastChange && daysBetween(lastChange.slice(0, 10), today) < COOLDOWN_DAYS) {
       const nextEligible = addDays(lastChange.slice(0, 10), COOLDOWN_DAYS);
       await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'cooldown', status: 'none',
-        commentary: `${stamp} ${estText}, ${Math.round(gapS)}s faster — but threshold changed within the last ${COOLDOWN_DAYS} days (next eligible ${fmtDay(nextEligible)}). Letting the block settle. No change.`, evidence: signals });
+        commentary: `${stamp} ${estText}, ${Math.round(absGapS)}s ${dirWord} — but threshold changed within the last ${COOLDOWN_DAYS} days (next eligible ${fmtDay(nextEligible)}). Letting the block settle. No change.`, evidence: signals });
       return;
     }
-    // 6. Suggest — step-capped.
-    const stepS = Math.min(gapS, STEP_CAP_S);
-    const suggestedMinKm = Math.round((currentMinKm - stepS / 60) * 1000) / 1000;
-    const capped = gapS > STEP_CAP_S;
+    // 6. Suggest — step-capped, either direction (slower only reaches here confirmed).
+    const stepS = Math.min(absGapS, STEP_CAP_S);
+    const suggestedMinKm = Math.round((currentMinKm - Math.sign(gapS) * stepS / 60) * 1000) / 1000;
+    const capped = absGapS > STEP_CAP_S;
     await writeCheck({
       weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'suggested', status: 'pending', suggestedMinKm,
-      commentary: `${stamp} ${evidenceText} ${estText} — ${Math.round(gapS)}s faster than your setting. → Suggested ${fmtPace(suggestedMinKm)}` +
+      commentary: `${stamp} ${evidenceText} ${estText} — ${Math.round(absGapS)}s ${dirWord} than your setting.${slowerNote} → Suggested ${fmtPace(suggestedMinKm)}` +
         (capped ? ` (step capped at ${STEP_CAP_S}s/km; the estimate says more, but one notch at a time).` : `.`),
       evidence: signals,
     });
