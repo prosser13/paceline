@@ -1,8 +1,7 @@
 'use client';
 
-// Shared run/race session row — used by BOTH the plan page (PlanThread) and the
-// dashboard "Tomorrow" block (SessionRows). One source of truth for how a
-// run/race row looks and expands.
+// Run/race session row for the plan page (via SessionRow ← PlanThread). One source
+// of truth for how a run/race row looks and expands.
 //
 // - Planned (future): graph slot + expandable per-segment PlannedDetail.
 // - Completed (past): plan-vs-actual DeltaBlock slot + expandable CompareTable +

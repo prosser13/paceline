@@ -12,7 +12,9 @@ import { NextResponse } from 'next/server';
 //   POST /api/plan-change
 //   { revert_adjustment_id, actor?, reason? }
 //
-// Responses: 200 (applied | duplicate), 422 (rejected | proposal_only), 400/401.
+// Responses (agents branch on the JSON `status` field, not the HTTP code): 200
+// (applied | duplicate), 409 (proposal_only — needs approval, nothing changed),
+// 422 (rejected), 400 (bad JSON body), 401.
 export async function POST(request: Request) {
   if (!(await isAuthorizedRequest(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -33,6 +35,6 @@ export async function POST(request: Request) {
       )
     : await applyPlanChange(body as unknown as PlanChangeInput);
 
-  const status = result.ok ? 200 : result.status === 'proposal_only' ? 422 : 422;
+  const status = result.ok ? 200 : result.status === 'proposal_only' ? 409 : 422;
   return NextResponse.json(result, { status });
 }

@@ -4,7 +4,8 @@
 // threshold_checks. Suggest freely, apply conservatively, never silently.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getThresholdPace, setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
+import { todayISO } from '@/lib/dates';
+import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 import { danielsVdot, vdotToThresholdPaceMinKm } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
@@ -221,7 +222,7 @@ async function writeCheck(row: {
 // the caller). Called from the wellness sync, alongside the benchmark snapshot.
 export async function runThresholdCheck(asOf?: string): Promise<void> {
   try {
-    const today = asOf ?? new Date().toISOString().slice(0, 10);
+    const today = asOf ?? todayISO();
     const weekStart = isoWeekStart(today);
     const stamp = `Checked ${fmtDay(today)}.`;
 
@@ -229,9 +230,12 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     const { data: existing } = await supabaseAdmin.from('threshold_checks').select('id').eq('week_start', weekStart).limit(1).maybeSingle();
     if (existing) return;
 
-    const thrStr = await getThresholdPace();
-    if (!thrStr) return;
-    const currentMinKm = parseThresholdPace(thrStr);
+    // Read the threshold fresh, not via the tag-cached getThresholdPace(): a check
+    // firing shortly after an apply in a warm process would otherwise see the
+    // pre-change value and log it as a phantom "manual change" (the mutations in
+    // this file use freshThresholdMinKm for the same reason).
+    const currentMinKm = await freshThresholdMinKm();
+    if (currentMinKm == null) return;
 
     const { estimateMinKm, signals, newestEvidenceDate } = await estimateThreshold(today, currentMinKm);
     const evidenceText = signals.length
@@ -373,7 +377,7 @@ export async function revertThresholdChange(checkId: string): Promise<{ ok: bool
   await setThresholdPace(ev.beforeThreshold);   // + TSS recompute
 
   await supabaseAdmin.from('threshold_checks').update({ status: 'reverted', resolved_at: new Date().toISOString() }).eq('id', checkId);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   await supabaseAdmin.from('threshold_checks').insert({
     week_start: isoWeekStart(today), current_min_km: parseThresholdPace(ev.beforeThreshold), outcome: 'applied', status: 'none',
     commentary: `Reverted to ${ev.beforeThreshold}/km on ${fmtDay(today)} — threshold + zones restored, TSS recomputed.`,
@@ -422,7 +426,7 @@ export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: b
   await supabaseAdmin.from('threshold_checks').update({ status: 'accepted', resolved_at: new Date().toISOString() }).eq('id', checkId);
   // Record the applied change — the cooldown anchor + history entry. Its evidence
   // carries the before/after (delta + prior zones) so a future revert (P2) can undo it.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   await supabaseAdmin.from('threshold_checks').insert({
     week_start: isoWeekStart(today), current_min_km: suggestedMinKm, estimate_min_km: check.estimate_min_km, outcome: 'applied', status: 'none',
     commentary: `Applied ${fmtPace(suggestedMinKm)}/km on ${fmtDay(today)} — pace zones shifted ${deltaS < 0 ? deltaS : `+${deltaS}`}s, TSS recomputed.`,
@@ -460,7 +464,7 @@ export async function correctThreshold(targetMinKm: number, reason: string): Pro
   // A manual re-base supersedes any open suggestion.
   await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() }).eq('status', 'pending');
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
   const cleanReason = reason.trim() || 'manual correction';
   await supabaseAdmin.from('threshold_checks').insert({
     week_start: isoWeekStart(today), current_min_km: targetMinKm, outcome: 'applied', status: 'none',

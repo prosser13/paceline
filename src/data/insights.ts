@@ -4,6 +4,7 @@
 // min-sample guarded so it never makes a claim off a handful of points.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayISO } from '@/lib/dates';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { parseThresholdPace } from '@/lib/run-tss';
 
@@ -34,7 +35,7 @@ function isoWeek(iso: string): string {
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 export async function computeLifestyleInsight(asOf?: string): Promise<LifestyleInsight | null> {
-  const today = asOf ?? new Date().toISOString().slice(0, 10);
+  const today = asOf ?? todayISO();
   const since = addDays(today, -WINDOW_DAYS);
   const wk = isoWeek(today);
 

@@ -163,11 +163,14 @@ export async function getStrengthCoachSummary() {
     getProgressionMode(),
     getStrengthTuning(),
     listRecentProgressionEvents(20),
+    // "Recent" hard ratings — ordered by the parent session's completed_at, NOT by
+    // the row's random uuid id (which is not time-ordered, so the window was noise).
     supabaseAdmin
       .from('strength_session_exercises')
-      .select('exercise_id, difficulty')
+      .select('exercise_id, difficulty, strength_sessions!inner(completed_at)')
       .gte('difficulty', 4)
-      .order('id', { ascending: false })
+      .not('strength_sessions.completed_at', 'is', null)
+      .order('completed_at', { ascending: false, referencedTable: 'strength_sessions' })
       .limit(60),
   ]);
 

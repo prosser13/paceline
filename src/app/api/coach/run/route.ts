@@ -18,7 +18,7 @@
 //     final=1 — the night's last catch-up; on failure, alert via Telegram
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, isCronRequest } from '@/lib/auth';
 import { getPlanContext } from '@/data/plan-context';
 import { getCoachContext, upsertCoachContext } from '@/data/coach';
 import { generateEveningReview } from '@/lib/coach-generate';
@@ -28,11 +28,6 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const GENERATE_HOUR_LONDON = 21; // 9pm
-
-function isCronRequest(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  return !!secret && request.headers.get('authorization') === `Bearer ${secret}`;
-}
 
 // The London civil date/hour — a 20:00–22:00 UTC fire maps to the right local day
 // and hour whether it's BST or GMT, so 9pm London needs no manual clock switch.

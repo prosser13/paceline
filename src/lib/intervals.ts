@@ -4,6 +4,7 @@ import {
 } from '@/data/wellness-cache';
 import { upsertWellnessDays, type WellnessDay } from '@/data/wellness-days';
 import { setPerceivedEffortByStravaId } from '@/data/plan-sessions';
+import { timedFetch } from '@/lib/http';
 
 const ATHLETE_ID = 'i330821';
 const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
@@ -92,7 +93,8 @@ export async function syncSession(session: PlanSession): Promise<string> {
   const method = isUpdate ? 'PUT' : 'POST';
   const body   = isUpdate ? JSON.stringify(event) : JSON.stringify([event]);
 
-  const res = await fetch(url, { method, headers: authHeaders(), body });
+  const res = await timedFetch(url, { method, headers: authHeaders(), body }, { label: 'intervals' });
+  if (!res) throw new Error(`intervals.icu ${method} unreachable`);
 
   if (!res.ok) {
     const text = await res.text();
@@ -141,11 +143,12 @@ async function fetchWellnessFromApi(): Promise<WellnessSnapshot | null> {
   const oldest = isoDay(new Date(today.getTime() - WELLNESS_HISTORY_DAYS * 86_400_000));
 
   try {
-    const res = await fetch(
+    const res = await timedFetch(
       `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
       { headers: authHeaders(), cache: 'no-store' },
+      { label: 'intervals' },
     );
-    if (!res.ok) return null;
+    if (!res || !res.ok) return null;
 
     const rows = (await res.json()) as Array<{ id?: string; ctl?: number | null; atl?: number | null }>;
     // wellness is returned ascending by date
@@ -267,10 +270,12 @@ async function fetchWellnessRows(windowDays: number): Promise<WellnessDay[]> {
   const today  = new Date();
   const newest = isoDay(today);
   const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
-  const res = await fetch(
+  const res = await timedFetch(
     `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
     { headers: authHeaders(), cache: 'no-store' },
+    { label: 'intervals' },
   );
+  if (!res) throw new Error('intervals.icu wellness request unreachable (timeout)');
   if (!res.ok) {
     const body = (await res.text().catch(() => '')).slice(0, 160);
     throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
@@ -337,10 +342,12 @@ async function fetchActivityRpe(windowDays: number): Promise<{ stravaId: number;
   const today = new Date();
   const newest = isoDay(today);
   const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
-  const res = await fetch(
+  const res = await timedFetch(
     `${BASE}/activities?oldest=${oldest}&newest=${newest}`,
     { headers: authHeaders(), cache: 'no-store' },
+    { label: 'intervals' },
   );
+  if (!res) throw new Error('intervals.icu activities request unreachable (timeout)');
   if (!res.ok) {
     const body = (await res.text().catch(() => '')).slice(0, 160);
     throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
@@ -377,10 +384,11 @@ export async function syncActivityRpe(windowDays = WELLNESS_SYNC_WINDOW_DAYS): P
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
-  const res = await fetch(`${BASE}/events/${eventId}`, {
+  const res = await timedFetch(`${BASE}/events/${eventId}`, {
     method: 'DELETE',
     headers: authHeaders(),
-  });
+  }, { label: 'intervals' });
+  if (!res) throw new Error('intervals.icu DELETE unreachable (timeout)');
 
   if (!res.ok && res.status !== 404) {
     throw new Error(`intervals.icu DELETE ${res.status}`);

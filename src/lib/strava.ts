@@ -12,6 +12,7 @@ import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds }
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
 import { computeNgp, computeLongRunQuality } from '@/lib/run-tss';
+import { timedFetch } from '@/lib/http';
 
 export interface StravaActivity {
   id: number;
@@ -36,49 +37,11 @@ interface TokenResponse {
 
 // ── Resilient fetch ──────────────────────────────────────────
 // Strava hangs, rate-limits (429) and 5xxs happen; without a timeout one stalled
-// request hangs the whole sync. timedFetch adds an abort timeout and a bounded
-// backoff retry (honouring Retry-After, capped so we never sleep a function out).
-
-const FETCH_TIMEOUT_MS = 15_000;
-const MAX_BACKOFF_MS = 30_000;
-const MAX_RETRIES = 2;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function timedFetch(url: string, init: RequestInit = {}): Promise<Response | null> {
-  for (let attempt = 0; ; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    try {
-      const res = await fetch(url, { ...init, signal: controller.signal });
-      clearTimeout(timer);
-      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES) {
-        const retryAfter = Number(res.headers.get('retry-after'));
-        const waitMs = Math.min(
-          Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1000 * 2 ** attempt,
-          MAX_BACKOFF_MS,
-        );
-        console.warn(`[strava] ${res.status} on ${url} — retry ${attempt + 1}/${MAX_RETRIES} in ${waitMs}ms`);
-        await sleep(waitMs);
-        continue;
-      }
-      return res;
-    } catch (err) {
-      clearTimeout(timer);
-      if (attempt < MAX_RETRIES) {
-        await sleep(Math.min(1000 * 2 ** attempt, MAX_BACKOFF_MS));
-        continue;
-      }
-      console.warn(`[strava] fetch failed after ${MAX_RETRIES} retries: ${String(err)}`);
-      return null;
-    }
-  }
-}
+// request hangs the whole sync. The shared timedFetch (src/lib/http.ts) adds an
+// abort timeout and a bounded backoff retry (honouring Retry-After).
 
 function stravaGet(url: string, token: string): Promise<Response | null> {
-  return timedFetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  return timedFetch(url, { headers: { Authorization: `Bearer ${token}` } }, { label: 'strava' });
 }
 
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
@@ -91,7 +54,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
       refresh_token: refreshToken,
       grant_type:    'refresh_token',
     }),
-  });
+  }, { label: 'strava' });
   if (!res || !res.ok) return null;
   const data: TokenResponse = await res.json();
   await updateStravaTokens({
@@ -234,22 +197,46 @@ function hmmToMins(d: string | null | undefined): number | null {
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
 }
 
-export async function syncActivities(): Promise<{ synced: number; matched: number }> {
+// Single-flight guard: the webhook (fires on every activity create/edit) and the
+// manual sync both call syncActivities, and Strava can push several events at once.
+// Coalescing overlapping runs within an instance avoids racing the token refresh
+// and hammering the Strava API; the DB's partial unique index on
+// completed_workouts(plan_session_id) backstops any cross-instance overlap.
+let syncInFlight: Promise<{ synced: number; matched: number }> | null = null;
+
+export function syncActivities(): Promise<{ synced: number; matched: number }> {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = runSyncActivities().finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
+
+async function runSyncActivities(): Promise<{ synced: number; matched: number }> {
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
 
-  // Sync from the earliest planned session
+  // Sync from the earliest planned session. Strava returns `after=` results
+  // ascending by start date in pages of `per_page`, so we MUST paginate — fetching
+  // only the first page silently drops every activity beyond the oldest 100 once a
+  // plan's history outgrows one page.
   const afterDate = (await getEarliestSessionDate()) ?? '2026-06-15';
   const afterUnix = Math.floor(new Date(afterDate + 'T00:00:00Z').getTime() / 1000);
 
-  const res = await stravaGet(
-    `https://www.strava.com/api/v3/athlete/activities?after=${afterUnix}&per_page=100`,
-    token,
-  );
-  if (!res) throw new Error('Strava API unreachable');
-  if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
+  const PER_PAGE = 100;
+  const MAX_PAGES = 20;   // 2000 activities — a generous ceiling for one plan's window
+  const all: StravaActivity[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await stravaGet(
+      `https://www.strava.com/api/v3/athlete/activities?after=${afterUnix}&per_page=${PER_PAGE}&page=${page}`,
+      token,
+    );
+    if (!res) throw new Error('Strava API unreachable');
+    if (!res.ok) throw new Error(`Strava API error: ${res.status}`);
+    const batch: StravaActivity[] = await res.json();
+    all.push(...batch);
+    if (batch.length < PER_PAGE) break;             // short page → done
+    if (page === MAX_PAGES) console.warn(`[strava] hit MAX_PAGES (${MAX_PAGES}); older activities may be unsynced`);
+  }
 
-  const all: StravaActivity[] = await res.json();
   const relevant = all.filter(a => activityKind(a.sport_type, a.type) !== null);
 
   if (!relevant.length) {

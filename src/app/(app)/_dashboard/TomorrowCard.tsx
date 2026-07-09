@@ -24,10 +24,9 @@ const SPORT = {
 const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
 
 export default function TomorrowCard({
-  session, thresholdPace, zones, hrZones, powerZones, bikeHrZones,
+  session, zones, hrZones, powerZones, bikeHrZones,
 }: {
   session: PlanSession;
-  thresholdPace: string;
   zones: ZoneMap;
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;

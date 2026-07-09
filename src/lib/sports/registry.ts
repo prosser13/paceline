@@ -5,7 +5,7 @@
 // A session's sport is decided by two fields in priority order — STRENGTH/CORE and
 // YOGA come off `session_type`, rides off `activity_type`, everything else (incl.
 // RACE) behaves as a run. This is the ONE place that ladder lives; resolveSport()
-// replaces the inline copies that used to sit in PlanThread, SessionRows and data.ts.
+// replaces the inline copies that used to sit in PlanThread and data.ts.
 //
 // To add a sport: add a SportKey, a SPORTS entry, a branch in resolveSport(), and a
 // branch in the SessionRow dispatcher (src/components/SessionRow.tsx). Heroes +

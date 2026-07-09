@@ -1,35 +1,24 @@
 'use client';
 
 // "Insight of the week" — a quiet, dismissible banner correlating a lifestyle
-// factor with performance/recovery. Dismissal is per-insight (keyed) in
-// localStorage, so a new week's insight resurfaces.
+// factor with performance/recovery. Dismissal is persisted server-side (keyed by
+// `insight.key`, the weekly content signature) so it stays hidden on every device
+// until a new week's insight arrives (new key). `initialDismissed` comes from the
+// server wrapper, so there's no flash and no localStorage.
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { dismissBannerAction } from '../actions';
 import type { LifestyleInsight } from '@/data/insights';
 
-const STORE_KEY = 'paceline.dismissedInsights';
-
-export default function InsightBanner({ insight }: { insight: LifestyleInsight }) {
-  const [dismissed, setDismissed] = useState(false);
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]') as string[];
-      if (raw.includes(insight.key)) setDismissed(true);
-    } catch { /* ignore */ }
-    setReady(true);
-  }, [insight.key]);
+export default function InsightBanner({ insight, initialDismissed }: { insight: LifestyleInsight; initialDismissed: boolean }) {
+  const [dismissed, setDismissed] = useState(initialDismissed);
 
   function dismiss() {
-    setDismissed(true);
-    try {
-      const raw = JSON.parse(localStorage.getItem(STORE_KEY) || '[]') as string[];
-      localStorage.setItem(STORE_KEY, JSON.stringify([...new Set([...raw, insight.key])].slice(-40)));
-    } catch { /* ignore */ }
+    setDismissed(true);   // optimistic — the server write keeps it hidden across devices
+    void dismissBannerAction('insight', insight.key);
   }
 
-  if (!ready || dismissed) return null;
+  if (dismissed) return null;
 
   const max = Math.max(...insight.buckets.map(b => b.value), 1);
 

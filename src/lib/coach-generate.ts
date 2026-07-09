@@ -7,6 +7,7 @@
 // longer depends on the external paceline-evening-coach task running at 9pm.
 
 import type { PlanContext } from '@/data/plan-context';
+import { timedFetch } from '@/lib/http';
 
 export interface CoachReview {
   headline: string;
@@ -53,50 +54,57 @@ const SCHEMA = {
 
 interface Block { type: string; text?: string }
 
-export async function generateEveningReview(ctx: PlanContext, memory: string): Promise<CoachReview> {
+// One place for the Claude Messages request + parse. Uses the shared timedFetch
+// with a bounded timeout so a stalled API aborts cleanly before the platform kills
+// the function (the coach routes set maxDuration = 60). No retry — re-running a
+// long adaptive-thinking generation would blow the same budget. Returns the parsed
+// JSON object; callers validate/shape their own fields.
+async function callClaudeJson(
+  system: string,
+  schema: object,
+  userContent: string,
+  maxTokens: number,
+  label: string,
+): Promise<Record<string, unknown>> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
 
+  const res = await timedFetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      thinking: { type: 'adaptive' },
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema } },
+      system,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  }, { label: 'claude', timeoutMs: 55_000, maxRetries: 0 });
+
+  if (!res) throw new Error(`Claude API unreachable (timeout) for ${label}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  if (data?.stop_reason === 'refusal') throw new Error(`Claude refused the ${label} request`);
+  const text: string = (data?.content as Block[] | undefined ?? [])
+    .filter(b => b.type === 'text').map(b => b.text ?? '').join('');
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    throw new Error(`${label} returned non-JSON output: ${text.slice(0, 200)}`);
+  }
+}
+
+export async function generateEveningReview(ctx: PlanContext, memory: string): Promise<CoachReview> {
   const userContent =
     `Today is ${ctx.as_of}. Write tonight's evening review.\n\n` +
     `── Your rolling memory (from prior nights) ──\n${memory || '(none yet — this is an early run)'}\n\n` +
     `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      system: SYSTEM,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
-  }
-
-  const data = await res.json();
-  if (data?.stop_reason === 'refusal') throw new Error('Claude refused the coach request');
-  const text: string = (data?.content as Block[] | undefined ?? [])
-    .filter(b => b.type === 'text')
-    .map(b => b.text ?? '')
-    .join('');
-
-  let parsed: { headline?: unknown; body_md?: unknown; updated_context?: unknown };
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    throw new Error(`Coach returned non-JSON output: ${text.slice(0, 200)}`);
-  }
+  const parsed = await callClaudeJson(SYSTEM, SCHEMA, userContent, 4000, 'evening review');
 
   const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
   const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
@@ -148,39 +156,13 @@ const MORNING_SCHEMA = {
 export async function generateMorningBriefing(
   ctx: PlanContext, memory: string, readiness: Record<string, unknown>,
 ): Promise<MorningBriefing> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
-
   const userContent =
     `Today is ${ctx.as_of}. Write this morning's briefing.\n\n` +
     `── Readiness snapshot (today's biometrics vs recent baseline) ──\n${JSON.stringify(readiness)}\n\n` +
     `── Your rolling memory (from prior nights) ──\n${memory || '(none yet — this is an early run)'}\n\n` +
     `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 3000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: MORNING_SCHEMA } },
-      system: MORNING_SYSTEM,
-      messages: [{ role: 'user', content: userContent }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  if (data?.stop_reason === 'refusal') throw new Error('Claude refused the morning-briefing request');
-  const text: string = (data?.content as Block[] | undefined ?? [])
-    .filter(b => b.type === 'text').map(b => b.text ?? '').join('');
-
-  let parsed: { headline?: unknown; body_md?: unknown };
-  try { parsed = JSON.parse(text); } catch { throw new Error(`Morning briefing returned non-JSON: ${text.slice(0, 200)}`); }
+  const parsed = await callClaudeJson(MORNING_SYSTEM, MORNING_SCHEMA, userContent, 3000, 'morning briefing');
   const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
   const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
   if (!headline || !bodyMd) throw new Error('Morning briefing returned an empty headline or body');
@@ -213,33 +195,8 @@ const RACE_SCHEMA = {
 } as const;
 
 export async function generateRaceAnalysis(input: Record<string, unknown>): Promise<{ headline: string; bodyMd: string }> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
-
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 3000,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: RACE_SCHEMA } },
-      system: RACE_SYSTEM,
-      messages: [{ role: 'user', content: `Analyse this race.\n\n── Race data (JSON) ──\n${JSON.stringify(input)}` }],
-    }),
-  });
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Claude API request failed HTTP ${res.status}: ${body.slice(0, 300)}`);
-  }
-  const data = await res.json();
-  if (data?.stop_reason === 'refusal') throw new Error('Claude refused the race-analysis request');
-  const text: string = (data?.content as Block[] | undefined ?? [])
-    .filter(b => b.type === 'text').map(b => b.text ?? '').join('');
-
-  let parsed: { headline?: unknown; body_md?: unknown };
-  try { parsed = JSON.parse(text); } catch { throw new Error(`Race analysis returned non-JSON: ${text.slice(0, 200)}`); }
+  const userContent = `Analyse this race.\n\n── Race data (JSON) ──\n${JSON.stringify(input)}`;
+  const parsed = await callClaudeJson(RACE_SYSTEM, RACE_SCHEMA, userContent, 3000, 'race analysis');
   const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
   const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
   if (!headline || !bodyMd) throw new Error('Race analysis returned an empty headline or body');

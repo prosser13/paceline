@@ -5,6 +5,7 @@
 // should UPDATE plan_sessions for planning reasons. See docs/plan-agent.md.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { todayISO } from '@/lib/dates';
 import { getCoachingPrefs } from '@/data/coaching';
 import { getCurrentWeek } from '@/data/plans';
 import { expandSegmentDistances } from '@/lib/plan-structure';
@@ -35,7 +36,7 @@ export type PlanChangeResult =
   | { ok: false; applied: false; status: 'rejected' | 'proposal_only'; reason: string };
 
 function today(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayISO();
 }
 
 // ISO date → ISO weekday 1..7 (Mon..Sun).
@@ -166,12 +167,14 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     .select('id')
     .single();
 
-  // A concurrent run claimed the key first: the change is (idempotently) done — roll
-  // our duplicate update back to the recorded before-state and report duplicate.
   if (logErr) {
+    // A concurrent run claimed the key first. Both runs carry the identical patch
+    // (that's the idempotency contract), and we already applied it at line 153, so
+    // the row holds the correct final state — do NOT roll back. Rolling back to the
+    // captured `before` here could undo the winner's change if this run read the
+    // session before the winner's update landed.
     if (logErr.code === '23505') {
       const dup = await findByKey(idempotency_key);
-      await supabaseAdmin.from('plan_sessions').update(before).eq('id', session_id);
       return { ok: true, applied: false, status: 'duplicate', adjustment_id: dup };
     }
     // Log write failed for another reason — undo the session change so state + audit stay in lockstep.
@@ -270,8 +273,10 @@ export async function revertPlanChange(
     .single();
 
   if (logErr) {
+    // Concurrent duplicate revert: both restore to the same `restore` state, which
+    // we already applied at line 258 — do NOT roll back to `current` (that would
+    // undo the winner's revert if this run read the row before the winner's update).
     if (logErr.code === '23505') {
-      await supabaseAdmin.from('plan_sessions').update(current).eq('id', log.plan_session_id);
       return { ok: true, applied: false, status: 'duplicate', adjustment_id: await findByKey(key) };
     }
     await supabaseAdmin.from('plan_sessions').update(current).eq('id', log.plan_session_id);

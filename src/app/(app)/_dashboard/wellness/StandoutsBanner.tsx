@@ -1,35 +1,22 @@
 'use client';
-import { useSyncExternalStore } from 'react';
+import { useState } from 'react';
+import { dismissBannerAction } from '../actions';
 
 // Dismissible "bright spots" banner (positive standouts) shown above the coach
-// card. Dismissal is remembered in localStorage keyed by the current standouts'
-// signature, so it stays hidden until the standouts actually change — then it
-// re-appears on its own. Read via useSyncExternalStore so it's SSR-safe (hidden
-// on the server, no flash) without a setState-in-effect.
+// card. Dismissal is persisted server-side keyed by the current standouts'
+// signature, so it stays hidden on every device until the standouts actually change
+// — then it re-appears on its own. `initialDismissed` comes from the server wrapper,
+// so there's no flash and no localStorage.
 export interface BannerStandout { key: string; label: string; value: string }
 
-const KEY = 'paceline:standouts-dismissed';
+export default function StandoutsBanner({ items, sig, initialDismissed }: { items: BannerStandout[]; sig: string; initialDismissed: boolean }) {
+  const [dismissed, setDismissed] = useState(initialDismissed);
 
-let listeners: Array<() => void> = [];
-function subscribe(cb: () => void) {
-  listeners.push(cb);
-  const onStorage = () => cb();
-  window.addEventListener('storage', onStorage);
-  return () => {
-    listeners = listeners.filter(l => l !== cb);
-    window.removeEventListener('storage', onStorage);
-  };
-}
-function isDismissed(sig: string): boolean {
-  try { return localStorage.getItem(KEY) === sig; } catch { return false; }
-}
-function dismiss(sig: string) {
-  try { localStorage.setItem(KEY, sig); } catch { /* ignore */ }
-  listeners.forEach(l => l());
-}
+  function dismiss() {
+    setDismissed(true);   // optimistic — the server write keeps it hidden across devices
+    void dismissBannerAction('standouts', sig);
+  }
 
-export default function StandoutsBanner({ items, sig }: { items: BannerStandout[]; sig: string }) {
-  const dismissed = useSyncExternalStore(subscribe, () => isDismissed(sig), () => true);
   if (!items.length || dismissed) return null;
 
   return (
@@ -48,7 +35,7 @@ export default function StandoutsBanner({ items, sig }: { items: BannerStandout[
           ))}
         </div>
       </div>
-      <button onClick={() => dismiss(sig)} aria-label="Dismiss" className="shrink-0 hover:opacity-70 transition-opacity"
+      <button onClick={dismiss} aria-label="Dismiss" className="shrink-0 hover:opacity-70 transition-opacity"
         style={{ border: 'none', background: 'transparent', color: 'var(--color-stone)', fontSize: 20, lineHeight: 1, cursor: 'pointer', padding: 4 }}>×</button>
     </div>
   );

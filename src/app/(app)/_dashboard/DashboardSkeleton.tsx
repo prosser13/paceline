@@ -3,7 +3,7 @@
 // swaps in without layout shift. Pure markup — no client JS.
 export default function DashboardSkeleton() {
   return (
-    <div className="px-[26px] py-[22px] max-w-[1040px] animate-pulse" aria-hidden>
+    <div className="px-4 md:px-[26px] py-[22px] max-w-[1040px] animate-pulse" aria-hidden>
       {/* Greeting bar */}
       <div className="flex items-baseline justify-between mb-4">
         <div className="h-[26px] w-[180px] rounded bg-fog/60" />

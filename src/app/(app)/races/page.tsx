@@ -5,6 +5,7 @@ import { listRaceGuides } from '@/data/races';
 import { getPlanBySlug } from '@/data/plans';
 import { listRaceFinishes } from '@/data/plan-sessions';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
+import { todayISO } from '@/lib/dates';
 import type { RaceGuide } from '@/data/races/types';
 
 function daysUntil(dateStr: string): number {
@@ -30,7 +31,7 @@ export default async function RacesPage() {
   ]);
   const planBySlug = Object.fromEntries(plans.map(p => [p.slug, p.plan]));
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = todayISO();
   const cards: Card[] = guides.map(guide => ({
     guide,
     date: planBySlug[guide.slug]?.race_date ?? guide.date ?? null,
@@ -45,7 +46,7 @@ export default async function RacesPage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[1040px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[1040px]">
         <h1 className="font-display font-semibold text-[26px] text-ink">Races</h1>
         <p className="text-[14px] text-stone mt-[4px] mb-[22px]">
           Race-day command centre — course, targets, weather, pacing, fuelling and kit for each event.

@@ -19,8 +19,8 @@ export const repsStr = (ex: StrengthEx) => (ex.reps_type === 'secs' ? `${ex.reps
 // Clean exercise list — one hairline-separated row per exercise: name (+ muscle
 // group) on the left, prescribed sets × reps (· weight) on the right. Mirrors
 // the run's WorkoutDetail rows. Shared by the dashboard StrengthHero, the
-// tomorrow/future SessionRows, and the plan StrengthRow; each caller supplies
-// its own padding wrapper.
+// dashboard TomorrowCard, and the plan StrengthRow; each caller supplies its own
+// padding wrapper.
 export function StrengthDetailTable({ exercises, weightCol = false }: { exercises: StrengthEx[]; weightCol?: boolean }) {
   // weightCol (dashboard today hero): a 3-column row — name · sets×reps · weight
   // (in the strength accent), no muscle group — matching the design mockup.

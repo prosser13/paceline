@@ -97,11 +97,13 @@ export async function listOffPlanActivitiesBetween(
       .gte('activity_date', from)
       .lte('activity_date', to)
       .order('activity_date', { ascending: false }),
+    // No completed_date bound here: an activity inside [from, to] can be merged into
+    // (or fulfil) a session dated just outside the window, and bounding this by date
+    // would wrongly surface it as an off-plan extra. It's a two-column scan of a
+    // small table.
     supabaseAdmin
       .from('completed_workouts')
-      .select('strava_activity_id, merged_strava_ids')
-      .gte('completed_date', from)
-      .lte('completed_date', to),
+      .select('strava_activity_id, merged_strava_ids'),
   ]);
 
   // An activity is "accounted for" if it's a completion's primary activity OR was

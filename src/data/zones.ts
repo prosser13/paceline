@@ -148,10 +148,30 @@ export async function setThresholdPace(threshold: string): Promise<void> {
   await recomputeAllCompletedTss();
 }
 
+// Replace a full keyed zone set safely (all four zone tables have PK zone_key):
+// upsert the new rows, then delete only the rows whose key is gone. This is
+// non-destructive — a failed upsert leaves the existing set intact, unlike the
+// old delete-then-insert which could wipe every zone if the insert failed (and
+// then report success). Throws on any error so callers never report a false save.
+async function replaceKeyedZones(
+  table: 'pace_zones' | 'hr_zones' | 'power_zones' | 'bike_hr_zones',
+  rows: Array<{ zone_key: string }>,
+): Promise<void> {
+  if (rows.length) {
+    const { error } = await supabaseAdmin.from(table).upsert(rows, { onConflict: 'zone_key' });
+    if (error) throw new Error(`${table} upsert failed: ${error.message}`);
+  }
+  const keep = rows.map(r => r.zone_key);
+  const del = keep.length
+    ? supabaseAdmin.from(table).delete().not('zone_key', 'in', `(${keep.join(',')})`)
+    : supabaseAdmin.from(table).delete().gte('zone_key', '');   // no rows kept → clear all
+  const { error } = await del;
+  if (error) throw new Error(`${table} prune failed: ${error.message}`);
+}
+
 // Replace the full pace-zone set (supports add/remove).
 export async function replacePaceZones(rows: PaceZoneRow[]): Promise<void> {
-  await supabaseAdmin.from('pace_zones').delete().gte('sort_order', 0);
-  if (rows.length) await supabaseAdmin.from('pace_zones').insert(rows);
+  await replaceKeyedZones('pace_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
 }
 
@@ -163,8 +183,7 @@ export async function saveHrConfig(cfg: HrConfigInput): Promise<void> {
 
 // Replace the full HR-zone set (supports add/remove).
 export async function replaceHrZones(rows: HrZoneRow[]): Promise<void> {
-  await supabaseAdmin.from('hr_zones').delete().gte('sort_order', 0);
-  if (rows.length) await supabaseAdmin.from('hr_zones').insert(rows);
+  await replaceKeyedZones('hr_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
 }
 
@@ -176,8 +195,7 @@ export async function savePowerConfig(threshold_power: number | null): Promise<v
 
 // Replace the full power-zone set (supports add/remove).
 export async function replacePowerZones(rows: PowerZoneRow[]): Promise<void> {
-  await supabaseAdmin.from('power_zones').delete().gte('sort_order', 0);
-  if (rows.length) await supabaseAdmin.from('power_zones').insert(rows);
+  await replaceKeyedZones('power_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
   // The Z4 ceiling is the FTP proxy that drives ride TSS — refresh stored rows.
   await recomputeAllCompletedTss();
@@ -191,7 +209,6 @@ export async function saveBikeHrConfig(cfg: HrConfigInput): Promise<void> {
 
 // Replace the full bike-HR-zone set (supports add/remove).
 export async function replaceBikeHrZones(rows: HrZoneRow[]): Promise<void> {
-  await supabaseAdmin.from('bike_hr_zones').delete().gte('sort_order', 0);
-  if (rows.length) await supabaseAdmin.from('bike_hr_zones').insert(rows);
+  await replaceKeyedZones('bike_hr_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
 }

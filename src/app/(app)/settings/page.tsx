@@ -114,7 +114,7 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <div className="px-[26px] py-[22px] max-w-[760px]">
+      <div className="px-4 md:px-[26px] py-[22px] max-w-[760px]">
         <h1 className="font-display font-bold text-[26px] mb-5">Settings</h1>
 
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Autonomy"

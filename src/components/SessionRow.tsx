@@ -1,13 +1,9 @@
 'use client';
 
-// The ONE place a planned session becomes a row. Both the plan page (PlanThread)
-// and the dashboard "Tomorrow" block (SessionRows) render through this, so the
-// per-sport dispatch lives once — adding a sport means one branch here plus a
-// SPORTS entry, not edits in two files.
-//
-// The two surfaces differ only in the `ctx` they pass: the dashboard passes
-// `emphasis` (roomier, planned-only); the plan passes today/next/done, the
-// completion, and run expansion. Strength/yoga/cycling are always `compact`.
+// The ONE place a planned session becomes a row on the plan page (PlanThread).
+// Per-sport dispatch lives here — adding a sport means one branch here plus a
+// SPORTS entry. (The dashboard "Tomorrow" card renders its own compact markup in
+// TomorrowCard, not through this component.)
 
 import { resolveSport } from '@/lib/sports/registry';
 import StrengthRow, { type StrengthEx } from './StrengthRow';

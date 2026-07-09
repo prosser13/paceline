@@ -1,7 +1,10 @@
-// Telegram Bot API sender — one thin HTTPS call, matching the bare-`fetch` house
-// style in src/lib/intervals.ts. Used to fan the nightly coach message out to
-// Telegram. Best-effort by contract: it never throws, so a Telegram outage can't
-// break the caller (the coach message is already saved to the DB either way).
+// Telegram Bot API sender — one thin HTTPS call via the shared timedFetch, so a
+// stalled Telegram request can't hang the coach cron. Used to fan the nightly
+// coach message out to Telegram. Best-effort by contract: it never throws, so a
+// Telegram outage can't break the caller (the coach message is already saved to
+// the DB either way).
+
+import { timedFetch } from '@/lib/http';
 
 const API = 'https://api.telegram.org';
 
@@ -24,7 +27,7 @@ export async function sendTelegramMessage(text: string): Promise<TelegramResult>
   if (!chatId) return { ok: false, error: 'TELEGRAM_CHAT_ID is not set' };
 
   try {
-    const res = await fetch(`${API}/bot${token}/sendMessage`, {
+    const res = await timedFetch(`${API}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       cache: 'no-store',
@@ -34,7 +37,8 @@ export async function sendTelegramMessage(text: string): Promise<TelegramResult>
         parse_mode: 'HTML',
         disable_web_page_preview: true,
       }),
-    });
+    }, { label: 'telegram' });
+    if (!res) return { ok: false, error: 'Telegram request unreachable (timeout)' };
     if (!res.ok) {
       const body = (await res.text().catch(() => '')).slice(0, 200);
       return { ok: false, error: `Telegram HTTP ${res.status}${body ? ` — ${body}` : ''}` };

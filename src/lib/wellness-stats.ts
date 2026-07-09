@@ -110,13 +110,19 @@ export function bodySignals(days: WellnessDay[]): BodySignals {
   const rhrToday = latest?.resting_hr ?? null;
   const hrvToday = latest?.hrv ?? null;
 
-  const ready = rhrBase.ready && hrvBase.ready && (rhrToday != null || hrvToday != null);
+  // Either metric being ready is enough — a device that never reports HRV (or RHR)
+  // shouldn't leave the whole tile stuck on "Building baseline" forever. Each metric
+  // below is rendered only when its own baseline is ready.
+  const rhrReady = rhrBase.ready && rhrToday != null;
+  const hrvReady = hrvBase.ready && hrvToday != null;
+  const ready = rhrReady || hrvReady;
   if (!ready) {
+    const days = Math.min(BODY.minDays, Math.max(rhrBase.n, hrvBase.n));
     return {
       ready: false, status: 'neutral', headline: 'Building baseline',
-      line: `Learning your normal range — ${Math.max(rhrBase.n, hrvBase.n)} of ${BODY.minDays} days so far.`,
+      line: `Learning your normal range — ${days} of ${BODY.minDays} days so far.`,
       rhr: emptyMarker(rhrToday), hrv: emptyMarker(hrvToday),
-      baselineDays: Math.max(rhrBase.n, hrvBase.n),
+      baselineDays: days,
     };
   }
 
@@ -184,9 +190,16 @@ export function sleepSummary(days: WellnessDay[], target = SLEEP.targetSecs): Sl
   const avgSecs = secsVals.length ? mean(secsVals) : null;
   const balanceSecs = secsVals.length ? secsVals.reduce((a, s) => a + (s - target), 0) : null;
 
+  // `last` is the most recent day WITH sleep data, which can be several days old if
+  // the watch didn't sync. Only treat it as "last night" (for the short-night nudge)
+  // when it's within a day of the newest day in the window.
+  const asOfDate = days.length ? days[days.length - 1].date : null;
+  const lastIsRecent = last != null && asOfDate != null &&
+    (Date.parse(asOfDate) - Date.parse(last.date)) / 86_400_000 <= 1.5;
+
   let tone: Flag = 'neutral'; let nudge = 'Not enough nights logged yet.';
   if (avgSecs != null && last?.sleep_secs != null) {
-    const shortLast = last.sleep_secs < SLEEP.shortNight;
+    const shortLast = lastIsRecent && last.sleep_secs < SLEEP.shortNight;
     const weakAvg = avgSecs < SLEEP.weakAvg;
     if (shortLast || weakAvg) {
       tone = 'watch';

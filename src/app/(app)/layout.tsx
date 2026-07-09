@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import MobileNav from '@/components/MobileNav';
 import PacelineMark from '@/components/PacelineMark';
 import { listNavPlans } from '@/data/plans';
+import { todayISO } from '@/lib/dates';
 
 // Persistent app shell for the authenticated routes. Because this is a layout
 // (not wrapped inside each page), the sidebar stays mounted across navigations —
@@ -18,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await getCurrentUser();
   if (!user) redirect('/auth/login');
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = todayISO();
   const plans = await listNavPlans();
 
   // Sidebar lists active + future plans in date order (active is always on top

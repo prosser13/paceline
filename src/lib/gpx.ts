@@ -71,17 +71,19 @@ export function parseGpx(xml: string): ParsedGpx | null {
     points.push(point);
   });
 
-  const lats = points.map(p => p.lat);
-  const lngs = points.map(p => p.lng);
+  // Reduce, not Math.min(...arr): a dense GPX (>~65k points) spread as call
+  // arguments overflows the stack.
+  const bounds = points.reduce(
+    (b, p) => ({
+      minLat: Math.min(b.minLat, p.lat), maxLat: Math.max(b.maxLat, p.lat),
+      minLng: Math.min(b.minLng, p.lng), maxLng: Math.max(b.maxLng, p.lng),
+    }),
+    { minLat: Infinity, maxLat: -Infinity, minLng: Infinity, maxLng: -Infinity },
+  );
 
   return {
     points,
-    bounds: {
-      minLat: Math.min(...lats),
-      maxLat: Math.max(...lats),
-      minLng: Math.min(...lngs),
-      maxLng: Math.max(...lngs),
-    },
+    bounds,
     totalKm: cum,
     ascentM: Math.round(ascent),
   };

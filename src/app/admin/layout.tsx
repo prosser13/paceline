@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <nav className="border-b border-gray-800 px-6 py-3 flex items-center justify-between">
+      <nav className="border-b border-gray-800 px-4 md:px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <span className="font-semibold text-white tracking-tight">Paceline Admin</span>
           <Link href="/admin/sessions" className="text-sm text-gray-400 hover:text-white transition-colors">
@@ -22,7 +22,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ← Dashboard
         </Link>
       </nav>
-      <main className="px-6 py-8 max-w-5xl mx-auto">{children}</main>
+      <main className="px-4 md:px-6 py-8 max-w-5xl mx-auto">{children}</main>
     </div>
   );
 }

@@ -26,6 +26,7 @@ import { intraDayOrder, strengthFirstOrder } from '@/lib/session-order';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
+import { todayISO, appHour } from '@/lib/dates';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
@@ -160,7 +161,7 @@ function eachDate(from: string, to: string): string[] {
   return out;
 }
 function greet(): string {
-  const h = new Date().getHours();
+  const h = appHour();
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
@@ -185,8 +186,8 @@ export function formatSpineDay(iso: string): { weekday: string; date: string } {
 }
 
 export async function loadDashboardData(): Promise<DashboardData> {
-  const today       = new Date();
-  const todayStr    = isoDate(today);
+  const todayStr    = todayISO();
+  const today       = new Date(todayStr + 'T00:00:00');
   const tomorrowStr = isoDate(addDays(today, 1));
   const weekAgoStr  = isoDate(addDays(today, -7));
   const weekEndStr  = isoDate(addDays(today, 7));
@@ -352,9 +353,12 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const sessions  = recent?.length ?? 0;
   const h = Math.floor(totalMins / 60);
   const m = Math.round(totalMins % 60);
+  // Prefer the stored, never-stale tss column (recomputed on every sync/threshold
+  // change — the canonical value, and the only one that counts rides). Fall back to
+  // a live pace-derived rTSS only for a row that has no stored value yet (runs only).
   const totalTss = Math.round((recent ?? []).reduce((s, w) => {
+    if (w.tss != null) return s + Number(w.tss);
     const mins = w.actual_duration_mins ? Number(w.actual_duration_mins) : null;
-    // NGP-based rTSS when available, else average pace.
     const runPace = w.actual_ngp_min_km != null ? Number(w.actual_ngp_min_km)
       : w.actual_avg_pace_min_km ? Number(w.actual_avg_pace_min_km) : null;
     if (mins == null || runPace == null || runPace <= 0) return s;
@@ -590,7 +594,7 @@ function paceToSec(p: string | null): number | null {
 // the tile and the banner. Each external read is best-effort (failures → skipped)
 // so standouts can never break the dashboard.
 export const loadStandouts = cache(async (): Promise<Standout[]> => {
-  const today = isoDate(new Date());
+  const today = todayISO();
   const { recent } = await loadWellnessDays();
   if (!recent.length) return [];
 
@@ -636,7 +640,7 @@ export interface WeekSeriesPoint {
   isRace: boolean;
 }
 export const loadWeeklyPlanSeries = cache(async (): Promise<WeekSeriesPoint[]> => {
-  const today = isoDate(new Date());
+  const today = todayISO();
   const weekRow = await getCurrentWeek(today);
   const planId = (weekRow?.plan_id as number | null) ?? null;
   if (!planId) return [];

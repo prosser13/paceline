@@ -328,13 +328,3 @@ export function segmentPerformance(seg: NormSegment): SegmentPerf | null {
   if (seg.actualPaceSec > hi) return 'behind';
   return 'on';
 }
-
-// Actual avg HR vs the segment's target HR window. Null when no HR / no target.
-export function segmentHrPerformance(seg: NormSegment): SegmentPerf | null {
-  if (seg.actualHr == null || seg.hrMin == null || seg.hrMax == null) return null;
-  const lo = Math.min(seg.hrMin, seg.hrMax);
-  const hi = Math.max(seg.hrMin, seg.hrMax);
-  if (seg.actualHr < lo) return 'ahead';
-  if (seg.actualHr > hi) return 'behind';
-  return 'on';
-}

@@ -1,10 +1,17 @@
+import { getCurrentUser } from '@/lib/auth';
+
 export const dynamic = 'force-dynamic';
 
-// One-time helper to register (or inspect) the Strava push subscription.
+// One-time helper to register (or inspect) the Strava push subscription. It can
+// tear down the subscription (action=delete), so it's owner-gated (a logged-in
+// session), not merely token-gated — Strava never calls this route.
 // Visit on the DEPLOYED site so the callback URL is publicly reachable:
 //   /api/strava/webhook/register?token=<STRAVA_VERIFY_TOKEN>
 // Add &action=view to list, &action=delete&id=<id> to remove.
 export async function GET(req: Request) {
+  if (!(await getCurrentUser())) {
+    return new Response('Unauthorized', { status: 401 });
+  }
   const url = new URL(req.url);
   if (url.searchParams.get('token') !== process.env.STRAVA_VERIFY_TOKEN) {
     return new Response('Forbidden', { status: 403 });

@@ -19,6 +19,23 @@ export function toDate(d: Date | string): Date {
   return /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + 'T00:00:00') : new Date(d);
 }
 
+// The app's operational timezone. Only weather.ts historically hardcoded it; every
+// "today" derived from `new Date().toISOString().slice(0,10)` was really the UTC day,
+// which is yesterday for the first hour of every BST day. Use these instead.
+export const APP_TZ = 'Europe/London';
+
+// Today's calendar date in the app timezone, as 'YYYY-MM-DD'.
+export function todayISO(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ }).format(new Date());
+}
+
+// Current hour (0–23) in the app timezone — for time-of-day greetings/gating.
+export function appHour(): number {
+  return Number(
+    new Intl.DateTimeFormat('en-GB', { timeZone: APP_TZ, hour: '2-digit', hourCycle: 'h23' }).format(new Date()),
+  );
+}
+
 function yearSuffix(dt: Date): string {
   return dt.getFullYear() === new Date().getFullYear() ? '' : ` ${dt.getFullYear()}`;
 }

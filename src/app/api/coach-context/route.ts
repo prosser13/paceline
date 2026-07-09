@@ -1,4 +1,5 @@
 import { isAuthorizedRequest } from '@/lib/auth';
+import { todayISO } from '@/lib/dates';
 import { upsertCoachContext } from '@/data/coach';
 import { NextResponse } from 'next/server';
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'summary (string) is required' }, { status: 400 });
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = todayISO();
   try {
     await upsertCoachContext(summary, today);
   } catch (e) {

@@ -27,6 +27,17 @@ export interface StravaConnectionInput {
   token_expires_at: number;
 }
 
+// The connected Strava athlete id, or null. Used to verify inbound webhook events
+// belong to the owner before spending Strava API budget on a sync.
+export async function getStravaAthleteId(): Promise<number | null> {
+  const { data } = await supabaseAdmin
+    .from('strava_connection')
+    .select('athlete_id')
+    .eq('id', CONNECTION_ID)
+    .maybeSingle();
+  return (data?.athlete_id as number | null) ?? null;
+}
+
 // OAuth tokens for the sync engine. Null when there is no connection row.
 export async function getStravaTokens(): Promise<StravaTokens | null> {
   const { data } = await supabaseAdmin

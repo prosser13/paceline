@@ -12,6 +12,7 @@ import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
+import { todayISO } from '@/lib/dates';
 
 const WINDOW_DAYS = 84;   // rolling 12 weeks
 
@@ -73,7 +74,7 @@ function efTrend(longRuns: { date: string; efficiencyFactor: number | null }[]):
 }
 
 export async function loadBenchmarksData(): Promise<BenchmarksData> {
-  const asOf = new Date().toISOString().slice(0, 10);
+  const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
   const [prediction, experimental, predictedRaces, endurance, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
