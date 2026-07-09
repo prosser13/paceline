@@ -52,7 +52,7 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   anywhere is "any authenticated Supabase user" (admin included: `src/app/admin/layout.tsx:9` — no
   `is_admin` exists despite doc/comments). Add an `OWNER_EMAIL` allowlist inside
   `getCurrentUser`/`requireUser` (`src/lib/auth.ts`) so the guarantee lives in the repo.
-- [x] **Backfill the migration drift** — live DB has ~8 applied migrations missing from
+- [ ] **(deferred — touches production DB, needs sign-off) Backfill the migration drift** — live DB has ~8 applied migrations missing from
   `supabase/migrations/` (`strava_connection`, `plans.strength_priority`, `coach_messages.kind`,
   `app_config.threshold_pace_per_km`, the `completed_workouts` partial unique index, …); a from-scratch
   replay of the repo files fails. Dump the live schema deltas into repo migration files.
