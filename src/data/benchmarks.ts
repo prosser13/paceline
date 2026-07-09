@@ -13,6 +13,7 @@ import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
 import {
   predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
+  predictedTimeAt, PREDICTABLE_DISTANCES_M,
   type MarathonPrediction, type PredictionInputs,
 } from '@/lib/prediction';
 import {
@@ -243,15 +244,23 @@ export async function getExperimentalPredictions(asOf: string): Promise<Experime
 
 // ── weekly snapshots ──────────────────────────────────────────
 
-export interface BenchmarkSnapshot { week_start: string; predicted_seconds: number | null; threshold_min_km: number | null; }
+export interface BenchmarkSnapshot { week_start: string; predicted_seconds: number | null; threshold_min_km: number | null; vdot: number | null; }
 
 export async function listBenchmarkSnapshotsSince(since: string): Promise<BenchmarkSnapshot[]> {
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
-    .select('week_start, predicted_seconds, threshold_min_km')
+    .select('week_start, predicted_seconds, threshold_min_km, vdot')
     .gte('week_start', since)
     .order('week_start');
   return ((data as BenchmarkSnapshot[] | null) ?? []);
+}
+
+// The fitness VDOT a snapshot represents — its stored vdot, else derived from the
+// stored marathon prediction (they round-trip). Null when neither is present.
+function snapshotVdot(s: { vdot: number | null; predicted_seconds: number | null }): number | null {
+  if (s.vdot != null) return Number(s.vdot);
+  if (s.predicted_seconds != null) return danielsVdot(MARATHON_M, Number(s.predicted_seconds) / 60);
+  return null;
 }
 
 // Compute the current prediction and upsert this ISO week's snapshot. Idempotent
@@ -265,25 +274,84 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
       week_start: isoWeekStart(asOf),
       predicted_seconds: pred.predictedSeconds,
       threshold_min_km: inputs.thresholdMinKm,
+      vdot: pred.vdot,
       computed_at: new Date().toISOString(),
     }, { onConflict: 'week_start' });
   } catch { /* snapshot is a nice-to-have; a sync failure here must not break the sync */ }
 }
 
-// The predicted marathon finish we were carrying into a race — the latest weekly
-// snapshot on/before the race date. Powers the post-race "predicted vs actual"
-// header. FUTURE (multi-distance): snapshots hold the marathon prediction; once they
-// store VDOT (or per-distance predictions), take a target distance and derive it.
-export async function getPredictedAtRace(raceDate: string): Promise<number | null> {
+// The predicted finish we were carrying into a race, at that race's distance — the
+// latest weekly snapshot on/before the race date, read at `distanceM` via its VDOT.
+// Powers the post-race "predicted vs actual" header for any distance.
+export async function getPredictedAtRace(raceDate: string, distanceM: number): Promise<number | null> {
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
-    .select('predicted_seconds, week_start')
+    .select('predicted_seconds, vdot, week_start')
     .lte('week_start', raceDate)
     .not('predicted_seconds', 'is', null)
     .order('week_start', { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data?.predicted_seconds != null ? Number(data.predicted_seconds) : null;
+  if (!data) return null;
+  return predictedTimeAt(snapshotVdot(data), distanceM);
+}
+
+// ── multi-distance predicted-races table (Benchmarks) ─────────
+
+export interface PredictedRace {
+  distanceM: number;
+  label: string;                 // "5K" | "10K" | "HM" | "Marathon"
+  seconds: number | null;        // predicted time at this distance now
+  paceSecPerKm: number | null;
+  deltaSec: { d7: number | null; d30: number | null; d90: number | null };  // vs look-back (neg = faster)
+}
+
+function distanceLabel(m: number): string {
+  if (Math.abs(m - MARATHON_M) < 400) return 'Marathon';
+  if (Math.abs(m - 21097) < 300) return 'HM';
+  if (Math.abs(m - 10000) < 200) return '10K';
+  if (Math.abs(m - 5000) < 150) return '5K';
+  return `${Math.round(m / 1000)}K`;
+}
+
+// The predicted time at each canonical distance for the current fitness VDOT, plus
+// the change since 7 / 30 / 90 days ago (from the nearest snapshot on/before each
+// look-back date). Deltas are null until a snapshot that old exists.
+export async function getPredictedRaces(asOf: string): Promise<PredictedRace[]> {
+  const [prediction, snapshots] = await Promise.all([
+    getCurrentPrediction(asOf),
+    listBenchmarkSnapshotsSince(addDays(asOf, -100)),
+  ]);
+  const nowVdot = prediction.vdot;
+
+  // Nearest snapshot with a usable VDOT on/before `date`.
+  const vdotOnOrBefore = (date: string): number | null => {
+    for (let i = snapshots.length - 1; i >= 0; i--) {
+      if (snapshots[i].week_start <= date) {
+        const v = snapshotVdot(snapshots[i]);
+        if (v != null) return v;
+      }
+    }
+    return null;
+  };
+  const v7 = vdotOnOrBefore(addDays(asOf, -7));
+  const v30 = vdotOnOrBefore(addDays(asOf, -30));
+  const v90 = vdotOnOrBefore(addDays(asOf, -90));
+
+  return PREDICTABLE_DISTANCES_M.map(distanceM => {
+    const seconds = predictedTimeAt(nowVdot, distanceM);
+    const delta = (pastVdot: number | null): number | null => {
+      const past = predictedTimeAt(pastVdot, distanceM);
+      return seconds != null && past != null ? seconds - past : null;
+    };
+    return {
+      distanceM,
+      label: distanceLabel(distanceM),
+      seconds,
+      paceSecPerKm: seconds != null ? Math.round(seconds / (distanceM / 1000)) : null,
+      deltaSec: { d7: delta(v7), d30: delta(v30), d90: delta(v90) },
+    };
+  });
 }
 
 // ── dashboard trajectory view (predicted vs target + verdict) ──

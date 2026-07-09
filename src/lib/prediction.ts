@@ -17,15 +17,12 @@
 
 const MARATHON_M = 42195;
 
-// Race distances the prediction engine can currently produce a target for. Today
-// only the marathon: the blend, snapshots and loadTrajectory are all marathon-keyed.
-//
-// FUTURE (multi-distance, 5k/10k/HM): add [5000, 10000, 21097] here, then make
-// predictMarathon → predictRace(inputs, distanceM), store VDOT (not just marathon
-// seconds) in benchmark_snapshots so any distance can be derived on read, and pass a
-// target distance through loadTrajectory + getPredictedAtRace. The race page + card
-// already route through predictableDistanceM(), so they'll light up automatically.
-export const PREDICTABLE_DISTANCES_M: number[] = [MARATHON_M];
+// Canonical race distances the prediction shows (Benchmarks table + race-page
+// gating). The blend runs in VDOT space, so a time exists for ANY distance — this is
+// just the display set. loadTrajectory (the campaign scoreboard) stays marathon-only
+// by its own gate; the post-race predicted-vs-actual banner derives at the race's
+// actual distance and so isn't limited to this list.
+export const PREDICTABLE_DISTANCES_M: number[] = [5000, 10000, 21097, MARATHON_M];
 
 // The canonical predictable distance a race maps to (within tolerance), or null.
 export function predictableDistanceM(distanceKm: number | null): number | null {
@@ -82,18 +79,28 @@ export function vdotToThresholdPaceMinKm(vdot: number): number | null {
   return 60 / (distanceM / 1000);   // min/km
 }
 
-// A single input performance and its predicted marathon time (seconds).
+// A single input performance, expressed as an implied fitness VDOT (the blend runs
+// in VDOT space, so any distance can be derived on read).
 export interface PredictionSignal {
   source: 'race' | 'threshold' | 'long_run';
   label: string;                 // e.g. "10K 33:40 · 21 Jun"
   date: string | null;           // ISO date the signal is dated to (for recency)
-  impliedMarathonSeconds: number;
+  vdot: number;                  // implied fitness VDOT
+  impliedMarathonSeconds: number;// = time at 42.195 km for this VDOT (display)
   weight: number;                // final blend weight (base reliability × recency)
 }
 
 export interface MarathonPrediction {
+  vdot: number | null;           // blended fitness VDOT (derive any distance from this)
   predictedSeconds: number | null;
   signals: PredictionSignal[];   // every signal that contributed, weight-sorted
+}
+export type RacePrediction = MarathonPrediction;
+
+// Predicted time (seconds) at a distance for a given fitness VDOT, or null.
+export function predictedTimeAt(vdot: number | null, distanceM: number): number | null {
+  if (vdot == null || !(vdot > 0) || !(distanceM > 0)) return null;
+  return Math.round(vdotToTimeMin(vdot, distanceM) * 60);
 }
 
 // ── signal → implied marathon time ────────────────────────────
@@ -104,7 +111,7 @@ function raceSignal(distanceM: number, timeSeconds: number, date: string | null,
   const vdot = danielsVdot(distanceM, timeSeconds / 60);
   if (!(vdot > 0)) return null;
   return {
-    source: 'race', label, date,
+    source: 'race', label, date, vdot,
     impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, MARATHON_M) * 60),
     weight: 0,
   };
@@ -118,7 +125,7 @@ function thresholdSignal(thresholdMinKm: number, date: string | null): Predictio
   const vdot = danielsVdot(distanceM, THRESHOLD_RACE_MIN);
   if (!(vdot > 0)) return null;
   return {
-    source: 'threshold', label: `Threshold ${fmtPace(thresholdMinKm)}/km`, date,
+    source: 'threshold', label: `Threshold ${fmtPace(thresholdMinKm)}/km`, date, vdot,
     impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, MARATHON_M) * 60),
     weight: 0,
   };
@@ -126,16 +133,20 @@ function thresholdSignal(thresholdMinKm: number, date: string | null): Predictio
 
 // Easy long-run NGP (min/km) → implied marathon pace. Long runs are run easier
 // than race pace; a common heuristic is easy pace ≈ marathon pace × ~1.10, so
-// marathon pace ≈ NGP / 1.10. NOT routed through VDOT (it isn't a race effort).
-// This is the softest signal — the low base weight below keeps its inherent
-// effort-dependent noise from dominating the blend.
+// marathon pace ≈ NGP / 1.10. The implied marathon TIME (not the pace) is what maps
+// to a VDOT — round-tripping through VDOT is exact, so the marathon number is
+// unchanged; it just lets this signal join the VDOT blend. Softest signal (low base
+// weight keeps its effort-dependent noise from dominating).
 const EASY_TO_MP = 1.10;
 function longRunSignal(ngpMinKm: number, date: string | null): PredictionSignal | null {
   if (!(ngpMinKm > 0)) return null;
   const mpMinKm = ngpMinKm / EASY_TO_MP;
+  const impliedMarathonSeconds = Math.round(mpMinKm * (MARATHON_M / 1000) * 60);
+  const vdot = danielsVdot(MARATHON_M, impliedMarathonSeconds / 60);
+  if (!(vdot > 0)) return null;
   return {
-    source: 'long_run', label: `Long-run NGP ${fmtPace(ngpMinKm)}/km`, date,
-    impliedMarathonSeconds: Math.round(mpMinKm * (MARATHON_M / 1000) * 60),
+    source: 'long_run', label: `Long-run NGP ${fmtPace(ngpMinKm)}/km`, date, vdot,
+    impliedMarathonSeconds,
     weight: 0,
   };
 }
@@ -183,21 +194,25 @@ export function predictMarathon(inputs: PredictionInputs): MarathonPrediction {
     if (s) raw.push(s);
   }
 
-  if (!raw.length) return { predictedSeconds: null, signals: [] };
+  if (!raw.length) return { vdot: null, predictedSeconds: null, signals: [] };
 
   for (const s of raw) {
     const recency = s.date ? Math.pow(0.5, daysBetween(s.date, inputs.asOf) / RECENCY_HALFLIFE_DAYS) : 0.5;
     s.weight = BASE_RELIABILITY[s.source] * recency;
   }
 
+  // Blend in VDOT space → one fitness number, so a time exists for every distance.
   const totalW = raw.reduce((a, s) => a + s.weight, 0);
-  const predictedSeconds = totalW > 0
-    ? Math.round(raw.reduce((a, s) => a + s.impliedMarathonSeconds * s.weight, 0) / totalW)
-    : null;
+  const vdot = totalW > 0 ? raw.reduce((a, s) => a + s.vdot * s.weight, 0) / totalW : null;
+  const predictedSeconds = predictedTimeAt(vdot, MARATHON_M);
 
   raw.sort((a, b) => b.weight - a.weight);
-  return { predictedSeconds, signals: raw };
+  return { vdot, predictedSeconds, signals: raw };
 }
+
+// Marathon prediction is just the race prediction read at 42.195 km. Alias kept so
+// existing callers (getCurrentPrediction) don't change.
+export const predictRace = predictMarathon;
 
 // ── small formatters (shared by the card + benchmarks) ────────
 

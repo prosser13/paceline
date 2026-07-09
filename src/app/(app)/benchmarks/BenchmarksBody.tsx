@@ -19,6 +19,23 @@ function SecLabel({ children }: { children: React.ReactNode }) {
   return <div className="text-[13px] uppercase font-bold" style={{ letterSpacing: '.06em', margin: '22px 0 12px' }}>{children}</div>;
 }
 
+// "m:ss" per-km from integer seconds.
+function fmtPaceSec(sec: number | null): string {
+  if (sec == null) return '—';
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}/km`;
+}
+
+// A Δ-vs-lookback cell: ▼ faster (green) / ▲ slower (muted) / — none.
+function DeltaCell({ sec }: { sec: number | null }) {
+  if (sec == null || sec === 0) return <td className="py-[9px] border-b border-fog/60 text-right text-stone/50">—</td>;
+  const better = sec < 0;
+  return (
+    <td className="py-[9px] border-b border-fog/60 text-right font-semibold" style={{ color: better ? 'var(--color-ready)' : 'var(--color-stone)' }}>
+      {better ? '▼' : '▲'} {fmtGap(Math.abs(sec))}
+    </td>
+  );
+}
+
 const RACE_LABELS: [number, string][] = [[42.195, 'Marathon'], [21.0975, 'HM'], [10, '10K'], [5, '5K']];
 function raceLabel(km: number): string {
   const hit = RACE_LABELS.find(([d]) => Math.abs(km - d) < Math.max(0.2, d * 0.02));
@@ -97,6 +114,36 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             <p className="text-[11.5px] text-stone mt-[8px]">Blended, weighting the freshest and most reliable signals highest.</p>
           </div>
         )}
+      </Card>
+
+      {/* Predicted races — the current blended fitness read at every distance, with
+          the change since 7 / 30 / 90 days ago. */}
+      <SecLabel>Predicted races</SecLabel>
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                {[['Distance', 'l'], ['Time', 'r'], ['Pace', 'r'], ['Δ7d', 'r'], ['Δ30d', 'r'], ['Δ90d', 'r']].map(([h, a]) => (
+                  <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {d.predictedRaces.map((r, i) => (
+                <tr key={i}>
+                  <td className="py-[9px] border-b border-fog/60 font-semibold">{r.label}</td>
+                  <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{r.seconds != null ? fmtHms(r.seconds) : '—'}</td>
+                  <td className="py-[9px] border-b border-fog/60 text-right text-stone">{fmtPaceSec(r.paceSecPerKm)}</td>
+                  <DeltaCell sec={r.deltaSec.d7} />
+                  <DeltaCell sec={r.deltaSec.d30} />
+                  <DeltaCell sec={r.deltaSec.d90} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[11.5px] text-stone mt-[8px]">From your current fitness (one blended VDOT read at each distance). Δ = change since 7 / 30 / 90 days ago — <b style={{ color: 'var(--color-ready)' }}>▼ faster</b> is progress; the longer look-backs fill in as weekly history accrues.</p>
+        </div>
       </Card>
 
       {/* Experimental predictors — three independent models, deliberately NOT
