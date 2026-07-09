@@ -14,7 +14,7 @@ import { getThresholdPace, listPaceZones } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { listUpcomingRunsForSync, updatePlanSession } from '@/data/plan-sessions';
 import { normalizeStructure, paceToSeconds } from '@/lib/plan-structure';
-import { normalizedToWorkoutText } from '@/lib/intervals-workout';
+import { normalizedToWorkoutText, easyRunText } from '@/lib/intervals-workout';
 import { pushWorkoutEvent, deleteIntervalEvent } from '@/lib/intervals';
 
 export type SyncAction = 'pushed' | 'cleared' | 'skipped-synced' | 'skipped-empty' | 'error';
@@ -91,7 +91,14 @@ export async function syncUpcomingRunWorkouts(days = 3, force = false): Promise<
     }
 
     const steps = normalizeStructure(s.structure as unknown[] | null, zones);
-    const text = normalizedToWorkoutText(steps, thresholdSec);
+    // Fall back to a single easy step for runs with no structured segments (a plain
+    // distance, maybe a target pace), so unstructured easy runs still reach the watch.
+    const text = normalizedToWorkoutText(steps, thresholdSec)
+      ?? easyRunText(
+        s.distance_km != null ? Number(s.distance_km) : 0,
+        paceToSeconds(s.target_pace as string | null),
+        thresholdSec,
+      );
 
     try {
       if (!text) {
