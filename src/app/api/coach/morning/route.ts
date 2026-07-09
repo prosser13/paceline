@@ -17,7 +17,7 @@
 //     force=1 — generate/redeliver even if wellness hasn't landed or it's early
 //     final=1 — the window's last fire; on failure, alert via Telegram
 
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, isCronRequest } from '@/lib/auth';
 import { getPlanContext, type PlanContext } from '@/data/plan-context';
 import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered } from '@/data/coach';
 import { getCoachingPrefs } from '@/data/coaching';
@@ -28,11 +28,6 @@ import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-function isCronRequest(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  return !!secret && request.headers.get('authorization') === `Bearer ${secret}`;
-}
 
 // The London civil date + HH:MM — a morning-window fire maps to the right local day
 // and clock whether it's BST or GMT, so the fallback-time gate needs no manual switch.

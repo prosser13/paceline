@@ -197,7 +197,20 @@ function hmmToMins(d: string | null | undefined): number | null {
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
 }
 
-export async function syncActivities(): Promise<{ synced: number; matched: number }> {
+// Single-flight guard: the webhook (fires on every activity create/edit) and the
+// manual sync both call syncActivities, and Strava can push several events at once.
+// Coalescing overlapping runs within an instance avoids racing the token refresh
+// and hammering the Strava API; the DB's partial unique index on
+// completed_workouts(plan_session_id) backstops any cross-instance overlap.
+let syncInFlight: Promise<{ synced: number; matched: number }> | null = null;
+
+export function syncActivities(): Promise<{ synced: number; matched: number }> {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = runSyncActivities().finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
+
+async function runSyncActivities(): Promise<{ synced: number; matched: number }> {
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
 
