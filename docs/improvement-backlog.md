@@ -111,9 +111,9 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   trainingLog are extended, races aren't).
  — hygiene, duplication, tooling
 
-- [ ] **Add CI**: `"typecheck": "tsc --noEmit"` script + a workflow running lint/typecheck/build on PRs
+- [x] **Add CI**: `"typecheck": "tsc --noEmit"` script + a workflow running lint/typecheck/build on PRs
   (today the Vercel build is the only gate; no tests exist).
-- [ ] **Delete dead code**: `_dashboard/SessionRows.tsx` (+ stale comments citing it in
+- [x] **Delete dead code**: `_dashboard/SessionRows.tsx` (+ stale comments citing it in
   `RunRow.tsx:4`/`SessionRow.tsx:4`), `FormMeterAsync.tsx`, `CollapsibleSession.tsx`,
   `plan/PastWeeksAccordion.tsx`, `src/lib/resend.ts` + `resend` dep + `RESEND_API_KEY` env/README
   mention, `src/app/plan-lab/**` (unauthenticated mock prototypes; ideas shipped), lib/data dead
@@ -132,12 +132,12 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   (`colors.ts:50` vs `profile.ts:12`), race-distance labels ×3.
 - [ ] **Dedupe the repeat-expansion walk** (5 copies: plan-structure ×2, profile ×2, cycling,
   execution-score) and the `Z\s*([1-9])` regex (3 copies) — this is where H2-style drift bugs breed.
-- [ ] **Extract `callClaudeJson()`** in `coach-generate.ts` — the ~40-line request/parse/validate block
+- [x] **Extract `callClaudeJson()`** in `coach-generate.ts` — the ~40-line request/parse/validate block
   is triplicated; also the single place to add a timeout/retry and a `?force` rate cap.
 - [ ] **Data-layer helpers**: shared embedded-join unwrap (9 copies), `COMPLETED_COLS` select constant
   (4 drifting copies), secs-else-mins fallback (5 copies); batch the per-exercise awaits in
   `evaluateProgressionAfterSession` (~30 serial round-trips → 2 batched).
-- [ ] **Harden the small auth seams**: gate `/api/strava/webhook/register` behind a session (it's not
+- [~] **Harden the small auth seams** (webhook/register gate + constant-time compares + 409/422 done; 400-split + err-trim deferred): gate `/api/strava/webhook/register` behind a session (it's not
   called by Strava); constant-time secret compares (`auth.ts:34`); distinct 400/422 codes in
   `/api/plan-change` (the ternary at `route.ts:36` is a no-op); trim `String(err)` echoes in route
   responses.
@@ -145,7 +145,7 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   `gen-malaga.mjs` must read zones/threshold from the DB before any rerun (hardcoded tables drift —
   threshold auto-suggestion exists precisely to change them); shared `scripts/_lib.mjs` if generators
   live on.
-- [ ] Exclude `/api/*` from the proxy matcher (`src/proxy.ts`) — webhooks/cron pay a Supabase
+- [x] Exclude `/api/*` from the proxy matcher (`src/proxy.ts`) — webhooks/cron pay a Supabase
   `auth.getUser()` round-trip for nothing.
 
 ## P3 — minor / polish
@@ -154,19 +154,19 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
 - [ ] `WeekStrip` lost tap-to-scroll (anchors exist in `AgendaA`, cells aren't links).
 - [ ] `AgendaA.tsx:61-70` re-derives the sport ladder (`NON_RUN` set) instead of `resolveSport`.
 - [ ] Login page uses raw `gray-*` palette instead of theme tokens — only unthemed page.
-- [ ] `gpx.ts:80` `Math.min(...lats)` stack-overflows on dense GPX (>~65k points); ascent is unsmoothed
+- [x] `gpx.ts:80` `Math.min(...lats)` stack-overflows on dense GPX (>~65k points); ascent is unsmoothed
   (over-reports 20–50%) yet consumed as fact by the coach.
 - [ ] `plan_sessions.week_number CHECK (1..20)` caps plans at 20 weeks; missing FKs on
   `plan_weeks.plan_id` / `plan_sessions.plan_id` / `strength_sessions.plan_session_id`.
 - [ ] `completed_workouts` has no secondary indexes (fine at 58 rows; fold into multi-tenant milestone).
-- [ ] `claimDailyAlert` read-then-upsert race → occasional double Telegram alert (`sync-alerts.ts:8`).
-- [ ] `runThresholdCheck` reads the tag-cached threshold while its own mutations use fresh reads
+- [x] `claimDailyAlert` read-then-upsert race → occasional double Telegram alert (`sync-alerts.ts:8`).
+- [x] `runThresholdCheck` reads the tag-cached threshold while its own mutations use fresh reads
   (`threshold-suggestion.ts:232` vs `393`) — post-apply check can log a phantom "manual change".
 - [ ] Segment paces use elapsed time while whole-run pace uses moving time (`strava.ts:157` vs `:281`).
-- [ ] Sleep nudge can describe a days-old night as "last night" (`wellness-stats.ts:176`).
+- [x] Sleep nudge can describe a days-old night as "last night" (`wellness-stats.ts:176`).
 - [ ] `revalidatePath` inconsistencies across settings/strength/benchmarks actions (masked by
   `force-dynamic` today — normalize before anything gets cached).
-- [ ] Remaining lint warnings (unused vars ×4, `no-unused-expressions` in `PlanThread.tsx:221`).
+- [x] Remaining lint warnings (unused vars ×4, `no-unused-expressions` in `PlanThread.tsx:221`).
 - [ ] `O(streams × segments)` scans in `computeSegmentActuals`/`computeSegmentHr` → two-pointer.
 - [ ] Distance-less run sessions can never match a Strava activity (`strava.ts:320` requires
   `distance_km > 0`) — intentional? comment it either way.
