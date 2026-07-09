@@ -401,15 +401,23 @@ export async function pushWorkoutEvent(args: {
     name: args.name,
     description: args.description,
   };
-
   // POST /events and PUT /events/{id} both take a SINGLE event object. (The array
   // form is only for POST /events/bulk — sending an array here is a JSON parse error.)
-  const isUpdate = Boolean(args.eventId);
-  const url    = isUpdate ? `${BASE}/events/${args.eventId}` : `${BASE}/events`;
-  const method = isUpdate ? 'PUT' : 'POST';
-  const body   = JSON.stringify(event);
+  const body = JSON.stringify(event);
+  const create = () => timedFetch(`${BASE}/events`, { method: 'POST', headers: authHeaders(), body }, { label: 'intervals' });
 
-  const res = await timedFetch(url, { method, headers: authHeaders(), body }, { label: 'intervals' });
+  let method = 'POST';
+  let res = args.eventId
+    ? await timedFetch(`${BASE}/events/${args.eventId}`, { method: (method = 'PUT'), headers: authHeaders(), body }, { label: 'intervals' })
+    : await create();
+
+  // A stored event id can go stale if the event was deleted on intervals.icu —
+  // the PUT then 404s. Self-heal by creating a fresh event instead of failing.
+  if (res && res.status === 404 && args.eventId) {
+    res = await create();
+    method = 'POST';
+  }
+
   if (!res) throw new Error(`intervals.icu workout ${method} unreachable (timeout)`);
   if (!res.ok) {
     const text = (await res.text().catch(() => '')).slice(0, 160);
