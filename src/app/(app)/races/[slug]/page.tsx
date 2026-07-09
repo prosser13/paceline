@@ -138,11 +138,15 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // Past race → post-race mode: lead with the result, tuck prep into a reference accordion.
   const isPast = daysToGo != null && daysToGo < 0;
 
-  // Does this race have a prediction target? Marathon-only today (§6C). FUTURE
-  // (multi-distance): predictableDistanceM widens to 5k/10k/HM and this lights up
-  // their pages automatically — the trajectory card + predicted-vs-actual below are
-  // already distance-agnostic in shape.
-  const predictable = predictableDistanceM(distanceKm);
+  // Two prediction gates (§7A):
+  //  • Pre-race TRAJECTORY card is the marathon campaign scoreboard — goal-marathon
+  //    pages only (a target + block only mean something there).
+  //  • Post-race PREDICTED-VS-ACTUAL derives at the race's actual distance from the
+  //    fitness VDOT, so it covers any road distance (incl. odd tune-ups); the ultra
+  //    is excluded (VDOT doesn't model 50 mi).
+  const isMarathonRace = predictableDistanceM(distanceKm) === 42195;
+  const bannerDistanceM = distanceKm != null && distanceKm >= 3 && distanceKm <= 45
+    ? Math.round(distanceKm * 1000) : null;
   let actualFinishSecs: number | null = null;
 
   // Post-race extras (coach analysis, full results, notes) + the completion actuals
@@ -181,8 +185,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // carried into the race (the latest snapshot on/before race day)? Marathon-only
   // today; hides gracefully when no snapshot pre-dates the race.
   let predictedVsActual: { predicted: number; actual: number } | null = null;
-  if (isPast && predictable && raceDate && actualFinishSecs != null) {
-    const predictedAtRace = await getPredictedAtRace(raceDate);
+  if (isPast && bannerDistanceM != null && raceDate && actualFinishSecs != null) {
+    const predictedAtRace = await getPredictedAtRace(raceDate, bannerDistanceM);
     if (predictedAtRace != null) predictedVsActual = { predicted: predictedAtRace, actual: actualFinishSecs };
   }
 
@@ -399,7 +403,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         {/* Predicted finish trajectory — the campaign scoreboard, stacked above the
             fitness/form readiness (§6C). Marathon-only today; streams independently.
             FUTURE (multi-distance): a distance-parameterised loader replaces this. */}
-        {!isPast && predictable && (
+        {!isPast && isMarathonRace && (
           <div className="mt-[24px]">
             <Suspense fallback={null}>
               <TargetTrajectoryAsync />
