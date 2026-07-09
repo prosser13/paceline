@@ -402,10 +402,12 @@ export async function pushWorkoutEvent(args: {
     description: args.description,
   };
 
+  // POST /events and PUT /events/{id} both take a SINGLE event object. (The array
+  // form is only for POST /events/bulk — sending an array here is a JSON parse error.)
   const isUpdate = Boolean(args.eventId);
   const url    = isUpdate ? `${BASE}/events/${args.eventId}` : `${BASE}/events`;
   const method = isUpdate ? 'PUT' : 'POST';
-  const body   = isUpdate ? JSON.stringify(event) : JSON.stringify([event]);
+  const body   = JSON.stringify(event);
 
   const res = await timedFetch(url, { method, headers: authHeaders(), body }, { label: 'intervals' });
   if (!res) throw new Error(`intervals.icu workout ${method} unreachable (timeout)`);

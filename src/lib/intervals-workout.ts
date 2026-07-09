@@ -55,6 +55,16 @@ function segLine(seg: NormSegment, thresholdSec: number, indent = ''): string | 
   return `${indent}- ${distLabel(km)} ${secToPace(fast)}-${secToPace(slow)}/km Pace`;
 }
 
+// Fallback for a run with no structured segments (just a distance, maybe a target
+// pace): a single step at the target pace as a band, or distance-only when there's
+// no pace signal at all (an untargeted easy run — the watch just shows the distance).
+export function easyRunText(distanceKm: number, targetSec: number | null, thresholdSec: number): string | null {
+  if (!(distanceKm > 0)) return null;
+  if (targetSec == null) return `- ${distLabel(distanceKm)}`;
+  const [fast, slow] = paceBandSec(targetSec, thresholdSec);
+  return `- ${distLabel(distanceKm)} ${secToPace(fast)}-${secToPace(slow)}/km Pace`;
+}
+
 // Build the full intervals.icu workout description from a normalised structure.
 // Returns null when there's nothing runnable to emit.
 export function normalizedToWorkoutText(steps: NormStep[], thresholdSec: number): string | null {
