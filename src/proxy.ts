@@ -35,6 +35,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 }
 
 export const config = {
-  // Run on everything except Next internals and static assets.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
+  // Run on everything except Next internals, static assets, and /api routes. API
+  // routes carry their own auth (cron/agent bearer tokens, Strava webhook, or an
+  // explicit getCurrentUser), so the session-refresh round-trip here is pure
+  // overhead on every webhook/cron hit.
+  matcher: ['/((?!api/|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'],
 };

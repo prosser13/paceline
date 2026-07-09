@@ -1,6 +1,6 @@
-// Streams the FitnessChart independently — see FormMeterAsync for the rationale.
-// Shares loadWellness()'s cached result with FormMeterAsync, so the two cards
-// cost a single intervals.icu fetch per request.
+// Streams the FitnessChart independently so a slow intervals.icu fetch can't hold
+// up the agenda. Shares loadWellness()'s cached result with the other wellness
+// cards, so they cost a single intervals.icu fetch per request.
 import { FitnessChart } from '@/components/dashboard-graphics';
 import { loadWellness } from './data';
 

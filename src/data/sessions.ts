@@ -47,7 +47,6 @@ export interface PlanSession {
 }
 
 export const PLAN_START_DATE = '2026-08-17';
-export const MARATHON_DATE   = '2026-11-08';
 
 export function calcScheduledDate(week: number, day: number): Date {
   // Work entirely in UTC: PLAN_START_DATE parses as UTC midnight and we advance

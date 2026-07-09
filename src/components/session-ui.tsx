@@ -285,9 +285,8 @@ export function WorkoutDetail({ steps, variant = 'row', isRace = false }: { step
   if (!steps.length) return null;
   // Clean, header-less segment list on the card's paper background — a left
   // border indents it like the mobile prototype's "Session detail" rows.
-  // The card variant is hero-only (via CollapsibleSession) — break it out of
-  // the hero body padding so its left rail sits at the card edge, matching the
-  // tomorrow run/strength/yoga row details.
+  // The card variant is hero-only — break it out of the hero body padding so its
+  // left rail sits at the card edge, matching the tomorrow row details.
   const wrap = variant === 'row'
     ? `${DETAIL_WRAP} py-[2px]`
     : '-mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]';

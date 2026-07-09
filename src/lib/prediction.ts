@@ -95,7 +95,6 @@ export interface MarathonPrediction {
   predictedSeconds: number | null;
   signals: PredictionSignal[];   // every signal that contributed, weight-sorted
 }
-export type RacePrediction = MarathonPrediction;
 
 // Predicted time (seconds) at a distance for a given fitness VDOT, or null.
 export function predictedTimeAt(vdot: number | null, distanceM: number): number | null {
@@ -228,10 +227,6 @@ export function predictMarathon(inputs: PredictionInputs): MarathonPrediction {
   raw.sort((a, b) => b.weight - a.weight);
   return { vdot, predictedSeconds, signals: raw };
 }
-
-// Marathon prediction is just the race prediction read at 42.195 km. Alias kept so
-// existing callers (getCurrentPrediction) don't change.
-export const predictRace = predictMarathon;
 
 // ── small formatters (shared by the card + benchmarks) ────────
 
