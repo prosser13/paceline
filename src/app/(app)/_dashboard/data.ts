@@ -113,7 +113,7 @@ export interface DashboardData {
   raceDistanceKm: number | null;   // goal race distance, from its /races/<slug> guide
 
   // Next-race card: nearest upcoming RACE session (incl. tune-ups), with its A/B/C priority.
-  nextRace: { name: string; daysTo: number | null; dateStr: string | null; priority: string | null; km: number | null } | null;
+  nextRace: { name: string; daysTo: number | null; dateStr: string | null; priority: string | null; km: number | null; raceDateISO: string | null; raceSlug: string | null } | null;
 
   weekPlannedKm: number | null;
   weekDoneKm: number;
@@ -411,9 +411,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
       dateStr: fmtWeekdayDate(nrs.scheduled_date),
       priority: nrs.priority ?? null,
       km: nrs.distance_km ?? null,
+      raceDateISO: nrs.scheduled_date,
+      // The goal-race guide (e.g. dragon-50) has a location but no hard-coded date,
+      // so pass its slug when this session IS the goal race (same date). Tune-ups
+      // with dated guides resolve by date instead (raceSlug null).
+      raceSlug: raceRow?.race_date && raceRow.race_date === nrs.scheduled_date ? (raceRow.slug ?? null) : null,
     };
   } else if (raceName) {
-    nextRace = { name: raceName, daysTo: daysToRace, dateStr: raceDateStr, priority: null, km: null };
+    nextRace = { name: raceName, daysTo: daysToRace, dateStr: raceDateStr, priority: null, km: null, raceDateISO: raceRow?.race_date ?? null, raceSlug: raceRow?.slug ?? null };
   }
 
   // Per-session completion: which of today's sessions are logged, plus each
