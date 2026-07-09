@@ -2,6 +2,7 @@
 // derived from the target finish time (see data/races/pacing.ts).
 
 import type { PacingRow } from '@/data/races/pacing';
+import { CheckpointLabel } from './CheckpointLabel';
 
 export default function PacingTable({
   rows, targetTime, note,
@@ -31,14 +32,9 @@ export default function PacingTable({
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={i} className="border-t border-fog/70">
-                <td className="px-[16px] py-[8px] text-ink font-semibold">
-                  {r.name}
-                  {r.dropBag && (
-                    <span className="ml-[7px] font-mono text-[9px] uppercase tracking-[.06em] text-marine border border-marine/40 rounded-[3px] px-[4px] py-[1px]">
-                      drop
-                    </span>
-                  )}
+              <tr key={i} className="border-t border-fog/70 align-top">
+                <td className="px-[16px] py-[8px]">
+                  <CheckpointLabel name={r.name} dropBag={r.dropBag} dropLabel="drop" />
                 </td>
                 <td className="px-[10px] py-[8px] text-right font-mono text-stone tabular-nums">{r.distanceKm}</td>
                 <td className="px-[10px] py-[8px] text-right font-mono text-stone tabular-nums">{r.legPace ?? '—'}</td>
