@@ -56,6 +56,13 @@ suggestion (detraining/illness) needs a higher bar — gap ≥ 5 s/km sustained 
 weekly checks — so one rough patch never slows the plan down. (The morning/evening coach already
 handles acute fatigue day-to-day; threshold is the long-term setting.)
 
+*Implemented 9 Jul 2026:* `slowerConfirmed()` — the streak needs 3 consecutive weekly checks at
+gap ≤ −5 s, all within 35 days, with **no threshold change in between** (a change resets it, since
+the gap recomputes against the new setting). Once confirmed, the slower suggestion passes through
+the same fresh-evidence + cooldown guardrails and the same 3 s step cap, and lands in the normal
+Apply/Dismiss flow. Under-5 s slower gaps stay watch-only; confirmation progress is counted out
+loud in the weekly commentary ("Slower confirmation week 2 of 3").
+
 Net effect: the fastest possible progression is 3 s/km every 3 weeks ≈ 1 s/km per week — brisk
 enough to bank a real fitness ramp across an 18-week block (≈ 18 s/km end to end), slow enough
 that no single result ever moves the plan more than one small notch.
