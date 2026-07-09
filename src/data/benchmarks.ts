@@ -13,8 +13,8 @@ import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
 import {
   predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
-  predictedTimeAt, PREDICTABLE_DISTANCES_M,
-  type MarathonPrediction, type PredictionInputs,
+  predictedTimeAt, PREDICTABLE_DISTANCES_M, enduranceScore, enduranceMultiplier,
+  type MarathonPrediction, type PredictionInputs, type EnduranceReadiness,
 } from '@/lib/prediction';
 import {
   riegelPrediction, tandaPrediction, cardiacPrediction, TANDA_WINDOW_DAYS,
@@ -110,27 +110,16 @@ export async function listLongRunsSince(since: string): Promise<LongRun[]> {
   }).sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function median(xs: number[]): number | null {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
 // ── prediction assembly ───────────────────────────────────────
 
-// Build the engine inputs from the last 12 months of races + the recent long-run
-// window + current threshold pace.
+// Build the engine inputs from the last 12 months of races + current threshold
+// pace. (The long-run NGP signal was removed from the blend — long-run endurance
+// enters through the endurance adjustment instead.)
 export async function buildPredictionInputs(asOf: string): Promise<PredictionInputs> {
-  const [thresholdStr, races, longRuns] = await Promise.all([
+  const [thresholdStr, races] = await Promise.all([
     getThresholdPace(),
     listRaceResultsSince(addDays(asOf, -365)),
-    listLongRunsSince(addDays(asOf, -28)),
   ]);
-
-  const recentLongNgps = longRuns.map(l => l.ngpMinKm);
-  const longRunNgp = median(recentLongNgps);
-  const longRunDate = longRuns.length ? longRuns[longRuns.length - 1].date : null;
 
   return {
     asOf,
@@ -140,13 +129,59 @@ export async function buildPredictionInputs(asOf: string): Promise<PredictionInp
       distanceM: r.distanceKm * 1000, timeSeconds: r.seconds, date: r.date,
       label: `${raceLabel(r.distanceKm)} ${fmtHms(r.seconds)} · ${shortDate(r.date)}`,
     })),
-    longRunNgpMinKm: longRunNgp,
-    longRunDate,
   };
 }
 
 export async function getCurrentPrediction(asOf: string): Promise<MarathonPrediction> {
   return predictMarathon(await buildPredictionInputs(asOf));
+}
+
+// ── endurance readiness (feeds the HM/marathon adjustment) ────
+
+// Trailing 8-week run volume + longest run, vs the goal block's own peak planned
+// week. Reads the raw activities log (planned + off-plan alike, same source the
+// Tanda tile uses) so unplanned volume still counts. Falls back to a 90 km/wk
+// anchor when there's no goal plan to anchor to.
+const ENDURANCE_WINDOW_DAYS = 56;
+const FALLBACK_ANCHOR_KM = 90;
+
+export async function getEnduranceReadiness(asOf: string): Promise<EnduranceReadiness> {
+  const goal = await getGoalMarathon(asOf);
+
+  const [runs, anchorWeeklyKm] = await Promise.all([
+    listRunTrainingSince(addDays(asOf, -ENDURANCE_WINDOW_DAYS)),
+    goal ? peakPlannedWeekKm(goal.id) : Promise.resolve(null),
+  ]);
+
+  const totalKm = runs.reduce((a, r) => a + r.km, 0);
+  const avgWeeklyKm = totalKm / (ENDURANCE_WINDOW_DAYS / 7);
+  const longestKm = runs.reduce((a, r) => Math.max(a, r.km), 0);
+  const anchor = anchorWeeklyKm ?? FALLBACK_ANCHOR_KM;
+
+  return {
+    score: enduranceScore(avgWeeklyKm, longestKm, anchor),
+    avgWeeklyKm: Math.round(avgWeeklyKm),
+    longestKm: Math.round(longestKm * 10) / 10,
+    anchorWeeklyKm: Math.round(anchor),
+  };
+}
+
+// The goal plan's biggest planned run week (km) — the "fully ready" volume anchor.
+async function peakPlannedWeekKm(planId: number): Promise<number | null> {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('scheduled_date, distance_km, session_type, activity_type')
+    .eq('plan_id', planId);
+  const weeks = new Map<string, number>();
+  for (const s of data ?? []) {
+    if (s.activity_type === 'cycling' || ['STRENGTH', 'CORE', 'YOGA', 'REST'].includes(s.session_type as string)) continue;
+    const km = s.distance_km != null ? Number(s.distance_km) : 0;
+    if (!(km > 0) || !s.scheduled_date) continue;
+    const wk = isoWeekStart(s.scheduled_date as string);
+    weeks.set(wk, (weeks.get(wk) ?? 0) + km);
+  }
+  const peak = Math.max(0, ...weeks.values());
+  return peak > 0 ? peak : null;
 }
 
 // ── experimental predictors (Benchmarks tiles) ────────────────
@@ -268,11 +303,15 @@ function snapshotVdot(s: { vdot: number | null; predicted_seconds: number | null
 // — never throws into the caller.
 export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
   try {
-    const inputs = await buildPredictionInputs(asOf);
+    const [inputs, readiness] = await Promise.all([buildPredictionInputs(asOf), getEnduranceReadiness(asOf)]);
     const pred = predictMarathon(inputs);
+    // predicted_seconds is the marathon prediction OF RECORD → endurance-adjusted
+    // (what the trajectory card shows); vdot stays the raw fitness score.
+    const adjusted = pred.predictedSeconds != null
+      ? Math.round(pred.predictedSeconds * enduranceMultiplier(MARATHON_M, readiness.score)) : null;
     await supabaseAdmin.from('benchmark_snapshots').upsert({
       week_start: isoWeekStart(asOf),
-      predicted_seconds: pred.predictedSeconds,
+      predicted_seconds: adjusted,
       threshold_min_km: inputs.thresholdMinKm,
       vdot: pred.vdot,
       computed_at: new Date().toISOString(),
@@ -281,8 +320,10 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
 }
 
 // The predicted finish we were carrying into a race, at that race's distance — the
-// latest weekly snapshot on/before the race date, read at `distanceM` via its VDOT.
-// Powers the post-race "predicted vs actual" header for any distance.
+// latest weekly snapshot on/before the race date. For a marathon the stored
+// predicted_seconds IS the number of record (endurance-adjusted at the time);
+// other distances derive from the snapshot's fitness VDOT. Powers the post-race
+// "predicted vs actual" header for any distance.
 export async function getPredictedAtRace(raceDate: string, distanceM: number): Promise<number | null> {
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
@@ -293,6 +334,7 @@ export async function getPredictedAtRace(raceDate: string, distanceM: number): P
     .limit(1)
     .maybeSingle();
   if (!data) return null;
+  if (Math.abs(distanceM - MARATHON_M) < 400 && data.predicted_seconds != null) return Number(data.predicted_seconds);
   return predictedTimeAt(snapshotVdot(data), distanceM);
 }
 
@@ -301,7 +343,8 @@ export async function getPredictedAtRace(raceDate: string, distanceM: number): P
 export interface PredictedRace {
   distanceM: number;
   label: string;                 // "5K" | "10K" | "HM" | "Marathon"
-  seconds: number | null;        // predicted time at this distance now
+  seconds: number | null;        // predicted time NOW — endurance-adjusted for HM/marathon
+  rawSeconds: number | null;     // unadjusted VDOT-equivalent (differs only when adjusted)
   paceSecPerKm: number | null;
   deltaSec: { d7: number | null; d30: number | null; d90: number | null };  // vs look-back (neg = faster)
 }
@@ -314,13 +357,16 @@ function distanceLabel(m: number): string {
   return `${Math.round(m / 1000)}K`;
 }
 
-// The predicted time at each canonical distance for the current fitness VDOT, plus
-// the change since 7 / 30 / 90 days ago (from the nearest snapshot on/before each
-// look-back date). Deltas are null until a snapshot that old exists.
+// The predicted time at each canonical distance for the current fitness VDOT —
+// endurance-adjusted for HM/marathon — plus the change since 7 / 30 / 90 days ago
+// (from the nearest snapshot on/before each look-back date). Past times get the
+// CURRENT endurance multiplier so the deltas isolate fitness change, not readiness
+// drift. Deltas are null until a snapshot that old exists.
 export async function getPredictedRaces(asOf: string): Promise<PredictedRace[]> {
-  const [prediction, snapshots] = await Promise.all([
+  const [prediction, snapshots, readiness] = await Promise.all([
     getCurrentPrediction(asOf),
     listBenchmarkSnapshotsSince(addDays(asOf, -100)),
+    getEnduranceReadiness(asOf),
   ]);
   const nowVdot = prediction.vdot;
 
@@ -339,15 +385,19 @@ export async function getPredictedRaces(asOf: string): Promise<PredictedRace[]> 
   const v90 = vdotOnOrBefore(addDays(asOf, -90));
 
   return PREDICTABLE_DISTANCES_M.map(distanceM => {
-    const seconds = predictedTimeAt(nowVdot, distanceM);
+    const mult = enduranceMultiplier(distanceM, readiness.score);
+    const adjust = (secs: number | null): number | null => secs != null ? Math.round(secs * mult) : null;
+    const rawSeconds = predictedTimeAt(nowVdot, distanceM);
+    const seconds = adjust(rawSeconds);
     const delta = (pastVdot: number | null): number | null => {
-      const past = predictedTimeAt(pastVdot, distanceM);
+      const past = adjust(predictedTimeAt(pastVdot, distanceM));
       return seconds != null && past != null ? seconds - past : null;
     };
     return {
       distanceM,
       label: distanceLabel(distanceM),
       seconds,
+      rawSeconds,
       paceSecPerKm: seconds != null ? Math.round(seconds / (distanceM / 1000)) : null,
       deltaSec: { d7: delta(v7), d30: delta(v30), d90: delta(v90) },
     };
@@ -451,10 +501,11 @@ const VERDICT_TOLERANCE_S = 20;   // gap change smaller than this per 3wk reads 
 
 export async function loadTrajectory(asOf: string): Promise<Trajectory> {
   const twelveWeeksAgo = isoWeekStart(addDays(asOf, -84));
-  const [prediction, goal, snapshots] = await Promise.all([
+  const [prediction, goal, snapshots, readiness] = await Promise.all([
     getCurrentPrediction(asOf),
     getGoalMarathon(asOf),
     listBenchmarkSnapshotsSince(twelveWeeksAgo),
+    getEnduranceReadiness(asOf),
   ]);
 
   // Phase bands come from the GOAL MARATHON's own plan weeks (it has a dedicated
@@ -467,7 +518,12 @@ export async function loadTrajectory(asOf: string): Promise<Trajectory> {
   const phaseBands = mergePhaseBands(phaseWeeks);
   const planStart = phaseWeeks[0]?.date_from ?? null;
 
-  const predictedSeconds = prediction.predictedSeconds;
+  // The scoreboard number is endurance-adjusted — a marathon estimate for the
+  // athlete as trained TODAY, which improves as the block's volume goes in (the
+  // stored snapshots are adjusted the same way, so the trend line is consistent).
+  const predictedSeconds = prediction.predictedSeconds != null
+    ? Math.round(prediction.predictedSeconds * enduranceMultiplier(MARATHON_M, readiness.score))
+    : null;
   const targetSeconds = goal?.targetSeconds ?? null;
   const gapSeconds = predictedSeconds != null && targetSeconds != null ? predictedSeconds - targetSeconds : null;
 

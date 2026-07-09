@@ -93,6 +93,12 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
           )}
           <DeltaChip deltaSec={d.predictedDeltaSec} kind="time" />
         </div>
+        {d.rawPredictedSeconds != null && d.predictedSeconds != null && d.predictedSeconds !== d.rawPredictedSeconds && (
+          <p className="text-[11.5px] text-stone mt-[6px]">
+            Adjusted for current endurance training — {d.endurance.avgWeeklyKm} km/wk vs {d.endurance.anchorWeeklyKm} at the block’s peak
+            (speed alone implies <b>{fmtHms(d.rawPredictedSeconds)}</b>). The gap closes as the block’s volume goes in.
+          </p>
+        )}
         {d.signals.length > 0 && (
           <div className="mt-[14px] overflow-x-auto">
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
@@ -142,7 +148,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
               ))}
             </tbody>
           </table>
-          <p className="text-[11.5px] text-stone mt-[8px]">From your current fitness (one blended VDOT read at each distance). Δ = change since 7 / 30 / 90 days ago — <b style={{ color: 'var(--color-ready)' }}>▼ faster</b> is progress; the longer look-backs fill in as weekly history accrues.</p>
+          <p className="text-[11.5px] text-stone mt-[8px]">From your current fitness (one blended VDOT read at each distance); HM &amp; marathon are endurance-adjusted for current training volume. Δ = change since 7 / 30 / 90 days ago — <b style={{ color: 'var(--color-ready)' }}>▼ faster</b> is progress; the longer look-backs fill in as weekly history accrues.</p>
         </div>
       </Card>
 
