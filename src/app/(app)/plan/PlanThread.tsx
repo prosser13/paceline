@@ -445,7 +445,9 @@ export default function PlanThread({
             <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
           </div>
           {week.purpose && <div className="text-[12px] font-semibold text-stone" style={{ marginBottom: '11px' }}>{week.purpose}</div>}
-          <div className="flex items-end gap-[18px]">
+          {/* Stack the stats above the day graph on mobile so the graph gets the
+              full width; side-by-side from md up. */}
+          <div className="flex flex-col gap-[12px] md:flex-row md:items-end md:gap-[18px]">
             <div className="flex shrink-0 gap-[16px]">
               {tot.map(([v, u]) => (
                 <div key={u}>
@@ -454,7 +456,7 @@ export default function PlanThread({
                 </div>
               ))}
             </div>
-            <div className="flex gap-[5px] ml-auto" style={{ flex: 1, maxWidth: '300px' }}>
+            <div className="flex gap-[5px] w-full md:flex-1 md:max-w-[300px] md:ml-auto">
               {weekDays.map(date => {
                 const mins = dayMins[date] ?? 0;
                 const dd = new Date(date + 'T00:00:00');
