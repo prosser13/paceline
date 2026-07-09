@@ -145,11 +145,13 @@ export async function listRecentRaces(
   });
 }
 
-// Every session in schedule order (plan page).
-export async function listAllSessions() {
+// One plan's sessions in schedule order — the plan page only ever renders a single
+// plan, so scope the read to it rather than fetching every plan's history.
+export async function listSessionsForPlan(planId: number) {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('plan_id', planId)
     .order('scheduled_date')
     .order('am_pm');
   return data ?? [];
@@ -348,11 +350,22 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
   return data ?? [];
 }
 
-// All completions with display fields keyed by plan_session_id (plan page).
-export async function listAllCompleted() {
+const COMPLETED_DISPLAY_COLS = 'id, plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, strava_activity_id, merged_strava_ids';
+
+// Completions for one plan's sessions (plan page) — display fields keyed by
+// plan_session_id, scoped so the page (and its client payload) don't carry every
+// completion in history. Two steps (session ids → completions) keeps the shape flat.
+export async function listCompletedForPlan(planId: number) {
+  const { data: sess } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id')
+    .eq('plan_id', planId);
+  const ids = (sess ?? []).map(s => s.id as string);
+  if (!ids.length) return [];
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, strava_activity_id, merged_strava_ids');
+    .select(COMPLETED_DISPLAY_COLS)
+    .in('plan_session_id', ids);
   return data ?? [];
 }
 

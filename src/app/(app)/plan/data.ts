@@ -4,7 +4,7 @@
 
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
-import { listAllSessions, listAllCompleted } from '@/data/plan-sessions';
+import { listSessionsForPlan, listCompletedForPlan } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, getActivityNamesByStravaIds, type OffPlanActivity } from '@/data/activities';
 import { listUserMatches } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
@@ -120,14 +120,31 @@ function eachDate(from: string, to: string): string[] {
   return out;
 }
 
+// Which plan the page views: the ?plan=<slug> match if given, else the active plan
+// (the one whose date span contains today). Mirrors the withStatus/viewPlan logic
+// below so wave 2 can scope its reads before that block runs.
+function resolveViewPlanId(
+  planRows: Omit<PlanRow, 'status'>[], planParam: string | undefined, todayStr: string,
+): number | null {
+  const statusOf = (p: Omit<PlanRow, 'status'>): PlanRow['status'] => {
+    if (p.end_date && p.end_date < todayStr) return 'archived';
+    if (p.start_date && p.end_date && p.start_date <= todayStr && todayStr <= p.end_date) return 'active';
+    return 'future';
+  };
+  const active = planRows.find(p => statusOf(p) === 'active') ?? null;
+  const selected = planParam ? planRows.find(p => p.slug === planParam) ?? null : null;
+  const viewPlan = selected ?? active;
+  return viewPlan ? (viewPlan.id as number) : null;
+}
+
 export async function loadPlanData(planParam: string | undefined): Promise<PlanData> {
   const todayStr = todayISO();
 
-  const [sessions, weeks, thresholdPaceRaw, completed, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
-    listAllSessions(),
+  // Wave 1: everything not scoped to a single plan (plans list resolves which plan
+  // the page views). Weeks are tiny (~1 row/week) so we keep the full read.
+  const [weeks, thresholdPaceRaw, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
     listWeeksByNumber(),
     getThresholdPace(),
-    listAllCompleted(),
     listPaceZones(),
     listHrZones(),
     listPowerZones(),
@@ -136,6 +153,14 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
     listUserMatches(),
     getFuelPlanForGoalBlock(todayStr),
     listFuelProducts(),
+  ]);
+
+  // Resolve the viewed plan up front so wave 2 only fetches its sessions +
+  // completions, instead of every plan's history (which then shipped to the client).
+  const viewPlanId = resolveViewPlanId(plans as Omit<PlanRow, 'status'>[], planParam, todayStr);
+  const [sessions, completed] = await Promise.all([
+    viewPlanId != null ? listSessionsForPlan(viewPlanId) : Promise.resolve([]),
+    viewPlanId != null ? listCompletedForPlan(viewPlanId) : Promise.resolve([]),
   ]);
 
   const thresholdPace = thresholdPaceRaw ?? '3:40';
