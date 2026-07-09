@@ -199,6 +199,23 @@ export async function getEarliestSessionDate(): Promise<string | null> {
   return (data?.scheduled_date as string | null) ?? null;
 }
 
+// Upcoming RUN sessions in [from, to] for the Garmin workout sync, with the fields
+// the translator + event push need. Filtered to actual runs: activity_type is
+// 'running' on strength rows too (a data quirk), so session_type must also exclude
+// the non-run and race types — you follow a structured run, you don't follow a race.
+export async function listUpcomingRunsForSync(from: string, to: string) {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at')
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', to)
+    .eq('activity_type', 'running')
+    .not('session_type', 'in', '("STRENGTH","CORE","YOGA","REST","RACE")')
+    .order('scheduled_date', { ascending: true })
+    .order('am_pm', { ascending: true });
+  return data ?? [];
+}
+
 // Minimal session fields for Strava activity matching.
 export async function listSessionsForMatching() {
   const { data } = await supabaseAdmin

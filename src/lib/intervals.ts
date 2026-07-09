@@ -383,6 +383,42 @@ export async function syncActivityRpe(windowDays = WELLNESS_SYNC_WINDOW_DAYS): P
   return { ok: true, updated };
 }
 
+// Create or update an intervals.icu WORKOUT calendar event from a plain-text
+// workout description (its workout-builder syntax). intervals.icu parses the
+// description into a structured workout and, when Garmin Connect is linked, pushes
+// today/tomorrow's events to the watch with pace targets. Pass an eventId to update
+// in place (PUT), else a new event is created (POST). Returns the event id.
+export async function pushWorkoutEvent(args: {
+  eventId?: string | null;
+  dateLocal: string;      // yyyy-mm-dd
+  name: string;
+  description: string;
+}): Promise<string> {
+  const event: Record<string, unknown> = {
+    category: 'WORKOUT',
+    type: 'Run',
+    start_date_local: `${args.dateLocal}T00:00:00`,
+    name: args.name,
+    description: args.description,
+  };
+
+  const isUpdate = Boolean(args.eventId);
+  const url    = isUpdate ? `${BASE}/events/${args.eventId}` : `${BASE}/events`;
+  const method = isUpdate ? 'PUT' : 'POST';
+  const body   = isUpdate ? JSON.stringify(event) : JSON.stringify([event]);
+
+  const res = await timedFetch(url, { method, headers: authHeaders(), body }, { label: 'intervals' });
+  if (!res) throw new Error(`intervals.icu workout ${method} unreachable (timeout)`);
+  if (!res.ok) {
+    const text = (await res.text().catch(() => '')).slice(0, 160);
+    throw new Error(`intervals.icu ${method} ${res.status}${text ? ` — ${text}` : ''}`);
+  }
+
+  const data = await res.json();
+  const id = Array.isArray(data) ? data[0]?.id : data?.id;
+  return String(id);
+}
+
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
   const res = await timedFetch(`${BASE}/events/${eventId}`, {
     method: 'DELETE',

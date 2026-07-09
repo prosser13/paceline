@@ -23,6 +23,7 @@ import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivere
 import { getCoachingPrefs } from '@/data/coaching';
 import { getLatestWellnessDay, listRecentWellnessDays, type WellnessDay } from '@/data/wellness-days';
 import { syncWellnessDays } from '@/lib/intervals';
+import { syncUpcomingRunWorkouts } from '@/lib/intervals-sync';
 import { generateMorningBriefing } from '@/lib/coach-generate';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
@@ -118,6 +119,12 @@ async function handle(request: Request): Promise<Response> {
   const forced = params.get('force') === '1';
   const isFinal = params.get('final') === '1';
   const { date: forDate, hhmm: londonHHMM } = londonParts();
+
+  // Push the next few days' planned runs to the watch (via intervals.icu → Garmin).
+  // Best-effort and idempotent (skips sessions already synced today), so it's safe
+  // to run on every morning fire and never blocks or fails the briefing. No-op
+  // unless INTERVALS_WORKOUT_SYNC is enabled.
+  await syncUpcomingRunWorkouts().catch(() => { /* best-effort; never fail the briefing */ });
 
   const prefs = await getCoachingPrefs();
   if (prefs?.morning_briefing === false && !forced) {
