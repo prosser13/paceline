@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { todayISO } from '@/lib/dates';
-import { getThresholdPace, setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
+import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 import { danielsVdot, vdotToThresholdPaceMinKm } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
@@ -230,9 +230,12 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     const { data: existing } = await supabaseAdmin.from('threshold_checks').select('id').eq('week_start', weekStart).limit(1).maybeSingle();
     if (existing) return;
 
-    const thrStr = await getThresholdPace();
-    if (!thrStr) return;
-    const currentMinKm = parseThresholdPace(thrStr);
+    // Read the threshold fresh, not via the tag-cached getThresholdPace(): a check
+    // firing shortly after an apply in a warm process would otherwise see the
+    // pre-change value and log it as a phantom "manual change" (the mutations in
+    // this file use freshThresholdMinKm for the same reason).
+    const currentMinKm = await freshThresholdMinKm();
+    if (currentMinKm == null) return;
 
     const { estimateMinKm, signals, newestEvidenceDate } = await estimateThreshold(today, currentMinKm);
     const evidenceText = signals.length

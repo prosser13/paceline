@@ -5,15 +5,22 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 // Record that we alerted about `kind` on `today` (London date). Returns true only
 // the FIRST call per day — the caller sends the Telegram alert only when true.
+// Atomic so two concurrent scheduled fires can't both claim (and double-alert): the
+// conditional UPDATE claims an existing row for the day, and the unique constraint
+// on `kind` makes the first-ever INSERT the sole winner (the loser 23505s → false).
 export async function claimDailyAlert(kind: string, today: string): Promise<boolean> {
-  const { data } = await supabaseAdmin
+  const nowIso = new Date().toISOString();
+  const { data: claimed } = await supabaseAdmin
     .from('sync_alerts')
-    .select('alerted_date')
+    .update({ alerted_date: today, updated_at: nowIso })
     .eq('kind', kind)
-    .maybeSingle();
-  if ((data?.alerted_date as string | undefined) === today) return false;
-  await supabaseAdmin
+    .neq('alerted_date', today)
+    .select('kind');
+  if (claimed && claimed.length) return true;   // won the update on an existing row
+
+  // No row updated: either already claimed today, or the row doesn't exist yet.
+  const { error } = await supabaseAdmin
     .from('sync_alerts')
-    .upsert({ kind, alerted_date: today, updated_at: new Date().toISOString() }, { onConflict: 'kind' });
-  return true;
+    .insert({ kind, alerted_date: today, updated_at: nowIso });
+  return !error;   // inserted the first row → we claim; unique-violation → already claimed
 }

@@ -190,9 +190,16 @@ export function sleepSummary(days: WellnessDay[], target = SLEEP.targetSecs): Sl
   const avgSecs = secsVals.length ? mean(secsVals) : null;
   const balanceSecs = secsVals.length ? secsVals.reduce((a, s) => a + (s - target), 0) : null;
 
+  // `last` is the most recent day WITH sleep data, which can be several days old if
+  // the watch didn't sync. Only treat it as "last night" (for the short-night nudge)
+  // when it's within a day of the newest day in the window.
+  const asOfDate = days.length ? days[days.length - 1].date : null;
+  const lastIsRecent = last != null && asOfDate != null &&
+    (Date.parse(asOfDate) - Date.parse(last.date)) / 86_400_000 <= 1.5;
+
   let tone: Flag = 'neutral'; let nudge = 'Not enough nights logged yet.';
   if (avgSecs != null && last?.sleep_secs != null) {
-    const shortLast = last.sleep_secs < SLEEP.shortNight;
+    const shortLast = lastIsRecent && last.sleep_secs < SLEEP.shortNight;
     const weakAvg = avgSecs < SLEEP.weakAvg;
     if (shortLast || weakAvg) {
       tone = 'watch';
