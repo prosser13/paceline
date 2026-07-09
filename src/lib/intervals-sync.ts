@@ -13,8 +13,8 @@ import { todayISO, APP_TZ } from '@/lib/dates';
 import { getThresholdPace, listPaceZones } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { listUpcomingRunsForSync, updatePlanSession } from '@/data/plan-sessions';
-import { normalizeStructure, paceToSeconds } from '@/lib/plan-structure';
-import { normalizedToWorkoutText, easyRunText } from '@/lib/intervals-workout';
+import { paceToSeconds } from '@/lib/plan-structure';
+import { structureToWorkoutText, easyRunText } from '@/lib/intervals-workout';
 
 // Default pace zone for a run that carries no structure and no target pace, keyed
 // by session type. Mirrors the app's own convention (src/data/sessions.ts): a
@@ -96,7 +96,6 @@ export async function syncUpcomingRunWorkouts(days = 3, force = false): Promise<
       continue;
     }
 
-    const steps = normalizeStructure(s.structure as unknown[] | null, zones);
     // Fall back to a single step for runs with no structured segments, so every run
     // reaches the watch with a pace. An explicit target pace becomes a point target;
     // otherwise use the session type's default zone WINDOW (recovery→Z1, else easy
@@ -108,7 +107,7 @@ export async function syncUpcomingRunWorkouts(days = 3, force = false): Promise<
       const z = zones[zKey];
       if (z) { minPace = z.paceMin; maxPace = z.paceMax; }
     }
-    const text = normalizedToWorkoutText(steps, thresholdSec)
+    const text = structureToWorkoutText(s.structure, zones, thresholdSec)
       ?? easyRunText(s.distance_km != null ? Number(s.distance_km) : 0, minPace, maxPace, thresholdSec);
 
     try {

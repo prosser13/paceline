@@ -3,20 +3,24 @@
 // workout and, when Garmin Connect is linked, pushes today/tomorrow's planned
 // workouts to the watch with pace targets.
 //
-// We work off the NORMALISED structure (src/lib/plan-structure normalizeStructure),
-// not the raw jsonb: that one place already handles both the legacy
-// {phase,pace_per_km,duration_mins} and new {type,zone,distance_km} formats,
-// derives real distances, resolves zones→paces and applies the ultra→Z1 rule — so
-// the watch workout matches exactly what the app displays.
+// We build off BOTH the normalised structure (src/lib/plan-structure
+// normalizeStructure) and the raw phases:
+//  - the normalised segment gives the real distance and the ENFORCED pace target
+//    (the zone window / authored range / a scaled band), exactly as the app shows;
+//  - the raw phase gives the coach's AUTHORED "aim" pace, which we surface as an
+//    on-watch prompt when it's a specific single target that the enforced range
+//    doesn't already spell out (e.g. an "ultra pace" leg that maps to a wide Z1
+//    window, or marathon pace as a tight band around an exact number).
 //
-// Target pace per step:
-//  - a real window (a zone, or an authored range) → use it verbatim, exactly as the
-//    app/site shows it (e.g. Z2 → 4:10–4:54). Zones already scale with pace (Z1 is
-//    ~60 s wide, Z4 only ~12 s), so there's no need to synthesise a band.
+// Pace target per step:
+//  - a real window (a zone, or an authored range) → used verbatim (Z2 → 4:10–4:54);
+//    zones already scale with pace, so no synthetic band.
 //  - a single point target (marathon pace, a stride) → a pace-scaled BAND: tight
-//    when fast, wide when slow, anchored so threshold ≈ ±5 s/km and 5:00/km ≈ ±30.
+//    when fast, wide when slow (threshold ≈ ±5 s/km, 5:00/km ≈ ±30).
+// On-watch text (via the `<!>` prompt separator): the authored aim pace, shown only
+// when it's a specific single pace (so zone/range runs aren't cluttered).
 
-import { paceToSeconds, type NormStep, type NormSegment } from '@/lib/plan-structure';
+import { normalizeStructure, paceToSeconds, type ZoneMap, type NormStep, type NormSegment } from '@/lib/plan-structure';
 
 // "m:ss" ⟵ seconds/km.
 export function secToPace(sec: number): string {
@@ -64,38 +68,86 @@ function paceRangeToken(
   return `${secToPace(fast)}-${secToPace(slow)}`;
 }
 
-// One "- <dist> <fast>-<slow>/km Pace" step line (indent for repeat sub-steps).
-// null for zero-distance markers (drills, form work) which can't go on the watch.
-function segLine(seg: NormSegment, thresholdSec: number, indent = ''): string | null {
+interface RawPhase {
+  type?: string;
+  phase?: string;
+  zone?: string | null;
+  pace_min?: string | null;
+  pace_max?: string | null;
+  pace_per_km?: string | null;
+  steps?: RawPhase[];
+}
+
+// The coach's authored "aim" pace ("m:ss") for a raw phase, when it's a SPECIFIC
+// single pace worth showing on the watch — else null (a zone or a range, which the
+// enforced target already spells out). New format: an explicit single pace with no
+// zone. Legacy: a named phase (e.g. "Ultra pace") carrying pace_per_km — but not a
+// bare zone label like "Z2".
+function aimPace(raw: RawPhase | undefined): string | null {
+  if (!raw) return null;
+  if (raw.type) {                                   // new format
+    if (raw.zone) return null;                      // zone → range shown as target
+    const { pace_min, pace_max } = raw;
+    if (pace_min && pace_max) return pace_min === pace_max ? pace_min : null;  // range → skip
+    return pace_min ?? pace_max ?? null;
+  }
+  const phase = String(raw.phase ?? '').trim();     // legacy
+  if (/^Z\s*[1-9]$/i.test(phase)) return null;      // bare zone → range
+  return raw.pace_per_km ?? null;                   // named phase's authored pace
+}
+
+// One "- [<aim>/km <!> ]<dist> <fast>-<slow>/km Pace" step line (indent for repeat
+// sub-steps). null for zero-distance markers (drills). The aim prompt is added only
+// when there's a specific authored pace (so zone/range steps stay clean).
+function segLine(seg: NormSegment, aim: string | null, thresholdSec: number, indent = ''): string | null {
   const km = seg.distanceKm || 0;
   if (km <= 0) return null;
   const range = paceRangeToken(seg.paceMin, seg.paceMax, thresholdSec);
-  return range ? `${indent}- ${distLabel(km)} ${range}/km Pace` : `${indent}- ${distLabel(km)}`;
+  const spec = range ? `${distLabel(km)} ${range}/km Pace` : distLabel(km);
+  const aimSec = paceToSeconds(aim);
+  const prompt = aimSec != null ? `${secToPace(aimSec)}/km <!> ` : '';
+  return `${indent}- ${prompt}${spec}`;
+}
+
+// Build the intervals.icu workout description from a run's raw structure + zones.
+// normalizeStructure preserves order and repeat grouping 1:1 with the raw array, so
+// we walk both in parallel to pair each segment's enforced target with its aim pace.
+// Returns null when there's nothing runnable to emit.
+export function structureToWorkoutText(
+  structure: unknown, zones: ZoneMap, thresholdSec: number,
+): string | null {
+  const steps: NormStep[] = normalizeStructure(structure as unknown[] | null, zones);
+  if (!steps.length) return null;
+  const raw = (Array.isArray(structure) ? structure : []) as RawPhase[];
+
+  const lines: string[] = [];
+  steps.forEach((st, i) => {
+    if (st.kind === 'repeat') {
+      const rawSubs = raw[i]?.steps ?? [];
+      const sub = st.steps
+        .map((seg, j) => segLine(seg, aimPace(rawSubs[j]), thresholdSec, '  '))
+        .filter(Boolean) as string[];
+      if (sub.length) lines.push(`${st.count}x`, ...sub);
+    } else {
+      const line = segLine(st, aimPace(raw[i]), thresholdSec);
+      if (line) lines.push(line);
+    }
+  });
+  return lines.length ? lines.join('\n') : null;
 }
 
 // Fallback for a run with no structured segments: a single step over the given pace
-// window (a default zone's window, or an explicit target). distance-only when there's
-// no pace signal at all.
+// window (a default zone's window, or an explicit target). When the target is a
+// single authored pace, that pace is also shown as the on-watch aim. distance-only
+// when there's no pace signal at all.
 export function easyRunText(
   distanceKm: number, minPace: string | null, maxPace: string | null, thresholdSec: number,
 ): string | null {
   if (!(distanceKm > 0)) return null;
   const range = paceRangeToken(minPace, maxPace, thresholdSec);
-  return range ? `- ${distLabel(distanceKm)} ${range}/km Pace` : `- ${distLabel(distanceKm)}`;
-}
-
-// Build the full intervals.icu workout description from a normalised structure.
-// Returns null when there's nothing runnable to emit.
-export function normalizedToWorkoutText(steps: NormStep[], thresholdSec: number): string | null {
-  const lines: string[] = [];
-  for (const st of steps) {
-    if (st.kind === 'repeat') {
-      const sub = st.steps.map(s => segLine(s, thresholdSec, '  ')).filter(Boolean) as string[];
-      if (sub.length) lines.push(`${st.count}x`, ...sub);
-    } else {
-      const line = segLine(st, thresholdSec);
-      if (line) lines.push(line);
-    }
-  }
-  return lines.length ? lines.join('\n') : null;
+  const spec = range ? `${distLabel(distanceKm)} ${range}/km Pace` : distLabel(distanceKm);
+  // A single explicit target (min === max) is a specific aim → surface it on the watch.
+  const aimSec = minPace && minPace === maxPace ? paceToSeconds(minPace) : null;
+  const prompt = aimSec != null ? `${secToPace(aimSec)}/km <!> ` : '';
+  return `- ${prompt}${spec}`;
 }
