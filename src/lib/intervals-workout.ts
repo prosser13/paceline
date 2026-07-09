@@ -9,11 +9,14 @@
 // derives real distances, resolves zones→paces and applies the ultra→Z1 rule — so
 // the watch workout matches exactly what the app displays.
 //
-// Targets are emitted as pace BANDS, not exact paces: the band widens with pace
-// (tight when fast, wide when slow), anchored so threshold ≈ ±5 s/km and a 5:00/km
-// easy pace ≈ ±30 s/km (a 60 s-wide band).
+// Target pace per step:
+//  - a real window (a zone, or an authored range) → use it verbatim, exactly as the
+//    app/site shows it (e.g. Z2 → 4:10–4:54). Zones already scale with pace (Z1 is
+//    ~60 s wide, Z4 only ~12 s), so there's no need to synthesise a band.
+//  - a single point target (marathon pace, a stride) → a pace-scaled BAND: tight
+//    when fast, wide when slow, anchored so threshold ≈ ±5 s/km and 5:00/km ≈ ±30.
 
-import type { NormStep, NormSegment } from '@/lib/plan-structure';
+import { paceToSeconds, type NormStep, type NormSegment } from '@/lib/plan-structure';
 
 // "m:ss" ⟵ seconds/km.
 export function secToPace(sec: number): string {
@@ -21,16 +24,16 @@ export function secToPace(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// Half-band (± seconds/km) for a target pace, given the athlete's threshold pace.
-// Linear through (threshold → ±5) and (5:00/km → ±30), clamped to [3, 45] so it
-// never collapses to zero for very fast reps or runs absurdly wide for slow jogs.
+// Half-band (± seconds/km) around a single point target, given the athlete's
+// threshold pace. Linear through (threshold → ±5) and (5:00/km → ±30), clamped to
+// [3, 45] so it never collapses to zero for fast reps or runs absurdly wide.
 export function paceBandHalfSec(targetSec: number, thresholdSec: number): number {
   const denom = Math.max(1, 300 - thresholdSec);      // 300 s = 5:00/km anchor
   const half = 5 + (targetSec - thresholdSec) * (25 / denom);
   return Math.min(45, Math.max(3, Math.round(half)));
 }
 
-// [fast, slow] seconds/km around a target (fast = smaller number).
+// [fast, slow] seconds/km around a point target (fast = smaller number).
 export function paceBandSec(targetSec: number, thresholdSec: number): [number, number] {
   const half = paceBandHalfSec(targetSec, thresholdSec);
   return [targetSec - half, targetSec + half];
@@ -44,25 +47,41 @@ function distLabel(km: number): string {
   return `${v}km`;
 }
 
+// The "<fast>-<slow>" pace-target token for a segment's window, or null when there's
+// no pace signal. A genuine window (bounds differ — a zone or authored range) is used
+// verbatim; a single point (bounds equal, e.g. marathon pace) gets the scaled band.
+function paceRangeToken(
+  minPace: string | null | undefined, maxPace: string | null | undefined, thresholdSec: number,
+): string | null {
+  const lo = paceToSeconds(minPace);
+  const hi = paceToSeconds(maxPace);
+  if (lo != null && hi != null && lo !== hi) {
+    return `${secToPace(Math.min(lo, hi))}-${secToPace(Math.max(lo, hi))}`;
+  }
+  const point = lo ?? hi;
+  if (point == null) return null;
+  const [fast, slow] = paceBandSec(point, thresholdSec);
+  return `${secToPace(fast)}-${secToPace(slow)}`;
+}
+
 // One "- <dist> <fast>-<slow>/km Pace" step line (indent for repeat sub-steps).
 // null for zero-distance markers (drills, form work) which can't go on the watch.
 function segLine(seg: NormSegment, thresholdSec: number, indent = ''): string | null {
   const km = seg.distanceKm || 0;
   if (km <= 0) return null;
-  const target = seg.midSeconds;
-  if (target == null) return `${indent}- ${distLabel(km)}`;   // untargeted (rare)
-  const [fast, slow] = paceBandSec(target, thresholdSec);
-  return `${indent}- ${distLabel(km)} ${secToPace(fast)}-${secToPace(slow)}/km Pace`;
+  const range = paceRangeToken(seg.paceMin, seg.paceMax, thresholdSec);
+  return range ? `${indent}- ${distLabel(km)} ${range}/km Pace` : `${indent}- ${distLabel(km)}`;
 }
 
-// Fallback for a run with no structured segments (just a distance, maybe a target
-// pace): a single step at the target pace as a band, or distance-only when there's
-// no pace signal at all (an untargeted easy run — the watch just shows the distance).
-export function easyRunText(distanceKm: number, targetSec: number | null, thresholdSec: number): string | null {
+// Fallback for a run with no structured segments: a single step over the given pace
+// window (a default zone's window, or an explicit target). distance-only when there's
+// no pace signal at all.
+export function easyRunText(
+  distanceKm: number, minPace: string | null, maxPace: string | null, thresholdSec: number,
+): string | null {
   if (!(distanceKm > 0)) return null;
-  if (targetSec == null) return `- ${distLabel(distanceKm)}`;
-  const [fast, slow] = paceBandSec(targetSec, thresholdSec);
-  return `- ${distLabel(distanceKm)} ${secToPace(fast)}-${secToPace(slow)}/km Pace`;
+  const range = paceRangeToken(minPace, maxPace, thresholdSec);
+  return range ? `- ${distLabel(distanceKm)} ${range}/km Pace` : `- ${distLabel(distanceKm)}`;
 }
 
 // Build the full intervals.icu workout description from a normalised structure.
