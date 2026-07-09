@@ -12,6 +12,7 @@
 import { parseThresholdPace, sessionTss, efficiencyFactor } from '@/lib/run-tss';
 
 export interface CompletedActuals {
+  workoutId: string | null;   // completed_workouts.id — the fuel log's write key
   durationStr: string;
   mins: number | null;
   tss: number | null;
@@ -26,10 +27,12 @@ export interface CompletedActuals {
   decouplingPct: number | null;
   paceDecayPct: number | null;
   fuelCarbsPerH: number | null;
+  fuelItems: { name: string; carbs_g: number; qty: number }[] | null;   // logged fuel (pre-fills the picker)
   efficiencyFactor: number | null;   // grade-adj m/min per bpm (NGP + avg HR)
 }
 
 export interface CompletedRow {
+  id?: string | null;
   actual_duration_mins?: number | string | null;
   actual_duration_secs?: number | string | null;   // precise moving time; preferred over the minute-rounded mins
   actual_avg_pace_min_km?: number | string | null;
@@ -44,6 +47,7 @@ export interface CompletedRow {
   decoupling_pct?: number | string | null;
   pace_decay_pct?: number | string | null;
   fuel_carbs_per_h?: number | string | null;
+  fuel_items?: unknown;
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
@@ -67,6 +71,7 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
   // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
   const tss = cw.tss != null ? Number(cw.tss) : sessionTss({ mins, runPace: ngp ?? pace, power: avgPower }, threshMinKm, ftp);
   return {
+    workoutId: (cw.id as string | null) ?? null,
     durationStr, mins, tss,
     distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
     avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
@@ -77,6 +82,7 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
     decouplingPct: cw.decoupling_pct != null ? Number(cw.decoupling_pct) : null,
     paceDecayPct: cw.pace_decay_pct != null ? Number(cw.pace_decay_pct) : null,
     fuelCarbsPerH: cw.fuel_carbs_per_h != null ? Number(cw.fuel_carbs_per_h) : null,
+    fuelItems: (cw.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
     // EF from the grade-adjusted pace (NGP preferred, else avg pace) + avg HR.
     efficiencyFactor: efficiencyFactor(ngp ?? pace, cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null),
   };

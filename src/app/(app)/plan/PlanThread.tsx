@@ -46,9 +46,11 @@ interface PlanSession {
   race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
+  fuel_target?: import('@/lib/fuel-progression').FuelTarget | null;
 }
 
 interface CompletedData {
+  workoutId?: string | null;
   durationStr: string;
   durationMins?: number | null;
   distanceKm?: number | null;
@@ -60,6 +62,7 @@ interface CompletedData {
   decouplingPct?: number | null;
   paceDecayPct?: number | null;
   fuelCarbsPerH?: number | null;
+  fuelItems?: { name: string; carbs_g: number; qty: number }[] | null;
   efficiencyFactor?: number | null;
 }
 
@@ -191,11 +194,12 @@ interface Props {
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  fuelProducts?: import('@/data/fuel').FuelProduct[];
 }
 
 export default function PlanThread({
   weeks, byWeek, offPlanByDate = {}, manualMatches = [], mergedBySession = {}, todayStr, completedMap, nextSessionId,
-  thresholdPace, zones, hrZones, powerZones, bikeHrZones,
+  thresholdPace, zones, hrZones, powerZones, bikeHrZones, fuelProducts = [],
 }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -278,7 +282,7 @@ export default function PlanThread({
       <SessionRow
         session={session}
         ctx={{
-          thresholdPace, zones, hrZones, powerZones, bikeHrZones,
+          thresholdPace, zones, hrZones, powerZones, bikeHrZones, fuelProducts,
           completed: completed ?? null,
           today: isFocus,
           next: isNext && !isToday,

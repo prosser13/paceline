@@ -30,12 +30,14 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   const strengthBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
-      exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} done={done} />
+      exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} done={done}
+      perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} />
   ) : null;
   const yogaBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <YogaHero label={label} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
-      poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done} />
+      poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done}
+      planSessionId={s.id} perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} />
   ) : null;
 
   // The day's activity hero — a ride or a run (shared ActivityHero). The run

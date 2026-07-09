@@ -21,6 +21,8 @@ export interface FuelReadiness {
   bestGPerH: number | null;
   practiced: number;     // long runs with fuel logged
   totalLongRuns: number;
+  repsCompleted?: number;   // gut-training progression reps run so far
+  repsOnPlan?: number;      // …of which hit that rep's target (±8 g/h)
 }
 
 export default function FuelPlan({
@@ -125,6 +127,9 @@ function FuelReadinessStrip({ r }: { r: FuelReadiness }) {
           <div className="text-[13px] text-ink mt-[5px]">
             Practised <b className="font-display text-[15px]">{avg}</b> g/h on <b>{practiced} of {totalLongRuns}</b> long runs
             {best != null && <span className="text-stone"> · best {best}</span>}
+            {(r.repsCompleted ?? 0) > 0 && (
+              <span className="text-stone"> · on the progression for <b className="text-ink">{r.repsOnPlan} of {r.repsCompleted}</b> gut-training reps</span>
+            )}
           </div>
           <div className="relative h-[8px] rounded-full bg-fog mt-[8px]">
             <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${barPct}%`, background: barColor }} />

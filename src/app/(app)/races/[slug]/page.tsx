@@ -19,6 +19,8 @@ import { getWellnessCached } from '@/lib/intervals';
 import { projectFitness, readinessFromProjection } from '@/lib/fitness-projection';
 import { predictableDistanceM } from '@/lib/prediction';
 import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
+import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { listCompletedForSessions } from '@/data/plan-sessions';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
 import RouteMap from './RouteMap';
@@ -220,21 +222,42 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   const targetTimeDisplay = formatTargetTime(targetTime);
 
   // Fuel rehearsal readiness — for endurance races (≥30 km), compare logged
-  // long-run fuelling (last 16 weeks) against the plan's carb target. Derived only.
+  // long-run fuelling (last 16 weeks) against the plan's carb target, plus
+  // adherence to the gut-training progression (on-plan reps so far). Derived only.
   let fuelReadiness: FuelReadiness | null = null;
   if ((distanceKm ?? 0) >= 30) {
     const fuelTarget = guide.fuel.carbsPerHourG?.[1] ?? null;
     if (fuelTarget != null && fuelTarget > 0) {
       const since = new Date(Date.now() - 112 * 86400000).toISOString().slice(0, 10);
-      const longRuns = await listLongRunsSince(since);
+      const [longRuns, fuelMap] = await Promise.all([
+        listLongRunsSince(since),
+        getFuelPlanForGoalBlock(todayStr),
+      ]);
       if (longRuns.length > 0) {
         const logged = longRuns.filter(r => r.fuelCarbsPerH != null).map(r => r.fuelCarbsPerH as number);
+        // Progression adherence: past gut-training reps, completed + logged within
+        // 8 g/h of that rep's target.
+        const pastReps = [...fuelMap.entries()].filter(([, t]) => t.kind === 'progression');
+        let repsCompleted = 0, repsOnPlan = 0;
+        if (pastReps.length) {
+          const completions = await listCompletedForSessions(pastReps.map(([id]) => id));
+          const byId = new Map(completions.map(c => [c.plan_session_id as string, c]));
+          for (const [id, t] of pastReps) {
+            const c = byId.get(id);
+            if (!c) continue;
+            repsCompleted++;
+            const g = c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null;
+            if (g != null && t.gph != null && g >= t.gph - 8) repsOnPlan++;
+          }
+        }
         fuelReadiness = {
           targetGPerH: fuelTarget,
           avgGPerH: logged.length ? Math.round(logged.reduce((a, b) => a + b, 0) / logged.length) : null,
           bestGPerH: logged.length ? Math.round(Math.max(...logged)) : null,
           practiced: logged.length,
           totalLongRuns: longRuns.length,
+          repsCompleted,
+          repsOnPlan,
         };
       }
     }

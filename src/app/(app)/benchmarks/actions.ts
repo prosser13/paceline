@@ -41,6 +41,8 @@ export async function logRunFuel(
   await requireUser();
   const perH = await saveRunFuel(completedId, items, movingSecs);
   revalidatePath('/benchmarks');
+  revalidatePath('/plan');     // fuel now also logs inline on plan rows + the dashboard hero (7B)
+  revalidatePath('/');
   return { ok: true, carbsPerH: perH };
 }
 

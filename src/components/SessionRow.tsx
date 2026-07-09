@@ -35,6 +35,7 @@ export interface SessionRowSession {
   race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
+  fuel_target?: import('@/lib/fuel-progression').FuelTarget | null;
 }
 
 export interface SessionRowContext {
@@ -43,6 +44,7 @@ export interface SessionRowContext {
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  fuelProducts?: import('@/data/fuel').FuelProduct[];
   completed?: RunRowCompleted | null;
   today?: boolean;
   next?: boolean;
@@ -111,6 +113,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           emphasis={ctx.emphasis}
           isExpanded={ctx.isExpanded}
           onToggle={ctx.onToggle}
+          fuelProducts={ctx.fuelProducts}
         />
       );
   }

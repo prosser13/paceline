@@ -25,6 +25,8 @@ import {
   type CompareRow, type WindowCmp,
 } from './session-ui';
 import LongRunQuality from './LongRunQuality';
+import { fuelTargetLabel, type FuelTarget } from '@/lib/fuel-progression';
+import type { FuelProduct } from '@/data/fuel';
 import { RunGlyph } from './glyphs';
 
 export interface RunRowSession {
@@ -41,9 +43,11 @@ export interface RunRowSession {
   race_slug?: string | null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure?: any[] | null;
+  fuel_target?: FuelTarget | null;
 }
 
 export interface RunRowCompleted {
+  workoutId?: string | null;
   durationStr: string;
   durationMins?: number | null;
   distanceKm?: number | null;
@@ -56,6 +60,7 @@ export interface RunRowCompleted {
   decouplingPct?: number | null;
   paceDecayPct?: number | null;
   fuelCarbsPerH?: number | null;
+  fuelItems?: { name: string; carbs_g: number; qty: number }[] | null;
   efficiencyFactor?: number | null;
 }
 
@@ -82,6 +87,7 @@ export default function RunRow({
   today = false, next = false, done = false,
   emphasis = false,
   isExpanded, onToggle,
+  fuelProducts = [],
 }: {
   session: RunRowSession;
   zones: ZoneMap;
@@ -94,6 +100,7 @@ export default function RunRow({
   emphasis?: boolean;
   isExpanded?: boolean;
   onToggle?: () => void;
+  fuelProducts?: FuelProduct[];
 }) {
   const [openLocal, setOpenLocal] = useState(false);
   const open = isExpanded ?? openLocal;
@@ -216,6 +223,20 @@ export default function RunRow({
                   {session.description}
                 </div>
               )}
+              {/* Gut-training fuel guidance on planned goal-block sessions. */}
+              {!done && session.fuel_target && (
+                <div className="mt-[6px]">
+                  <span
+                    className={`inline-flex items-center font-mono text-[11px] rounded-[5px] border px-[6px] py-[1px] ${
+                      session.fuel_target.kind === 'progression'
+                        ? 'font-bold text-strength border-strength/45'
+                        : 'text-stone border-fog'
+                    }`}
+                  >
+                    {fuelTargetLabel(session.fuel_target)}
+                  </span>
+                </div>
+              )}
               {(exec || (done && completed?.perceivedEffort != null)) && (
                 <div className="mt-[6px] flex items-center gap-[6px] flex-wrap">
                   {exec && (
@@ -263,6 +284,13 @@ export default function RunRow({
                 decouplingPct={completed.decouplingPct ?? null}
                 paceDecayPct={completed.paceDecayPct ?? null}
                 fuelCarbsPerH={completed.fuelCarbsPerH ?? null}
+                recommendedGph={session.fuel_target?.kind === 'progression' ? session.fuel_target.gph : null}
+                log={completed.workoutId ? {
+                  workoutId: completed.workoutId,
+                  movingSecs: (completed.durationMins ?? null) != null ? Math.round((completed.durationMins as number) * 60) : null,
+                  fuelItems: completed.fuelItems ?? null,
+                  products: fuelProducts,
+                } : null}
               />
             </div>
           )}

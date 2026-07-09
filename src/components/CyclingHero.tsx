@@ -1,6 +1,7 @@
 import ProfileChart from './ProfileChart';
 import { buildCyclingBars } from '@/lib/profile';
 import { CyclingSegmentDetail } from './CyclingRow';
+import EffortScale from './EffortScale';
 import { BikeGlyph } from './glyphs';
 import { RIDE, RIDE_B, READY } from '@/lib/colors';
 import { CompareTable, buildRideCompare, humanHMM, fmtClock } from './session-ui';
@@ -31,6 +32,7 @@ function parseDurMins(str: string | null | undefined): number | null {
 // with the colour-coded profile graph, plan-vs-actual table and segment targets.
 export default function CyclingHero({
   label, session, powerZones, bikeHrZones, completed = null, light = false,
+  planSessionId = null, perceivedEffort = null,
 }: {
   label: string;
   session: {
@@ -43,6 +45,8 @@ export default function CyclingHero({
   bikeHrZones: BikeHrZoneMap;
   completed?: CyclingCompleted | null;
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
+  planSessionId?: string | null;      // enables the manual RPE scale when done (7B)
+  perceivedEffort?: number | null;
 }) {
   const isDone = !!completed;
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -114,6 +118,9 @@ export default function CyclingHero({
       </summary>
 
       <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
+        {isDone && planSessionId && (
+          <div className="mb-[12px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>
+        )}
         {compare && compare.rows.length > 0 && (
           <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
         )}

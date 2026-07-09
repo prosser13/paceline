@@ -1,9 +1,17 @@
+'use client';
+
 // Long-run quality block — Efficiency Factor (the headline durability metric),
 // aerobic decoupling (Pa:HR), final-third pace decay, and fuel practiced. Shown on
 // the expanded detail of qualifying long runs (plan rows + the dashboard
-// recently-completed hero). Presentation only: values are computed at Strava sync
-// / derived from stored NGP + HR, surfaced through CompletedActuals. Verdict
-// thresholds mirror the Benchmarks long-run table.
+// recently-completed hero). Values are computed at Strava sync / derived from
+// stored NGP + HR, surfaced through CompletedActuals; verdict thresholds mirror
+// the Benchmarks long-run table. When `log` is supplied the fuel line is
+// INTERACTIVE — the FuelLogCell picker inline, so fuel gets logged right where the
+// run is reviewed (7B) — and `recommendedGph` compares logged vs the gut-training
+// target.
+
+import FuelLogCell from './FuelLogCell';
+import type { FuelProduct } from '@/data/fuel';
 
 function pct(v: number): string {
   return `${v > 0 ? '+' : ''}${v.toFixed(1)}%`;
@@ -24,11 +32,14 @@ function decayVerdict(v: number) {
 
 export default function LongRunQuality({
   efficiencyFactor, decouplingPct, paceDecayPct, fuelCarbsPerH,
+  recommendedGph = null, log = null,
 }: {
   efficiencyFactor: number | null;
   decouplingPct: number | null;
   paceDecayPct: number | null;
   fuelCarbsPerH: number | null;
+  recommendedGph?: number | null;   // the gut-training target for this session
+  log?: { workoutId: string; movingSecs: number | null; fuelItems: { name: string; carbs_g: number; qty: number }[] | null; products: FuelProduct[] } | null;
 }) {
   // Nothing to show without at least one metric.
   if (efficiencyFactor == null && decouplingPct == null && paceDecayPct == null) return null;
@@ -92,9 +103,27 @@ export default function LongRunQuality({
           </div>
         )}
       </div>
-      <div className="border-t border-fog px-[12px] py-[8px] flex items-center justify-between">
-        <span className="text-[11px] text-stone">Fuel practiced</span>
-        {fuelCarbsPerH != null
+      <div className="border-t border-fog px-[12px] py-[8px] flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-[11px] text-stone">
+          Fuel practiced
+          {recommendedGph != null && fuelCarbsPerH != null && (
+            <span className="ml-[6px] font-bold" style={{ color: fuelCarbsPerH >= recommendedGph - 4 ? 'var(--color-ready)' : 'var(--color-strength)' }}>
+              · target was {recommendedGph}
+            </span>
+          )}
+          {recommendedGph != null && fuelCarbsPerH == null && (
+            <span className="ml-[6px] text-stone/70">· target {recommendedGph} g/h</span>
+          )}
+        </span>
+        {log ? (
+          <FuelLogCell
+            runId={log.workoutId}
+            movingSecs={log.movingSecs}
+            initialCarbsPerH={fuelCarbsPerH}
+            initialItems={log.fuelItems}
+            products={log.products}
+          />
+        ) : fuelCarbsPerH != null
           ? <span><span className="font-display font-bold text-[15px]">{Math.round(fuelCarbsPerH)}</span><span className="text-[12px] text-stone"> g/h</span></span>
           : <span className="text-[11px] text-stone/60">not logged</span>}
       </div>

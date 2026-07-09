@@ -5,7 +5,7 @@
 import { fmtHms, fmtPace } from '@/lib/prediction';
 import type { ExperimentalPredictionView } from '@/data/benchmarks';
 import MetricTrendChart from '@/components/MetricTrendChart';
-import FuelLogCell from './FuelLogCell';
+import FuelLogCell from '@/components/FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
 import type { BenchmarksData, Series } from './data';
 

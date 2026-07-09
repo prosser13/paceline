@@ -17,7 +17,8 @@ export default function ActivityHero({
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
 }) {
   return resolveSport(session) === 'cycling'
-    ? <CyclingHero label={label} session={session} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} light={light} />
+    ? <CyclingHero label={label} session={session} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} light={light}
+        planSessionId={session.id} perceivedEffort={completed?.perceivedEffort ?? null} />
     : <SessionHero label={label} session={session} thresholdPace={d.thresholdPace}
-        zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} />;
+        zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} fuelProducts={d.fuelProducts} />;
 }
