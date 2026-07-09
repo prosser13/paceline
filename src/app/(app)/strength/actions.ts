@@ -5,6 +5,7 @@ import { getPlanSessionPrescription } from '@/data/plan-sessions';
 import {
   createStrengthSession, insertSessionExercises, updateStrengthExercise,
   markStrengthSessionComplete, deleteStrengthSession,
+  beginSessionTimer, pauseSessionTimer, resumeSessionTimer,
 } from '@/data/strength-sessions';
 import { evaluateProgressionAfterSession, promoteOverride, loadBuilderStateMaps } from '@/data/strength-progression';
 import { insertNiggle, setNiggleActiveRow, listActiveNiggles } from '@/data/strength-niggles';
@@ -202,6 +203,23 @@ export async function completeSession(sessionId: string) {
   }
   revalidatePath('/strength/history');
   revalidatePath('/strength');
+  return { ok: true as const };
+}
+
+// ── session timer ────────────────────────────────────────────
+export async function beginTimer(sessionId: string) {
+  await requireUser();
+  const startedAt = await beginSessionTimer(sessionId);
+  return { ok: true as const, startedAt };
+}
+export async function pauseTimer(sessionId: string) {
+  await requireUser();
+  await pauseSessionTimer(sessionId);
+  return { ok: true as const };
+}
+export async function resumeTimer(sessionId: string) {
+  await requireUser();
+  await resumeSessionTimer(sessionId);
   return { ok: true as const };
 }
 

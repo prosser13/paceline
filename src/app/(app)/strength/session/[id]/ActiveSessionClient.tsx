@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GROUP_LABEL, SESSION_INTENT_CONFIG, type MuscleGroup, type SessionIntent } from '@/data/strength';
-import { updateSessionExercise, completeSession, deleteSession, keepOverrideGoingForward } from '../../actions';
+import {
+  updateSessionExercise, completeSession, deleteSession, keepOverrideGoingForward,
+  beginTimer, pauseTimer, resumeTimer,
+} from '../../actions';
 
 export interface ActiveItem {
   id: string;
@@ -16,6 +19,7 @@ export interface ActiveItem {
   weightKg: number | null;
   isSingleLeg: boolean;
   weightType: 'barbell' | 'dumbbells' | null;
+  singleDumbbell: boolean;   // held in one dumbbell, not a pair
   canProgress: boolean;
   cue: string;
   youtubeUrl: string | null;
@@ -23,12 +27,31 @@ export interface ActiveItem {
   isDone: boolean;
 }
 
-// Equipment-tagged weight, e.g. "14 kg · per hand" (dumbbells) / "40 kg · barbell".
-function weightLine(it: { weightKg: number | null; weightType: 'barbell' | 'dumbbells' | null }): string | null {
+// Equipment tag for dumbbells: single-side lifts use one dumbbell, everything else
+// is a pair (one per hand).
+function dumbbellTag(it: { singleDumbbell: boolean }): string {
+  return it.singleDumbbell ? 'one dumbbell' : 'per hand';
+}
+
+// Equipment-tagged weight, e.g. "14 kg · per hand" / "18 kg · one dumbbell" / "40 kg · barbell".
+function weightLine(it: ActiveItem): string | null {
   if (it.weightKg == null || it.weightKg <= 0) return null;
-  if (it.weightType === 'dumbbells') return `${it.weightKg} kg · per hand`;
+  if (it.weightType === 'dumbbells') return `${it.weightKg} kg · ${dumbbellTag(it)}`;
   if (it.weightType === 'barbell') return `${it.weightKg} kg · barbell`;
   return `${it.weightKg} kg`;
+}
+
+// Compact unit caption for the weight stat box.
+function weightUnit(it: ActiveItem): string {
+  if (it.weightType === 'dumbbells') return it.singleDumbbell ? 'kg · one DB' : 'kg · per hand';
+  if (it.weightType === 'barbell') return 'kg · barbell';
+  return 'kg';
+}
+
+// "each leg" (reps) / "each side" (timed holds) note for a single-side exercise.
+function sideNote(it: { isSingleLeg: boolean; repsType: 'reps' | 'secs' }): string | null {
+  if (!it.isSingleLeg) return null;
+  return it.repsType === 'secs' ? 'each side' : 'each leg';
 }
 
 // The group line + sets×reps + weight, in the clean dashboard/builder style.
@@ -37,8 +60,8 @@ function rx(it: ActiveItem) {
     ? `${it.sets} × ${it.repsValue}${it.repsType === 'secs' ? ' s' : ''}`
     : `${it.sets} sets`;
   const weight = weightLine(it);
-  const note = it.isSingleLeg ? (it.repsType === 'secs' ? ' · each side' : ' · each leg') : '';
-  const group = (it.group ? GROUP_LABEL[it.group] : '') + note;
+  const note = sideNote(it);
+  const group = (it.group ? GROUP_LABEL[it.group] : '') + (note ? ` · ${note}` : '');
   return { rep, weight, group };
 }
 
@@ -47,11 +70,11 @@ function fmtClock(sec: number): string {
   return `${m}:${String(sec % 60).padStart(2, '0')}`;
 }
 
-// Unit caption for the weight stat, tagging the equipment.
-function weightUnit(weightType: 'barbell' | 'dumbbells' | null): string {
-  if (weightType === 'dumbbells') return 'kg · per hand';
-  if (weightType === 'barbell') return 'kg · barbell';
-  return 'kg';
+// Difficulty (1 easy → 5 failed) → a tint for the score pills.
+function scoreColor(n: number): string {
+  if (n <= 2) return 'var(--color-fern)';
+  if (n === 3) return '#b8862b';
+  return 'var(--color-oxblood)';
 }
 
 function Chevron() {
@@ -62,25 +85,38 @@ function Chevron() {
 
 export default function ActiveSessionClient({
   sessionId, intent, completedAt, items: initial,
+  initialElapsed, timerRunning, timerStarted,
 }: {
   sessionId: string; intent: string; completedAt: string | null; items: ActiveItem[];
+  initialElapsed: number; timerRunning: boolean; timerStarted: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState<ActiveItem[]>(initial);
-  const [elapsed, setElapsed] = useState(0);
-  const [paused, setPaused] = useState(!!completedAt);
+  const [elapsed, setElapsed] = useState(initialElapsed);
+  const [running, setRunning] = useState(timerRunning);
   const [done, setDone] = useState(!!completedAt);
   const [editing, setEditing] = useState(false);
   const [edit, setEdit] = useState({ sets: '', reps: '', weight: '' });
   const [editedId, setEditedId] = useState<string | null>(null);   // last item edited this session
   const [promotedIds, setPromotedIds] = useState<Set<string>>(new Set());
   const exStart = useRef(0);
+  const begun = useRef(timerStarted);
 
+  // Start the timer the first time the session is opened (persisted server-side, so
+  // it keeps running across refresh/close and only freezes on end/abandon).
   useEffect(() => {
-    if (paused || done) return;
+    if (done || begun.current) return;
+    begun.current = true;
+    setRunning(true);
+    void beginTimer(sessionId);
+  }, [done, sessionId]);
+
+  // Tick locally while running; the server-computed base re-syncs on each load.
+  useEffect(() => {
+    if (!running || done) return;
     const t = setInterval(() => setElapsed(e => e + 1), 1000);
     return () => clearInterval(t);
-  }, [paused, done]);
+  }, [running, done]);
 
   const currentIdx = items.findIndex(it => !it.isDone);
   const current = currentIdx >= 0 ? items[currentIdx] : null;
@@ -89,6 +125,11 @@ export default function ActiveSessionClient({
 
   function patch(idx: number, p: Partial<ActiveItem>) {
     setItems(prev => prev.map((it, i) => (i === idx ? { ...it, ...p } : it)));
+  }
+
+  async function togglePause() {
+    if (running) { setRunning(false); await pauseTimer(sessionId); }
+    else { setRunning(true); await resumeTimer(sessionId); }
   }
 
   async function markDone() {
@@ -101,6 +142,7 @@ export default function ActiveSessionClient({
     });
     const remaining = items.filter((it, i) => i !== currentIdx && !it.isDone).length;
     if (remaining === 0) {
+      setRunning(false);
       await completeSession(sessionId);
       setDone(true);
     }
@@ -153,21 +195,61 @@ export default function ActiveSessionClient({
   }
 
   async function endEarly() {
+    setRunning(false);
     await completeSession(sessionId);
     setDone(true);
   }
 
   async function abandon() {
     if (!confirm('Abandon this session? It will be deleted.')) return;
+    setRunning(false);
     await deleteSession(sessionId);
     router.push('/strength');
   }
 
+  // ── summary (session finished or reopened) ──
   if (done || !current) {
+    const skipped = items.filter(it => !it.isDone).length;
     return (
       <div>
-        <h1 className="font-display font-semibold text-[23px] mb-2">Session complete</h1>
-        <p className="text-stone text-[14px] mb-6">{doneCount} of {items.length} exercises done · {fmtClock(elapsed)}</p>
+        <h1 className="font-display font-semibold text-[23px] mb-[2px]">Session complete</h1>
+        <p className="text-stone text-[13.5px] mb-[16px]">
+          {intentLabel} · {fmtClock(elapsed)} · {doneCount} of {items.length} done{skipped > 0 ? ` · ${skipped} skipped` : ''}
+        </p>
+
+        <div className="border border-fog rounded-[16px] bg-paper overflow-hidden mb-[18px]">
+          {items.map((it, i) => {
+            const r = rx(it);
+            const sn = sideNote(it);
+            return (
+              <div key={it.id} className={`flex items-start gap-[12px] px-[15px] py-[11px] ${i > 0 ? 'border-t border-fog/60' : ''} ${it.isDone ? '' : 'opacity-55'}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14.5px] font-medium text-ink leading-snug">{it.name}</div>
+                  <div className="text-[11.5px] text-stone mt-[1px]">
+                    {r.rep}{r.weight ? ` · ${r.weight}` : ''}{sn ? ` · ${sn}` : ''}
+                  </div>
+                </div>
+                <div className="shrink-0 pt-[1px]">
+                  {!it.isDone ? (
+                    <span className="text-[11.5px] font-semibold text-stone">Skipped</span>
+                  ) : it.canProgress && it.difficulty != null ? (
+                    <span className="inline-flex items-center justify-center min-w-[26px] h-[26px] rounded-[8px] text-bone text-[13px] font-bold tabular-nums"
+                      style={{ background: scoreColor(it.difficulty) }} title="How it felt (1 easy · 5 failed)">{it.difficulty}</span>
+                  ) : it.canProgress ? (
+                    <span className="text-[11.5px] text-stone">—</span>
+                  ) : (
+                    <span className="text-fern text-[15px]" aria-label="done">✓</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {items.some(it => it.canProgress) && (
+          <p className="text-[11.5px] text-stone mb-[18px] -mt-[8px]">Scores: 1 = easy · 5 = failed. They tune the next targets.</p>
+        )}
+
         <div className="flex gap-3">
           <a href="/strength" className="min-h-[48px] inline-flex items-center bg-oxblood text-bone text-[15px] font-semibold px-5 rounded-[12px] hover:bg-oxblood-dark transition-colors">New session</a>
           <a href="/strength/history" className="min-h-[48px] inline-flex items-center border border-fog text-ink text-[15px] px-5 rounded-[12px] hover:bg-fog/40 transition-colors">History</a>
@@ -177,6 +259,14 @@ export default function ActiveSessionClient({
   }
 
   const upcoming = items.filter((it, i) => !it.isDone && i !== currentIdx);
+  const currentNote = (() => {
+    const parts: string[] = [];
+    const sn = sideNote(current);
+    if (sn) parts.push(current.repsType === 'secs' ? 'hold each side' : 'reps are per leg');
+    if (current.singleDumbbell) parts.push('one dumbbell, single hand');
+    if (!parts.length) return null;
+    return parts.join(' · ').replace(/^./, c => c.toUpperCase()) + '.';
+  })();
 
   return (
     <div className="[overflow-anchor:none]">
@@ -186,10 +276,16 @@ export default function ActiveSessionClient({
           <div className="font-mono text-[10px] uppercase tracking-[.13em] text-stone">{intentLabel} session</div>
           <div className="text-[15px] font-semibold text-ink">{doneCount} / {items.length} done</div>
         </div>
-        <div className="text-right">
+        <div className="flex items-center gap-[8px]">
           <div className="font-display font-semibold text-[22px] text-ink tabular-nums leading-none">{fmtClock(elapsed)}</div>
-          <button type="button" onClick={() => setPaused(p => !p)}
-            className="mt-[4px] h-[34px] px-[12px] rounded-[9px] border border-fog bg-bone text-stone text-[12px]">{paused ? '▶ Resume' : '⏸ Pause'}</button>
+          <button type="button" onClick={togglePause} aria-label={running ? 'Pause timer' : 'Resume timer'}
+            className="grid place-items-center w-[34px] h-[34px] rounded-[9px] border border-fog bg-bone text-stone hover:text-ink transition-colors">
+            {running ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5l11 7-11 7z" /></svg>
+            )}
+          </button>
         </div>
       </div>
       <div className="h-[6px] rounded-[4px] bg-fog overflow-hidden mb-4">
@@ -221,12 +317,15 @@ export default function ActiveSessionClient({
           </>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-[9px] my-[14px]">
+            <div className="grid grid-cols-3 gap-[9px] mt-[14px] mb-[8px]">
               <Stat v={current.sets} u="sets" />
               <Stat v={current.repsValue ?? '—'} u={current.repsType === 'secs' ? 'secs' : 'reps'} />
               <Stat v={current.weightKg != null && current.weightKg > 0 ? current.weightKg : '—'}
-                u={current.weightKg != null && current.weightKg > 0 ? weightUnit(current.weightType) : 'kg'} />
+                u={current.weightKg != null && current.weightKg > 0 ? weightUnit(current) : 'kg'} />
             </div>
+            {currentNote && (
+              <p className="font-mono text-[10.5px] uppercase tracking-[.06em] text-marine mb-[12px]">{currentNote}</p>
+            )}
             <button type="button" onClick={startEdit}
               className="w-full min-h-[42px] rounded-[12px] border border-fog text-ink text-[13px] mb-[14px] hover:bg-fog/40 transition-colors">Edit</button>
             {editedId === current.id && !promotedIds.has(current.id) && (

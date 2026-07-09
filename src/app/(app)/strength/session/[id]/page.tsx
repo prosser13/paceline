@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
 import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
-import { progressable } from '@/data/strength';
+import { progressable, usesSingleDumbbell, timerElapsedSecs } from '@/data/strength';
 import { getStrengthSessionByShortId, listSessionExercises } from '@/data/strength-sessions';
 import ActiveSessionClient, { type ActiveItem } from './ActiveSessionClient';
 
@@ -27,6 +27,7 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
       weightKg: r.weight_kg != null ? Number(r.weight_kg) : null,
       isSingleLeg: ex?.isSingleLeg ?? false,
       weightType: ex?.weightType ?? null,
+      singleDumbbell: ex ? usesSingleDumbbell(ex) : false,
       canProgress: ex ? progressable(ex) : false,
       cue: ex?.cue ?? '',
       youtubeUrl: ex?.youtubeUrl ?? null,
@@ -34,6 +35,13 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
       isDone: r.is_done,
     };
   });
+
+  // Persistent timer state, computed on the server (so it survives refresh/close).
+  const timerAccumSecs = (sess.timer_accum_secs as number | null) ?? 0;
+  const timerStartedAt = (sess.timer_started_at as string | null) ?? null;
+  const initialElapsed = timerElapsedSecs(timerStartedAt, timerAccumSecs, sess.completed_at);
+  const timerRunning = !!timerStartedAt && !sess.completed_at;
+  const timerStarted = !!timerStartedAt || timerAccumSecs > 0;
 
   return (
     <>
@@ -43,6 +51,9 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
           intent={sess.intent}
           completedAt={sess.completed_at}
           items={items}
+          initialElapsed={initialElapsed}
+          timerRunning={timerRunning}
+          timerStarted={timerStarted}
         />
       </div>
     </>

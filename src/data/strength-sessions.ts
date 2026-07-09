@@ -93,11 +93,60 @@ export async function updateStrengthExercise(
   await supabaseAdmin.from('strength_session_exercises').update(update).eq('id', id);
 }
 
-// Mark a session complete (sets completed_at to now).
+// ── session timer (persistent, pausable) ─────────────────────
+// timer_started_at = start of the running segment (null when paused/stopped);
+// timer_accum_secs = seconds banked from prior segments. Elapsed while running =
+// accum + (now − started). All server-clock, so it survives refresh/close.
+
+// Start the timer the first time the session is opened (idempotent: only stamps
+// when it hasn't started yet and isn't complete). Returns the started_at, or null.
+export async function beginSessionTimer(sessionId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('strength_sessions')
+    .update({ timer_started_at: new Date().toISOString() })
+    .eq('id', sessionId).is('timer_started_at', null).eq('timer_accum_secs', 0).is('completed_at', null)
+    .select('timer_started_at')
+    .maybeSingle();
+  return (data?.timer_started_at as string | null) ?? null;
+}
+
+// Pause: bank the current running segment into timer_accum_secs and clear started.
+export async function pauseSessionTimer(sessionId: string): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('strength_sessions')
+    .select('timer_started_at, timer_accum_secs, completed_at')
+    .eq('id', sessionId).maybeSingle();
+  if (!data || data.completed_at || !data.timer_started_at) return;
+  const add = Math.max(0, Math.floor((Date.now() - Date.parse(data.timer_started_at as string)) / 1000));
+  await supabaseAdmin.from('strength_sessions')
+    .update({ timer_started_at: null, timer_accum_secs: (data.timer_accum_secs as number ?? 0) + add })
+    .eq('id', sessionId);
+}
+
+// Resume: start a new running segment (only if currently paused and not complete).
+export async function resumeSessionTimer(sessionId: string): Promise<void> {
+  await supabaseAdmin.from('strength_sessions')
+    .update({ timer_started_at: new Date().toISOString() })
+    .eq('id', sessionId).is('timer_started_at', null).is('completed_at', null);
+}
+
+// Mark a session complete (sets completed_at to now) and freeze the timer, banking
+// any in-flight running segment.
 export async function markStrengthSessionComplete(sessionId: string): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('strength_sessions')
+    .select('timer_started_at, timer_accum_secs, completed_at')
+    .eq('id', sessionId).maybeSingle();
+  if (data?.completed_at) return;   // already complete — don't re-bank
+  const started = data?.timer_started_at as string | null;
+  const add = started ? Math.max(0, Math.floor((Date.now() - Date.parse(started)) / 1000)) : 0;
   await supabaseAdmin
     .from('strength_sessions')
-    .update({ completed_at: new Date().toISOString() })
+    .update({
+      completed_at: new Date().toISOString(),
+      timer_started_at: null,
+      timer_accum_secs: (data?.timer_accum_secs as number ?? 0) + add,
+    })
     .eq('id', sessionId);
 }
 
