@@ -43,11 +43,11 @@ export function paceBandSec(targetSec: number, thresholdSec: number): [number, n
   return [targetSec - half, targetSec + half];
 }
 
-// Distance token: metres under 1 km ("100m"), else km with trailing zeros trimmed
-// ("6.8km", "5km").
+// Distance token — always in km ("6.8km", "0.1km"). intervals.icu reads a bare "m"
+// as MINUTES, so a sub-km distance must be written in km (e.g. 0.1km, not 100m) or
+// it's parsed as 100 minutes. Rounded to the metre (3 dp).
 function distLabel(km: number): string {
-  if (km < 1) return `${Math.round(km * 1000)}m`;
-  const v = Math.round(km * 100) / 100;
+  const v = Math.round(km * 1000) / 1000;
   return `${v}km`;
 }
 
@@ -71,11 +71,19 @@ function paceRangeToken(
 interface RawPhase {
   type?: string;
   phase?: string;
+  label?: string | null;
   zone?: string | null;
   pace_min?: string | null;
   pace_max?: string | null;
   pace_per_km?: string | null;
   steps?: RawPhase[];
+}
+
+const STRIDE_RE = /stride/i;
+const DRILLS_RE = /drill/i;
+
+function labelOf(raw: RawPhase | undefined): string {
+  return String(raw?.label ?? raw?.phase ?? '');
 }
 
 // The coach's authored "aim" pace ("m:ss") for a raw phase, when it's a SPECIFIC
@@ -96,17 +104,23 @@ function aimPace(raw: RawPhase | undefined): string | null {
   return raw.pace_per_km ?? null;                   // named phase's authored pace
 }
 
-// One "- [<aim>/km <!> ]<dist> <fast>-<slow>/km Pace" step line (indent for repeat
-// sub-steps). null for zero-distance markers (drills). The aim prompt is added only
-// when there's a specific authored pace (so zone/range steps stay clean).
-function segLine(seg: NormSegment, aim: string | null, thresholdSec: number, indent = ''): string | null {
+// On-watch text for a step: a plain "Strides" for a stride rep (a precise pace is
+// unhelpful on a 100 m acceleration), else the coach's specific aim pace ("3:47/km"),
+// else nothing (zone/range steps already show their target).
+function promptText(raw: RawPhase | undefined): string | null {
+  if (STRIDE_RE.test(labelOf(raw))) return 'Strides';
+  const aimSec = paceToSeconds(aimPace(raw));
+  return aimSec != null ? `${secToPace(aimSec)}/km` : null;
+}
+
+// One "- [<text> <!> ]<dist> <fast>-<slow>/km Pace" step line (indent for repeat
+// sub-steps). null for zero-distance markers. `prompt` is the on-watch text, if any.
+function segLine(seg: NormSegment, prompt: string | null, thresholdSec: number, indent = ''): string | null {
   const km = seg.distanceKm || 0;
   if (km <= 0) return null;
   const range = paceRangeToken(seg.paceMin, seg.paceMax, thresholdSec);
   const spec = range ? `${distLabel(km)} ${range}/km Pace` : distLabel(km);
-  const aimSec = paceToSeconds(aim);
-  const prompt = aimSec != null ? `${secToPace(aimSec)}/km <!> ` : '';
-  return `${indent}- ${prompt}${spec}`;
+  return `${indent}- ${prompt ? `${prompt} <!> ` : ''}${spec}`;
 }
 
 // Build the intervals.icu workout description from a run's raw structure + zones.
@@ -122,14 +136,19 @@ export function structureToWorkoutText(
 
   const lines: string[] = [];
   steps.forEach((st, i) => {
+    const rawItem = raw[i];
     if (st.kind === 'repeat') {
-      const rawSubs = raw[i]?.steps ?? [];
+      const rawSubs = rawItem?.steps ?? [];
       const sub = st.steps
-        .map((seg, j) => segLine(seg, aimPace(rawSubs[j]), thresholdSec, '  '))
+        .map((seg, j) => segLine(seg, promptText(rawSubs[j]), thresholdSec, '  '))
         .filter(Boolean) as string[];
       if (sub.length) lines.push(`${st.count}x`, ...sub);
+    } else if (rawItem && DRILLS_RE.test(labelOf(rawItem)) && (st.distanceKm || 0) <= 0) {
+      // Form drills carry no distance or pace — emit as 4×1-minute labelled steps
+      // ("1m" is one minute in intervals.icu; a bare distance would be wrong here).
+      lines.push('4x', '  - Drills <!> 1m');
     } else {
-      const line = segLine(st, aimPace(raw[i]), thresholdSec);
+      const line = segLine(st, promptText(rawItem), thresholdSec);
       if (line) lines.push(line);
     }
   });
