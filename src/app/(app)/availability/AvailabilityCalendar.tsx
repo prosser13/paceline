@@ -14,6 +14,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
 
 const KIND_LABEL: Record<AvailabilityKind, string> = {
   full_day:          'Whole day off',
+  reduced_intensity: 'Below par',
   time_limited:      'Limited time',
   activity_limited:  'No certain activities',
   equipment_limited: 'No certain equipment',
@@ -71,6 +72,8 @@ function summarise(r: AvailabilityRow): string {
   switch (r.kind) {
     case 'full_day':
       return 'Off';
+    case 'reduced_intensity':
+      return 'Below par';
     case 'time_limited':
       return r.minutes != null ? `${r.minutes}m` : 'time';
     case 'activity_limited': {
@@ -84,6 +87,7 @@ function summarise(r: AvailabilityRow): string {
 
 const CHIP: Record<AvailabilityKind, string> = {
   full_day:          'bg-oxblood/12 text-oxblood',
+  reduced_intensity: 'bg-amber/15 text-amber-dark',
   time_limited:      'bg-marine/12 text-marine',
   activity_limited:  'bg-hard/15 text-hard',
   equipment_limited: 'bg-strength/15 text-strength',
@@ -268,6 +272,12 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
                   <button type="button" onClick={() => removeDraft(d._key)} aria-label="Remove restriction"
                     className="font-mono text-[16px] text-stone/50 hover:text-oxblood transition-colors leading-none px-1">×</button>
                 </div>
+
+                {d.kind === 'reduced_intensity' && (
+                  <p className="text-[11px] text-stone leading-snug">
+                    A sub-optimal day (e.g. the day after a wedding). Nothing is off-limits, but marathon-pace and hard sessions are avoided — the coach shifts any quality to the day before or after.
+                  </p>
+                )}
 
                 {d.kind === 'time_limited' && (
                   <label className="flex items-center gap-2 text-[13px] text-stone">
