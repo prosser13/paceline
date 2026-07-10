@@ -6,7 +6,7 @@
 //
 // Auth: `Authorization: Bearer <CRON_SECRET>` or a logged-in session.
 //
-//   POST /api/intervals/workout-sync[?force=1][?days=3]
+//   POST /api/intervals/workout-sync[?force=1][?days=7]
 
 import { getCurrentUser, isCronRequest } from '@/lib/auth';
 import { syncUpcomingRunWorkouts } from '@/lib/intervals-sync';
@@ -22,7 +22,8 @@ async function handle(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   const force = params.get('force') === '1';
   const daysRaw = Number(params.get('days'));
-  const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(14, Math.floor(daysRaw)) : 3;
+  // Default to the same 7-day window the cron uses (override with ?days=N).
+  const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(14, Math.floor(daysRaw)) : 7;
 
   const result = await syncUpcomingRunWorkouts(days, force);
   return Response.json(result, { status: result.ok ? 200 : 502 });
