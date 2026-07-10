@@ -26,11 +26,20 @@ function isQuality(seg: NormSegment): boolean {
   return /tempo|threshold|vo2|interval|\brep\b|race|marathon|\bmp\b/i.test(seg.label || '');
 }
 
+// A true recovery segment (Z1 / "recovery") is the one effort where running slower
+// than the window is genuinely fine — the point is to stay easy. A zoned aerobic
+// run (e.g. Z2) instead has a real floor: run it as recovery and you miss the
+// aerobic stimulus, so coming in slow IS a miss.
+function isRecovery(seg: NormSegment): boolean {
+  return (seg.zoneKey || '').toLowerCase() === 'z1' || /recovery/i.test(seg.label || '');
+}
+
 // Grace band (fractional pace deviation beyond the window → 0 credit), asymmetric:
 // the "wrong" direction for each effort type is punished harder.
-function grace(quality: boolean, tooFast: boolean): number {
+function grace(quality: boolean, tooFast: boolean, recovery: boolean): number {
   if (quality) return tooFast ? 0.06 : 0.05;   // quality: slightly fast OK; slow = missed pace
-  return tooFast ? 0.05 : 0.12;                 // easy: too fast is the error; too slow is fine
+  if (tooFast) return 0.05;                     // easy: too fast is the classic error
+  return recovery ? 0.12 : 0.08;                // too slow: fine for recovery, a miss for a zoned aerobic run
 }
 
 // 0..1 credit for one segment, or null when it can't be scored (no target/no actual).
@@ -42,9 +51,9 @@ function segScore(seg: NormSegment): number | null {
   if (lo0 == null || hi0 == null) return null;
   const lo = Math.min(lo0, hi0), hi = Math.max(lo0, hi0);
   if (a >= lo && a <= hi) return 1;
-  const q = isQuality(seg);
-  if (a < lo) return Math.max(0, 1 - ((lo - a) / lo) / grace(q, true));
-  return Math.max(0, 1 - ((a - hi) / hi) / grace(q, false));
+  const q = isQuality(seg), rec = isRecovery(seg);
+  if (a < lo) return Math.max(0, 1 - ((lo - a) / lo) / grace(q, true, rec));
+  return Math.max(0, 1 - ((a - hi) / hi) / grace(q, false, rec));
 }
 
 export interface ExecutionScore { score: number; segments: number; note: string; }
@@ -53,7 +62,7 @@ export interface ExecutionScore { score: number; segments: number; note: string;
 // the dominant miss. Returns null when nothing is scorable (e.g. no pace targets).
 export function computeExecutionScore(steps: NormStep[]): ExecutionScore | null {
   const flat = flatten(steps);
-  let wSum = 0, sSum = 0, scored = 0, fastEasyW = 0, slowQualityW = 0;
+  let wSum = 0, sSum = 0, scored = 0, fastEasyW = 0, slowQualityW = 0, slowAerobicW = 0;
 
   for (const { seg, weight } of flat) {
     const sc = segScore(seg);
@@ -64,9 +73,10 @@ export function computeExecutionScore(steps: NormStep[]): ExecutionScore | null 
     if (sc < 1 && seg.actualPaceSec != null) {
       const lo0 = paceToSeconds(seg.paceMin), hi0 = paceToSeconds(seg.paceMax);
       if (lo0 != null && hi0 != null) {
-        const lo = Math.min(lo0, hi0), hi = Math.max(lo0, hi0), q = isQuality(seg);
+        const lo = Math.min(lo0, hi0), hi = Math.max(lo0, hi0), q = isQuality(seg), rec = isRecovery(seg);
         if (seg.actualPaceSec < lo && !q) fastEasyW += weight;
         if (seg.actualPaceSec > hi && q) slowQualityW += weight;
+        if (seg.actualPaceSec > hi && !q && !rec) slowAerobicW += weight;   // zoned aerobic run, ran too easy
       }
     }
   }
@@ -76,6 +86,7 @@ export function computeExecutionScore(steps: NormStep[]): ExecutionScore | null 
 
   let note: string;
   if (fastEasyW > wSum * 0.15) note = 'Easy running too fast';
+  else if (slowAerobicW > wSum * 0.15) note = 'Ran below the aerobic zone';
   else if (slowQualityW > wSum * 0.15) note = 'Missed quality pace';
   else if (score >= 95) note = 'Nailed it';
   else if (score >= 80) note = 'Solid execution';

@@ -9,6 +9,10 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { todayISO } from '@/lib/dates';
+import {
+  resolveZone, zoneFromPace, normalizeStructure, paceToSeconds, secondsToPace,
+  type ZoneMap, type PaceZone,
+} from '@/lib/plan-structure';
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
@@ -115,6 +119,19 @@ export interface PlanContext {
   };
 }
 
+// A deterministic "did the run stay in its prescribed zone?" verdict, computed so
+// the coach never has to infer zone adherence from the session's name or HR — and
+// never mis-reads a decimal min/km (5.28) as clock time (5:28). Paces are already
+// formatted "m:ss/km".
+export interface PaceCheck {
+  planned_zone: string;          // e.g. "Z2 Aerobic Endurance", or "mixed (Z2 + Z1)"
+  planned_window: string | null; // e.g. "4:10–4:54/km" (null for mixed workouts)
+  actual_pace: string;           // e.g. "5:17/km"
+  actual_ngp: string | null;     // grade-adjusted, when available
+  actual_zone: string | null;    // the zone the actual pace fell in
+  verdict: string;               // plain-language on-plan / OUTSIDE-plan judgement
+}
+
 export interface RecentSession {
   id: string;
   scheduled_date: string;
@@ -129,6 +146,7 @@ export interface RecentSession {
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
   } | null;
+  pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
 }
 
 // Assemble the briefing as of `asOf` (YYYY-MM-DD; defaults to today, UTC).
@@ -148,19 +166,23 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const recentFrom = addDays(today, -RECENT_DAYS);
   const recentTo = throughToday ? today : addDays(today, -1);
 
+  // Pace zones drive the per-run zone check in the `recent` list, so resolve them
+  // (a cached read) before the main wave and reuse the rows for zones.pace_zones.
+  const paceZones = await listPaceZones();
+  const runZones = buildRunZoneMap(paceZones);
+
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
-    wellness, threshold, paceZones, hrConfig, hrZones, powerConfig, powerZones,
+    wellness, threshold, hrConfig, hrZones, powerConfig, powerZones,
     constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
     getCurrentWeek(today),
     getUpcomingSessions(upcomingFrom, upcomingTo),
-    getRecentSessions(recentFrom, recentTo),
+    getRecentSessions(recentFrom, recentTo, runZones),
     getWellnessCacheRow(),
     getThresholdPace(),
-    listPaceZones(),
     getHrConfig(),
     listHrZones(),
     getPowerConfig(),
@@ -299,11 +321,100 @@ async function getUpcomingSessions(from: string, to: string): Promise<Record<str
   return (data ?? []) as unknown as Record<string, unknown>[];
 }
 
+// A ZoneMap (keyed Z1..Zn) from the raw pace_zones rows — the shape
+// normalizeStructure / zoneFromPace consume. Local mini-builder so the briefing
+// doesn't need to fetch all four zone tables just to check run paces.
+function buildRunZoneMap(rows: readonly Record<string, unknown>[]): ZoneMap {
+  const m: ZoneMap = {};
+  for (const z of rows) {
+    const key = z.zone_key as string;
+    if (!key) continue;
+    m[key] = { key, name: z.name as string, paceMin: z.pace_min as string, paceMax: z.pace_max as string, sortOrder: z.sort_order as number };
+  }
+  return m;
+}
+
+const NON_RUN_TYPES = ['STRENGTH', 'CORE', 'YOGA', 'REST'];
+
+// Distinct pace-zone keys a structured run spans (empty when unstructured).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function structureZoneKeys(structure: any, zones: ZoneMap): string[] {
+  const steps = normalizeStructure(Array.isArray(structure) ? structure : null, zones);
+  const keys = new Set<string>();
+  for (const st of steps) {
+    if (st.kind === 'segment') { if (st.zoneKey) keys.add(st.zoneKey); }
+    else for (const sub of st.steps) if (sub.zoneKey) keys.add(sub.zoneKey);
+  }
+  return [...keys];
+}
+
+// The single prescribed zone for an easy/steady run: the zone token in its
+// description/name ("Z2", "ultra", …), else the zone containing the authored
+// target pace. Null when there's no zone signal at all.
+function plannedRunZone(name: string, description: string | null, targetPace: string | null, zones: ZoneMap): PaceZone | null {
+  return resolveZone(`${description ?? ''} ${name ?? ''}`, targetPace, zones);
+}
+
+// Deterministic pace-vs-prescribed-zone verdict for a completed run. Returns null
+// for non-runs, sessions without an actual pace, or runs with no zone to check
+// against (so the coach falls back to the raw actuals, as before).
+function buildPaceCheck(
+  s: { session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
+  actualPaceMinKm: number | null, ngpMinKm: number | null, zones: ZoneMap,
+): PaceCheck | null {
+  if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
+  if (actualPaceMinKm == null) return null;
+
+  const actualSec = Math.round(actualPaceMinKm * 60);
+  const actualPace = `${secondsToPace(actualSec)}/km`;
+  const actualNgp = ngpMinKm != null ? `${secondsToPace(Math.round(ngpMinKm * 60))}/km` : null;
+  const actualZone = zoneFromPace(secondsToPace(actualSec), zones);
+  const actualZoneLabel = actualZone ? `${actualZone.key} ${actualZone.name}` : null;
+
+  // Multi-zone structured workout: no single whole-run verdict — flag it so the
+  // coach reads it per segment rather than judging the average.
+  const structureKeys = s.structure ? structureZoneKeys(s.structure, zones) : [];
+  if (structureKeys.length > 1) {
+    return {
+      planned_zone: `mixed (${structureKeys.join(' + ')})`,
+      planned_window: null,
+      actual_pace: actualPace,
+      actual_ngp: actualNgp,
+      actual_zone: actualZoneLabel,
+      verdict: 'structured multi-zone session — assess each segment against its own target, not the whole-run average',
+    };
+  }
+
+  const planned = structureKeys.length === 1
+    ? (zones[structureKeys[0]] ?? null)
+    : plannedRunZone(s.name, s.description, s.target_pace, zones);
+  if (!planned) return null;
+
+  const a = paceToSeconds(planned.paceMin) ?? 0, b = paceToSeconds(planned.paceMax) ?? 0;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  const plannedLabel = `${planned.key} ${planned.name}`;
+  const plannedWindow = `${planned.paceMin}–${planned.paceMax}/km`;
+
+  let verdict: string;
+  if (actualSec >= lo && actualSec <= hi) {
+    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})`;
+  } else {
+    const easier = actualSec > hi; // a slower pace is an easier effort
+    const gap = actualZone ? Math.abs(actualZone.sortOrder - planned.sortOrder) : 0;
+    const mag = gap >= 2 ? `${gap} zones ${easier ? 'easier' : 'harder'}`
+      : gap === 1 ? `a full zone ${easier ? 'easier' : 'harder'}`
+      : easier ? 'slower' : 'faster';
+    verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${actualPace}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
+  }
+
+  return { planned_zone: plannedLabel, planned_window: plannedWindow, actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel, verdict };
+}
+
 // Planned sessions in [from, to] annotated with their actuals (from completed_workouts).
-async function getRecentSessions(from: string, to: string): Promise<RecentSession[]> {
+async function getRecentSessions(from: string, to: string, zones: ZoneMap): Promise<RecentSession[]> {
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, session_type, name, priority, status, distance_km, target_pace, estimated_tss, estimated_duration')
+    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, structure')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .order('scheduled_date');
@@ -328,6 +439,8 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
   return (sessions ?? []).map(s => {
     const c = bySession.get(s.id as string);
     const isRest = (s.session_type as string) === 'REST';
+    const actualPaceMinKm = c && c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null;
+    const ngpMinKm = c && c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null;
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -345,14 +458,25 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
       actual: c ? {
         distance_km: c.actual_distance_km != null ? Number(c.actual_distance_km) : null,
         duration_mins: c.actual_duration_mins != null ? Number(c.actual_duration_mins) : null,
-        avg_pace_min_km: c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null,
-        ngp_min_km: c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null,
+        avg_pace_min_km: actualPaceMinKm,
+        ngp_min_km: ngpMinKm,
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
       } : null,
+      pace_check: c ? buildPaceCheck(
+        {
+          session_type: s.session_type as string,
+          activity_type: (s.activity_type as string | null) ?? null,
+          name: s.name as string,
+          description: (s.description as string | null) ?? null,
+          target_pace: (s.target_pace as string | null) ?? null,
+          structure: s.structure,
+        },
+        actualPaceMinKm, ngpMinKm, zones,
+      ) : null,
     };
   });
 }
