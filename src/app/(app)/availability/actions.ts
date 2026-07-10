@@ -19,9 +19,10 @@ export async function saveDayAvailability(date: string, entries: AvailabilityEnt
   await requireUser();
 
   const rows = entries
-    // A full-day block is self-describing; the others need a payload to mean anything.
+    // Full-day and reduced-intensity are self-describing; the others need a payload
+    // to mean anything.
     .filter(e => {
-      if (e.kind === 'full_day') return true;
+      if (e.kind === 'full_day' || e.kind === 'reduced_intensity') return true;
       if (e.kind === 'time_limited') return e.minutes.trim() !== '';
       return e.items.length > 0 || e.note.trim() !== '';
     })

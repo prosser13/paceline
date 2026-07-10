@@ -8,9 +8,10 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export type AvailabilityKind =
-  | 'full_day'          // whole day unavailable
-  | 'time_limited'      // only `minutes` available
-  | 'activity_limited'  // activities in `items` barred (e.g. 'cycling')
+  | 'full_day'           // whole day unavailable
+  | 'reduced_intensity'  // sub-optimal day (post-event): keep it easy, no hard/MP efforts
+  | 'time_limited'       // only `minutes` available
+  | 'activity_limited'   // activities in `items` barred (e.g. 'cycling')
   | 'equipment_limited'; // equipment in `items` barred (e.g. 'Barbell')
 
 export interface AvailabilityRow {
