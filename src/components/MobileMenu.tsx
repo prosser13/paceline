@@ -22,12 +22,10 @@ export default function MobileMenu({
   const planParam = useSearchParams().get('plan');
   const [open, setOpen] = useState(false);
 
-  // Close on route change — tapping a link should dismiss the drawer.
-  useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
-
-  // Lock body scroll + allow Escape to close while the drawer is open.
+  // Allow Escape to close while the drawer is open. (Tapping a nav link closes
+  // the drawer via the delegated onClick on the drawer container below, so no
+  // route-change effect is needed — that would setState synchronously in an
+  // effect, which cascades renders.)
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -69,8 +67,11 @@ export default function MobileMenu({
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-ink/40"
           />
-          {/* drawer */}
+          {/* drawer — any nav-link tap inside dismisses it (delegated) */}
           <div
+            onClick={(e) => {
+              if ((e.target as HTMLElement).closest('a')) setOpen(false);
+            }}
             className="absolute right-0 top-0 flex h-full w-[240px] max-w-[80%] flex-col gap-1.5 bg-paper border-l border-fog p-[18px_14px] shadow-xl"
             style={{ paddingTop: 'max(18px, env(safe-area-inset-top))' }}
           >
