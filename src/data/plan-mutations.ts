@@ -10,6 +10,7 @@ import { getCoachingPrefs } from '@/data/coaching';
 import { getCurrentWeek } from '@/data/plans';
 import { expandSegmentDistances } from '@/lib/plan-structure';
 import { countsToWeeklyVolume } from '@/lib/weekly-volume';
+import { triggerIntervalsSync } from '@/lib/intervals-sync';
 
 // Fields the planning layer may change. Everything else (id, plan_id, timestamps,
 // intervals link, is_completed) is off-limits — a patch touching them is rejected.
@@ -207,6 +208,11 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     }
   }
 
+  // Keep intervals.icu in lockstep with the plan: reconcile the workout window so
+  // this edit (structure / pace / date / distance) lands on the calendar immediately.
+  // Best-effort and a no-op unless the sync is enabled.
+  await triggerIntervalsSync();
+
   return {
     ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string,
     before, after: patch, ...(warnings.length ? { warnings } : {}),
@@ -282,6 +288,8 @@ export async function revertPlanChange(
     await supabaseAdmin.from('plan_sessions').update(current).eq('id', log.plan_session_id);
     return reject(`could not record revert: ${logErr.message}`);
   }
+
+  await triggerIntervalsSync();   // keep intervals.icu in lockstep after a revert too
 
   return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: current, after: restore };
 }

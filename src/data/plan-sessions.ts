@@ -206,7 +206,7 @@ export async function getEarliestSessionDate(): Promise<string | null> {
 export async function listUpcomingRunsForSync(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at')
+    .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at, intervals_workout_hash')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .eq('activity_type', 'running')
@@ -214,6 +214,30 @@ export async function listUpcomingRunsForSync(from: string, to: string) {
     .order('scheduled_date', { ascending: true })
     .order('am_pm', { ascending: true });
   return data ?? [];
+}
+
+// Sessions in [from, to] that carry an intervals.icu event id — for reconcile
+// cleanup: any of these NOT in the current run set (e.g. edited to a rest/race, or
+// their structure removed) has a stale event that should be deleted.
+export async function listIntervalEventsInWindow(from: string, to: string) {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, name, intervals_event_id')
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', to)
+    .not('intervals_event_id', 'is', null);
+  return data ?? [];
+}
+
+// The intervals.icu event id for a session (if any) — used to delete the event
+// when the session itself is deleted from the plan.
+export async function getIntervalEventId(id: string): Promise<string | null> {
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('intervals_event_id')
+    .eq('id', id)
+    .maybeSingle();
+  return (data?.intervals_event_id as string | null) ?? null;
 }
 
 // Minimal session fields for Strava activity matching.
