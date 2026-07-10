@@ -23,6 +23,11 @@ const DEFAULT_ZONE_BY_TYPE: Record<string, string> = { REC: 'Z1' };
 const DEFAULT_RUN_ZONE = 'Z2';
 const DEFAULT_DAYS = 7;
 
+// Step name for a run with no structure — a recovery run reads "Recovery", every
+// other easy/aerobic run "Easy".
+const DEFAULT_NAME_BY_TYPE: Record<string, string> = { REC: 'Recovery' };
+const DEFAULT_RUN_NAME = 'Easy';
+
 export type SyncAction = 'pushed' | 'updated' | 'unchanged' | 'cleared' | 'skipped-empty' | 'error';
 
 export interface SyncDetail {
@@ -94,9 +99,10 @@ export async function syncUpcomingRunWorkouts(days = DEFAULT_DAYS, force = false
     }
     // A manual override wins — hand-crafted on-watch text pushed verbatim.
     const override = (s.intervals_workout_override as string | null)?.trim() || null;
+    const fallbackName = DEFAULT_NAME_BY_TYPE[s.session_type as string] ?? DEFAULT_RUN_NAME;
     const text = override
       ?? structureToWorkoutText(s.structure, zones)
-      ?? easyRunText(s.distance_km != null ? Number(s.distance_km) : 0, minPace, maxPace);
+      ?? easyRunText(fallbackName, s.distance_km != null ? Number(s.distance_km) : 0, minPace, maxPace);
 
     try {
       if (!text) {

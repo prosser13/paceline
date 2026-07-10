@@ -1,22 +1,27 @@
 // Translate a planned run into an intervals.icu workout description (its plain-text
-// workout-builder syntax). intervals.icu parses the description into a structured
-// workout with pace targets; once the athlete's threshold pace is set in intervals.icu
-// it pushes those targets to the watch.
+// workout-builder syntax). intervals.icu parses it into a structured workout with
+// pace targets and, once threshold pace is set there, pushes them to the watch.
 //
-// Built off BOTH the normalised structure (src/lib/plan-structure normalizeStructure,
-// which handles legacy + new formats, derives distances and resolves zones→paces) and
-// the raw phases (for the coach's authored pace + labels). They align 1:1 so we walk
-// them in parallel.
+// Every step gets a descriptive NAME (a leading cue, shown on the watch) and a pace
+// target:
+//  - a zone or an authored range → its range (wide zones don't beep on GPS drift);
+//  - a single authored pace (marathon pace, an interval) → a tight ±5 s band, so
+//    it's held precisely without a razor-exact target;
+//  - strides and hill sprints → NO pace target (effort by feel; a GPS pace on a
+//    100 m acceleration is pointless and just beeps).
+// Form drills become 4×1-minute steps.
 //
-// Pace target per step:
-//  - a specific authored single pace (marathon 3:47, ultra 5:30, a stride) → shown
-//    EXACTLY (e.g. "5:30/km Pace"), so the intended pace is visible;
-//  - a zone or an authored range → shown as its range (Z2 → "4:10-4:54/km Pace");
-//  - a hill sprint → no pace (a GPS target is meaningless on a ~10 s max effort).
-// Effort steps carry a leading label ("Strides", "Hill sprint"); form drills become
-// 4×1-minute "Drills" steps.
+// Names must be plain words: a bare zone ("Z2") or pace ("5:30/km") would be parsed
+// as the target, so those never appear as a step name (the range + name convey it).
 
 import { normalizeStructure, paceToSeconds, type ZoneMap, type NormStep, type NormSegment } from '@/lib/plan-structure';
+
+// ± seconds around a single authored pace (marathon pace, an interval rep).
+const SINGLE_PACE_TOLERANCE_SEC = 5;
+
+// Short, watch-friendly names for the pace zones (the DB zone names like "Aerobic
+// Endurance" are too long for a step label).
+const ZONE_NAME: Record<string, string> = { Z1: 'Recovery', Z2: 'Easy', Z3: 'Tempo', Z4: 'Threshold', Z5: 'Fast' };
 
 // "m:ss" ⟵ seconds/km.
 export function secToPace(sec: number): string {
@@ -25,8 +30,7 @@ export function secToPace(sec: number): string {
 }
 
 // Distance token — always in km ("6.8km", "0.1km"). intervals.icu reads a bare "m"
-// as MINUTES, so a sub-km distance must be written in km (0.1km, not 100m) or it's
-// parsed as 100 minutes. Rounded to the metre (3 dp).
+// as MINUTES, so a sub-km distance must be written in km (0.1km, not 100m).
 function distLabel(km: number): string {
   return `${Math.round(km * 1000) / 1000}km`;
 }
@@ -36,6 +40,7 @@ interface RawPhase {
   phase?: string;
   label?: string | null;
   zone?: string | null;
+  description?: string | null;
   pace_min?: string | null;
   pace_max?: string | null;
   pace_per_km?: string | null;
@@ -50,51 +55,52 @@ function labelOf(raw: RawPhase | undefined): string {
   return String(raw?.label ?? raw?.phase ?? '');
 }
 
-// The coach's authored SINGLE pace ("m:ss") for a raw phase, else null (a zone, a
-// range, or no pace). New format: an explicit single pace with no zone. Legacy: a
-// named phase (e.g. "Ultra pace") carrying pace_per_km — but not a bare zone ("Z2").
-// This is what lets an "ultra pace" leg show 5:30 even though it maps to Z1 for display.
-function authoredPace(raw: RawPhase | undefined): string | null {
-  if (!raw) return null;
-  if (raw.type) {
-    if (raw.zone) return null;
-    const { pace_min, pace_max } = raw;
-    if (pace_min && pace_max) return pace_min === pace_max ? pace_min : null;
-    return pace_min ?? pace_max ?? null;
-  }
-  const phase = String(raw.phase ?? '').trim();
-  if (/^Z\s*[1-9]$/i.test(phase)) return null;
-  return raw.pace_per_km ?? null;
+// A run step is effort-based (no pace target) — a stride or a hill sprint.
+function isEffort(raw: RawPhase | undefined): boolean {
+  const l = labelOf(raw);
+  return STRIDE_RE.test(l) || HILL_RE.test(l);
 }
 
-// Leading label shown on effort steps, else null.
-function cueFor(raw: RawPhase | undefined): string | null {
-  const label = labelOf(raw);
-  if (HILL_RE.test(label)) return 'Hill sprint';
+// The descriptive step name shown on the watch. Explicit labels win (Steady, Marathon
+// pace, Interval…), then a named legacy phase (Ultra pace), then a warm-up/cool-down/
+// recovery cue from the description, else the zone's short name.
+function nameFor(seg: NormSegment, raw: RawPhase | undefined): string {
+  const label = String(raw?.label ?? '');
   if (STRIDE_RE.test(label)) return 'Strides';
-  return null;
+  if (HILL_RE.test(label))   return 'Hill sprint';
+  if (label) return label;
+
+  const phase = String(raw?.phase ?? '').trim();
+  if (phase && !/^Z\s*[1-9]$/i.test(phase)) return phase;      // e.g. "Ultra pace"
+
+  const desc = String(raw?.description ?? '');
+  if (/warm/i.test(desc)) return 'Warm-up';
+  if (/cool/i.test(desc)) return 'Cool-down';
+  if (/jog|walk-?back/i.test(desc)) return 'Recovery jog';
+
+  return (seg.zoneKey && ZONE_NAME[seg.zoneKey]) || 'Run';
 }
 
-// The "<pace>/km Pace" token for a step: the authored single pace exactly, else the
-// segment's zone/authored range, else (hills / no pace) null.
+// The "<pace>/km Pace" target token for a step, or null (effort step / no pace).
+// A real range is used verbatim; a single authored pace gets a ±5 s band.
 function targetToken(seg: NormSegment, raw: RawPhase | undefined): string | null {
-  if (HILL_RE.test(labelOf(raw))) return null;
-  const exact = paceToSeconds(authoredPace(raw));
-  if (exact != null) return `${secToPace(exact)}/km Pace`;
+  if (isEffort(raw)) return null;
   const lo = paceToSeconds(seg.paceMin), hi = paceToSeconds(seg.paceMax);
-  if (lo != null && hi != null && lo !== hi) return `${secToPace(Math.min(lo, hi))}-${secToPace(Math.max(lo, hi))}/km Pace`;
+  if (lo != null && hi != null && lo !== hi) {
+    return `${secToPace(Math.min(lo, hi))}-${secToPace(Math.max(lo, hi))}/km Pace`;
+  }
   const p = lo ?? hi;
-  return p != null ? `${secToPace(p)}/km Pace` : null;
+  if (p == null) return null;
+  return `${secToPace(p - SINGLE_PACE_TOLERANCE_SEC)}-${secToPace(p + SINGLE_PACE_TOLERANCE_SEC)}/km Pace`;
 }
 
-// One "- [<cue> ]<dist>[ <pace>/km Pace]" step line (indent for repeat sub-steps).
+// One "- <name> <dist>[ <pace>/km Pace]" step line (indent for repeat sub-steps).
 // null for zero-distance markers (drills handled separately).
 function segLine(seg: NormSegment, raw: RawPhase | undefined, indent = ''): string | null {
   const km = seg.distanceKm || 0;
   if (km <= 0) return null;
-  const cue = cueFor(raw);
   const target = targetToken(seg, raw);
-  return `${indent}- ${cue ? `${cue} ` : ''}${distLabel(km)}${target ? ` ${target}` : ''}`;
+  return `${indent}- ${nameFor(seg, raw)} ${distLabel(km)}${target ? ` ${target}` : ''}`;
 }
 
 // Build the intervals.icu workout description from a run's raw structure + zones.
@@ -112,8 +118,8 @@ export function structureToWorkoutText(structure: unknown, zones: ZoneMap): stri
       const sub = st.steps.map((seg, j) => segLine(seg, rawSubs[j], '  ')).filter(Boolean) as string[];
       if (sub.length) lines.push(`${st.count}x`, ...sub);
     } else if (rawItem && DRILLS_RE.test(labelOf(rawItem)) && (st.distanceKm || 0) <= 0) {
-      // Form drills carry no distance or pace — emit as 4×1-minute labelled steps
-      // ("1m" is one minute in intervals.icu; a bare distance would be wrong here).
+      // Form drills carry no distance/pace — emit as 4×1-minute labelled steps
+      // ("1m" is one minute in intervals.icu).
       lines.push('4x', '  - Drills 1m');
     } else {
       const line = segLine(st, rawItem);
@@ -123,14 +129,17 @@ export function structureToWorkoutText(structure: unknown, zones: ZoneMap): stri
   return lines.length ? lines.join('\n') : null;
 }
 
-// Fallback for a run with no structured segments: a single step over the given pace
-// window (a default zone's window, or an explicit target pace shown exactly), or
-// distance-only when there's no pace signal.
-export function easyRunText(distanceKm: number, minPace: string | null, maxPace: string | null): string | null {
+// Fallback for a run with no structured segments: a single named step over the given
+// pace window (a default zone's window, or an explicit target pace ±5 s).
+export function easyRunText(name: string, distanceKm: number, minPace: string | null, maxPace: string | null): string | null {
   if (!(distanceKm > 0)) return null;
   const lo = paceToSeconds(minPace), hi = paceToSeconds(maxPace);
   let target: string | null = null;
-  if (lo != null && hi != null && lo !== hi) target = `${secToPace(Math.min(lo, hi))}-${secToPace(Math.max(lo, hi))}/km Pace`;
-  else { const p = lo ?? hi; if (p != null) target = `${secToPace(p)}/km Pace`; }
-  return `- ${distLabel(distanceKm)}${target ? ` ${target}` : ''}`;
+  if (lo != null && hi != null && lo !== hi) {
+    target = `${secToPace(Math.min(lo, hi))}-${secToPace(Math.max(lo, hi))}/km Pace`;
+  } else {
+    const p = lo ?? hi;
+    if (p != null) target = `${secToPace(p - SINGLE_PACE_TOLERANCE_SEC)}-${secToPace(p + SINGLE_PACE_TOLERANCE_SEC)}/km Pace`;
+  }
+  return `- ${name} ${distLabel(distanceKm)}${target ? ` ${target}` : ''}`;
 }
