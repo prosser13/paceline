@@ -21,16 +21,16 @@ const KIND_LABEL: Record<AvailabilityKind, string> = {
 };
 
 // activity_limited stores lowercase canonical values; label + a short form for chips.
-// Strength is special: it's never fully unavailable — bodyweight work is always
-// possible wherever you are — so barring it means "no strength equipment", not "no
-// strength". The label/chip say so; the future coach reads it that way (downgrade
-// to bodyweight rather than drop the session).
+// Yoga isn't listed — it needs no equipment or venue, so it's never something you
+// can't do. Strength stays but is special: it's never fully unavailable either
+// (bodyweight works anywhere), so barring it means "no strength equipment", not "no
+// strength" — the label/chip say so, and the future coach reads it that way
+// (downgrade to bodyweight rather than drop the session).
 const ACTIVITY_OPTIONS: { value: string; label: string; short: string; only: string }[] = [
   { value: 'running',  label: 'Running',              short: 'run',           only: 'running' },
   { value: 'cycling',  label: 'Cycling',              short: 'bike',          only: 'cycling' },
   { value: 'swimming', label: 'Swimming',             short: 'swim',          only: 'swimming' },
   { value: 'strength', label: 'Strength (equipment)', short: 'strength gear', only: 'strength' },
-  { value: 'yoga',     label: 'Yoga',                 short: 'yoga',          only: 'yoga' },
 ];
 
 const EQUIPMENT_PRESETS = ['Dumbbells', 'Barbell', 'Bench', 'Kettlebell', 'Machine/Cable', 'Bands', 'Pull-up bar'];
