@@ -122,13 +122,17 @@ export interface PlanContext {
 // A deterministic "did the run stay in its prescribed zone?" verdict, computed so
 // the coach never has to infer zone adherence from the session's name or HR — and
 // never mis-reads a decimal min/km (5.28) as clock time (5:28). Paces are already
-// formatted "m:ss/km".
+// formatted "m:ss/km". Also carries the effort read (avg HR + its HR zone) so the
+// coach weighs effort = HR × pace, not pace alone, and can spot decoupling.
 export interface PaceCheck {
   planned_zone: string;          // e.g. "Z2 Aerobic Endurance", or "mixed (Z2 + Z1)"
   planned_window: string | null; // e.g. "4:10–4:54/km" (null for mixed workouts)
   actual_pace: string;           // e.g. "5:17/km"
   actual_ngp: string | null;     // grade-adjusted, when available
   actual_zone: string | null;    // the zone the actual pace fell in
+  actual_hr: number | null;      // avg HR (bpm), the effort signal
+  actual_hr_zone: string | null; // the HR zone that HR fell in, e.g. "Z1 Recovery"
+  effort_note: string | null;    // decoupling read when HR effort and pace diverge
   verdict: string;               // plain-language on-plan / OUTSIDE-plan judgement
 }
 
@@ -166,25 +170,26 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const recentFrom = addDays(today, -RECENT_DAYS);
   const recentTo = throughToday ? today : addDays(today, -1);
 
-  // Pace zones drive the per-run zone check in the `recent` list, so resolve them
-  // (a cached read) before the main wave and reuse the rows for zones.pace_zones.
-  const paceZones = await listPaceZones();
+  // Pace + HR zones drive the per-run pace/effort check in the `recent` list, so
+  // resolve them (cached reads) before the main wave and reuse the rows for
+  // zones.pace_zones / zones.hr_zones.
+  const [paceZones, hrZones] = await Promise.all([listPaceZones(), listHrZones()]);
   const runZones = buildRunZoneMap(paceZones);
+  const runHrBands = buildHrBands(hrZones);
 
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
-    wellness, threshold, hrConfig, hrZones, powerConfig, powerZones,
+    wellness, threshold, hrConfig, powerConfig, powerZones,
     constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
     getCurrentWeek(today),
     getUpcomingSessions(upcomingFrom, upcomingTo),
-    getRecentSessions(recentFrom, recentTo, runZones),
+    getRecentSessions(recentFrom, recentTo, runZones, runHrBands),
     getWellnessCacheRow(),
     getThresholdPace(),
     getHrConfig(),
-    listHrZones(),
     getPowerConfig(),
     listPowerZones(),
     listPlanConstraints(),
@@ -334,6 +339,27 @@ function buildRunZoneMap(rows: readonly Record<string, unknown>[]): ZoneMap {
   return m;
 }
 
+// Run HR zones as ordered bands, for classifying an avg HR into an effort zone.
+interface HrBand { key: string; name: string; min: number; max: number; sortOrder: number }
+function buildHrBands(rows: readonly Record<string, unknown>[]): HrBand[] {
+  return rows
+    .map(z => ({ key: z.zone_key as string, name: z.name as string, min: Number(z.hr_min), max: Number(z.hr_max), sortOrder: Number(z.sort_order) }))
+    .filter(b => b.key)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+// The HR zone a bpm value falls in; the nearest band when it's outside every window.
+function hrZoneFromBpm(bpm: number, bands: HrBand[]): HrBand | null {
+  if (!bands.length) return null;
+  for (const b of bands) if (bpm >= b.min && bpm <= b.max) return b;
+  let best = bands[0], bestDist = Infinity;
+  for (const b of bands) {
+    const dist = bpm < b.min ? b.min - bpm : bpm > b.max ? bpm - b.max : 0;
+    if (dist < bestDist) { bestDist = dist; best = b; }
+  }
+  return best;
+}
+
 const NON_RUN_TYPES = ['STRENGTH', 'CORE', 'YOGA', 'REST'];
 
 // Distinct pace-zone keys a structured run spans (empty when unstructured).
@@ -360,7 +386,8 @@ function plannedRunZone(name: string, description: string | null, targetPace: st
 // against (so the coach falls back to the raw actuals, as before).
 function buildPaceCheck(
   s: { session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
-  actualPaceMinKm: number | null, ngpMinKm: number | null, zones: ZoneMap,
+  actualPaceMinKm: number | null, ngpMinKm: number | null, actualHr: number | null,
+  zones: ZoneMap, hrBands: HrBand[],
 ): PaceCheck | null {
   if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
   if (actualPaceMinKm == null) return null;
@@ -370,6 +397,20 @@ function buildPaceCheck(
   const actualNgp = ngpMinKm != null ? `${secondsToPace(Math.round(ngpMinKm * 60))}/km` : null;
   const actualZone = zoneFromPace(secondsToPace(actualSec), zones);
   const actualZoneLabel = actualZone ? `${actualZone.key} ${actualZone.name}` : null;
+
+  // Effort read: which HR zone the average HR fell in. Effort = HR × pace, so this
+  // is what tells the coach whether an easy-looking pace actually came easy.
+  const hrZone = actualHr != null ? hrZoneFromBpm(actualHr, hrBands) : null;
+  const actualHrZoneLabel = hrZone ? `${hrZone.key} ${hrZone.name}` : null;
+
+  // Decoupling read: HR effort vs the effort the actual pace implies.
+  let effortNote: string | null = null;
+  if (actualZone && hrZone) {
+    const gap = hrZone.sortOrder - actualZone.sortOrder;
+    if (gap >= 2) effortNote = 'HR effort well above the running pace — likely fatigue, heat, or hills';
+    else if (gap === 1) effortNote = 'HR effort a touch above the running pace';
+    else if (gap <= -1) effortNote = 'HR below the effort the pace implies — it came comfortably';
+  }
 
   // Multi-zone structured workout: no single whole-run verdict — flag it so the
   // coach reads it per segment rather than judging the average.
@@ -381,6 +422,9 @@ function buildPaceCheck(
       actual_pace: actualPace,
       actual_ngp: actualNgp,
       actual_zone: actualZoneLabel,
+      actual_hr: actualHr,
+      actual_hr_zone: actualHrZoneLabel,
+      effort_note: null, // whole-run average is a blend across zones — decoupling read isn't meaningful
       verdict: 'structured multi-zone session — assess each segment against its own target, not the whole-run average',
     };
   }
@@ -407,11 +451,16 @@ function buildPaceCheck(
     verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${actualPace}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
   }
 
-  return { planned_zone: plannedLabel, planned_window: plannedWindow, actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel, verdict };
+  return {
+    planned_zone: plannedLabel, planned_window: plannedWindow,
+    actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel,
+    actual_hr: actualHr, actual_hr_zone: actualHrZoneLabel, effort_note: effortNote,
+    verdict,
+  };
 }
 
 // Planned sessions in [from, to] annotated with their actuals (from completed_workouts).
-async function getRecentSessions(from: string, to: string, zones: ZoneMap): Promise<RecentSession[]> {
+async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBands: HrBand[]): Promise<RecentSession[]> {
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, structure')
@@ -441,6 +490,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap): Prom
     const isRest = (s.session_type as string) === 'REST';
     const actualPaceMinKm = c && c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null;
     const ngpMinKm = c && c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null;
+    const avgHr = c && c.actual_avg_hr != null ? Number(c.actual_avg_hr) : null;
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -475,7 +525,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap): Prom
           target_pace: (s.target_pace as string | null) ?? null,
           structure: s.structure,
         },
-        actualPaceMinKm, ngpMinKm, zones,
+        actualPaceMinKm, ngpMinKm, avgHr, zones, hrBands,
       ) : null,
     };
   });

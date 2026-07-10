@@ -53,7 +53,7 @@ It returns one JSON object:
 | `upcoming_races` | Race plans on/after `as_of`, soonest first |
 | `current_week` | The `plan_weeks` row for `as_of` — phase, purpose, planned volume |
 | `upcoming` | Next 14 days of `plan_sessions` — **the editable surface**. Each carries `id` (the change address), `structure`, `target_pace`, `estimated_tss`, `intensity`, `priority`, `status`, `rationale` |
-| `recent` | Last 14 days, planned vs actual per session, with `adherence` (`done`/`missed`) and, for completed runs, a `pace_check` (prescribed zone + window, actual pace/zone as formatted `m:ss/km`, and an on-plan/OUTSIDE-plan verdict) so zone adherence is judged by pace, not the session's name |
+| `recent` | Last 14 days, planned vs actual per session, with `adherence` (`done`/`missed`) and, for completed runs, a `pace_check` (prescribed zone + window, actual pace/zone as formatted `m:ss/km`, the avg HR + its HR zone, an `effort_note` when HR and pace diverge, and an on-plan/OUTSIDE-plan verdict) so zone adherence is judged by pace and effort by HR × pace, not the session's name |
 | `wellness` | Cached intervals.icu form / fitness / fatigue (+ `stale` flag) |
 | `zones` | Threshold pace, pace/HR/power zones — used to translate intent into targets |
 | `constraints` | Standing scheduling limits the user set (see §3) |
