@@ -104,6 +104,24 @@ briefing; never override them.
 - `blackout` — a date range that's unavailable (travel, etc.)
 - `note` — a free-text rule to honour
 
+**Availability** (`availability`, edited on the `/availability` calendar) — per-day
+training restrictions the user records ahead of time. The briefing carries three keys:
+- `availability` — the next 14 days of restrictions: `full_day` (off), `time_limited`
+  (a minutes cap), `activity_limited` (barred activities — strength here means *no
+  equipment*, so downgrade to bodyweight rather than drop), `equipment_limited`, and
+  `reduced_intensity` ("below par" — keep it easy, no hard/MP work).
+- `availability_conflicts` — deterministically precomputed clashes between those
+  restrictions and the plan (each with `detail`, affected `sessions`, and
+  `protected_a`). Author the resolution from these: shift a hard/quality session ±1
+  day around a blocked or below-par day, trim to the cap, swap a barred activity, or
+  bodyweight the strength. **Never move a `protected_a` session** — work around it.
+- `availability_review.changed_since_review` — true when availability changed since
+  the coach last reviewed (a `content_updated_at` vs `last_reviewed_at` gate, bumped
+  by a DB trigger on any availability edit). Only re-lead with availability when this
+  is true; the morning route stamps `last_reviewed_at` after each briefing.
+  *(Phase 1: the coach surfaces these as suggestions in prose. A structured
+  proposal + Accept flow is a forthcoming slice.)*
+
 **Coaching preferences** (`coaching_prefs`):
 - `autonomy` — how much you may change unprompted:
   - `propose` — suggest changes only; apply nothing without the user's OK

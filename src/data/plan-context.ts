@@ -17,6 +17,8 @@ import {
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
+import { listAvailabilityBetween, getAvailabilityReviewState, type AvailabilityRow } from '@/data/availability';
+import { detectAvailabilityConflicts, type AvailabilityConflict, type ConflictSession } from '@/lib/availability-conflicts';
 import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
   getPowerConfig, listPowerZones,
@@ -98,6 +100,11 @@ export interface PlanContext {
     power_zones: { name: string; power_min: number; power_max: number }[];
   };
   constraints: Record<string, unknown>[];
+  availability: AvailabilityRow[];               // next 14 days of training restrictions the user recorded
+  availability_conflicts: AvailabilityConflict[]; // precomputed clashes between availability and the plan
+  availability_review: {                         // the "changed since I last looked?" gate
+    content_updated_at: string; last_reviewed_at: string | null; changed_since_review: boolean;
+  };
   coaching: Record<string, unknown> | null;     // autonomy + guardrails + standing notes
   recent_changes: Record<string, unknown>[];    // adjustment_logs tail (empty until the agent writes)
   strength: {                                    // how the strength builder is progressing + adapting
@@ -191,7 +198,8 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
     wellness, threshold, hrConfig, powerConfig, powerZones,
-    constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
+    constraints, availability, availabilityReview, coaching, recentChanges,
+    strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
@@ -204,6 +212,8 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getPowerConfig(),
     listPowerZones(),
     listPlanConstraints(),
+    listAvailabilityBetween(upcomingFrom, upcomingTo),
+    getAvailabilityReviewState(),
     getCoachingPrefs(),
     getRecentChanges(),
     getStrengthCoachSummary(),
@@ -211,6 +221,24 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getPendingThresholdSuggestion(),
     getFuelPlanForGoalBlock(today),
   ]);
+
+  // Deterministic availability↔plan conflicts over the same window as `upcoming`
+  // (already loaded — no extra query). The coach authors the resolution; this is the
+  // reliable "what clashes" half of the hybrid.
+  const conflictSessions: ConflictSession[] = upcoming.map(s => ({
+    scheduled_date:     s.scheduled_date as string,
+    name:               s.name as string,
+    session_type:       s.session_type as string,
+    activity_type:      (s.activity_type as string | null) ?? null,
+    intensity:          (s.intensity as string | null) ?? null,
+    priority:           (s.priority as string | null) ?? null,
+    estimated_duration: (s.estimated_duration as string | null) ?? null,
+    distance_km:        s.distance_km != null ? Number(s.distance_km) : null,
+  }));
+  const availabilityConflicts = detectAvailabilityConflicts(availability, conflictSessions);
+  const availabilityChanged =
+    !availabilityReview.last_reviewed_at ||
+    availabilityReview.content_updated_at > availabilityReview.last_reviewed_at;
 
   // Today's gut-training fuel guidance (for the morning briefing's session line) —
   // the first of today's sessions that carries a target. Today lives in `upcoming`
@@ -262,6 +290,13 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
       power_zones: powerZones.map(z => ({ name: z.name, power_min: z.power_min, power_max: z.power_max })),
     },
     constraints: constraints as Record<string, unknown>[],
+    availability,
+    availability_conflicts: availabilityConflicts,
+    availability_review: {
+      content_updated_at: availabilityReview.content_updated_at,
+      last_reviewed_at:   availabilityReview.last_reviewed_at,
+      changed_since_review: availabilityChanged,
+    },
     coaching: coaching as Record<string, unknown> | null,
     recent_changes: recentChanges,
     strength: {
