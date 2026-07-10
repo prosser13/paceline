@@ -92,7 +92,10 @@ export async function syncUpcomingRunWorkouts(days = DEFAULT_DAYS, force = false
       const z = zones[DEFAULT_ZONE_BY_TYPE[s.session_type as string] ?? DEFAULT_RUN_ZONE];
       if (z) { minPace = z.paceMin; maxPace = z.paceMax; }
     }
-    const text = structureToWorkoutText(s.structure, zones)
+    // A manual override wins — hand-crafted on-watch text pushed verbatim.
+    const override = (s.intervals_workout_override as string | null)?.trim() || null;
+    const text = override
+      ?? structureToWorkoutText(s.structure, zones)
       ?? easyRunText(s.distance_km != null ? Number(s.distance_km) : 0, minPace, maxPace);
 
     try {
