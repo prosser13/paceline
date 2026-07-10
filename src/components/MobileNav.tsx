@@ -16,6 +16,7 @@ const STATIONS = [
   { href: '/races', label: 'Races', match: (p: string) => p.startsWith('/races') },
   { href: '/strength', label: 'Strength', match: (p: string) => p.startsWith('/strength') },
   { href: '/benchmarks', label: 'Benchmarks', match: (p: string) => p.startsWith('/benchmarks') },
+  { href: '/availability', label: 'Avail', match: (p: string) => p.startsWith('/availability') },
 ] as const;
 
 // Even horizontal spacing per station, so the runner + line math scale with count.
