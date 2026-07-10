@@ -21,16 +21,16 @@ const KIND_LABEL: Record<AvailabilityKind, string> = {
 };
 
 // activity_limited stores lowercase canonical values; label + a short form for chips.
-// Strength is special: it's never fully unavailable — bodyweight work is always
-// possible wherever you are — so barring it means "no strength equipment", not "no
-// strength". The label/chip say so; the future coach reads it that way (downgrade
-// to bodyweight rather than drop the session).
-const ACTIVITY_OPTIONS: { value: string; label: string; short: string }[] = [
-  { value: 'running',  label: 'Running',              short: 'run' },
-  { value: 'cycling',  label: 'Cycling',              short: 'bike' },
-  { value: 'swimming', label: 'Swimming',             short: 'swim' },
-  { value: 'strength', label: 'Strength (equipment)', short: 'strength gear' },
-  { value: 'yoga',     label: 'Yoga',                 short: 'yoga' },
+// Yoga isn't listed — it needs no equipment or venue, so it's never something you
+// can't do. Strength stays but is special: it's never fully unavailable either
+// (bodyweight works anywhere), so barring it means "no strength equipment", not "no
+// strength" — the label/chip say so, and the future coach reads it that way
+// (downgrade to bodyweight rather than drop the session).
+const ACTIVITY_OPTIONS: { value: string; label: string; short: string; only: string }[] = [
+  { value: 'running',  label: 'Running',              short: 'run',           only: 'running' },
+  { value: 'cycling',  label: 'Cycling',              short: 'bike',          only: 'cycling' },
+  { value: 'swimming', label: 'Swimming',             short: 'swim',          only: 'swimming' },
+  { value: 'strength', label: 'Strength (equipment)', short: 'strength gear', only: 'strength' },
 ];
 
 const EQUIPMENT_PRESETS = ['Dumbbells', 'Barbell', 'Bench', 'Kettlebell', 'Machine/Cable', 'Bands', 'Pull-up bar'];
@@ -47,6 +47,17 @@ function prettyDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   return `${WEEKDAYS[mondayIndex(date)]} ${d} ${MONTHS[m - 1]} ${y}`;
+}
+// A month's 6-week grid of ISO date strings, Monday-first, with leading/trailing
+// blanks as null so the grid stays 7-wide.
+function monthCells(year: number, month: number): (string | null)[] {
+  const lead = mondayIndex(new Date(year, month, 1));
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const out: (string | null)[] = [];
+  for (let i = 0; i < lead; i++) out.push(null);
+  for (let d = 1; d <= daysInMonth; d++) out.push(ymd(new Date(year, month, d)));
+  while (out.length % 7 !== 0) out.push(null);
+  return out;
 }
 
 // ── editor draft ─────────────────────────────────────────────
@@ -77,8 +88,13 @@ function summarise(r: AvailabilityRow): string {
     case 'time_limited':
       return r.minutes != null ? `${r.minutes}m` : 'time';
     case 'activity_limited': {
+      if (!r.items.length) return 'no activities';
+      // If everything but one known activity is barred, "X only" reads far better
+      // than a long list of nos.
+      const allowed = ACTIVITY_OPTIONS.filter(a => !r.items.includes(a.value));
+      if (allowed.length === 1) return `${allowed[0].only} only`;
       const shorts = r.items.map(v => ACTIVITY_OPTIONS.find(a => a.value === v)?.short ?? v);
-      return shorts.length ? `no ${shorts.join(', ')}` : 'no activities';
+      return `no ${shorts.join(', ')}`;
     }
     case 'equipment_limited':
       return r.items.length ? `no ${r.items.map(i => i.toLowerCase()).join(', ')}` : 'no equipment';
@@ -106,7 +122,6 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
   });
 
   const today = useMemo(() => new Date(), []);
-  const [view, setView] = useState<{ year: number; month: number }>({ year: today.getFullYear(), month: today.getMonth() });
   const [selected, setSelected] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [saved, setSaved] = useState(false);
@@ -114,29 +129,27 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
 
   const todayIso = ymd(today);
 
-  // The 6-week grid of ISO date strings (with leading/trailing blanks as null).
-  const cells = useMemo<(string | null)[]>(() => {
-    const first = new Date(view.year, view.month, 1);
-    const lead = mondayIndex(first);
-    const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
-    const out: (string | null)[] = [];
-    for (let i = 0; i < lead; i++) out.push(null);
-    for (let d = 1; d <= daysInMonth; d++) out.push(ymd(new Date(view.year, view.month, d)));
-    while (out.length % 7 !== 0) out.push(null);
+  // Months to render, stacked vertically: the current month through a year ahead,
+  // widened to include any month that holds an entry (past or further out) so no
+  // data is ever hidden. No horizontal month-paging — the user just scrolls down.
+  const months = useMemo<{ year: number; month: number }[]>(() => {
+    const cur = today.getFullYear() * 12 + today.getMonth();
+    let min = cur, max = cur + 11;
+    for (const key of byDate.keys()) {
+      const [y, m] = key.split('-').map(Number);
+      const idx = y * 12 + (m - 1);
+      if (idx < min) min = idx;
+      if (idx > max) max = idx;
+    }
+    const out: { year: number; month: number }[] = [];
+    for (let idx = min; idx <= max; idx++) out.push({ year: Math.floor(idx / 12), month: idx % 12 });
     return out;
-  }, [view]);
+  }, [byDate, today]);
 
   function openDay(iso: string) {
     setSelected(iso);
     setDrafts((byDate.get(iso) ?? []).map(toDraft));
     setSaved(false);
-  }
-
-  function shiftMonth(delta: number) {
-    setView(v => {
-      const d = new Date(v.year, v.month + delta, 1);
-      return { year: d.getFullYear(), month: d.getMonth() };
-    });
   }
 
   function updateDraft(key: number, patch: Partial<Draft>) {
@@ -190,62 +203,12 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
     });
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      {/* ── month header ── */}
-      <div className="flex items-center justify-between">
-        <button type="button" onClick={() => shiftMonth(-1)} aria-label="Previous month"
-          className="w-8 h-8 rounded-[8px] border border-fog text-stone hover:bg-fog/50 transition-colors flex items-center justify-center">‹</button>
-        <div className="font-display font-bold text-[18px]">{MONTHS[view.month]} {view.year}</div>
-        <button type="button" onClick={() => shiftMonth(1)} aria-label="Next month"
-          className="w-8 h-8 rounded-[8px] border border-fog text-stone hover:bg-fog/50 transition-colors flex items-center justify-center">›</button>
-      </div>
+  const selectedIdx = selected ? Number(selected.slice(0, 4)) * 12 + (Number(selected.slice(5, 7)) - 1) : null;
 
-      {/* ── calendar grid ── */}
-      <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-        <div className="grid grid-cols-7 border-b border-fog">
-          {WEEKDAYS.map(d => (
-            <div key={d} className="text-[11px] font-bold uppercase text-stone text-center py-[7px]" style={{ letterSpacing: '.05em' }}>{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7">
-          {cells.map((iso, i) => {
-            if (!iso) return <div key={`b${i}`} className="min-h-[74px] border-r border-b border-fog/60 bg-bone/40 last:border-r-0" />;
-            const entries = byDate.get(iso) ?? [];
-            const dayNum = Number(iso.slice(8));
-            const isToday = iso === todayIso;
-            const isSelected = iso === selected;
-            return (
-              <button
-                key={iso}
-                type="button"
-                onClick={() => openDay(iso)}
-                className={`min-h-[74px] border-r border-b border-fog/60 last:border-r-0 text-left p-[5px] flex flex-col gap-[3px] transition-colors ${
-                  isSelected ? 'bg-strength/10' : 'hover:bg-fog/30'
-                }`}
-              >
-                <span className={`text-[12px] font-semibold leading-none inline-flex items-center justify-center w-[19px] h-[19px] rounded-full ${
-                  isToday ? 'bg-hero text-onhero' : 'text-ink'
-                }`}>{dayNum}</span>
-                <span className="flex flex-col gap-[2px] overflow-hidden">
-                  {entries.slice(0, 2).map((e, idx) => (
-                    <span key={idx} className={`text-[9.5px] leading-[1.25] font-medium px-[4px] py-[1px] rounded-[4px] truncate ${CHIP[e.kind]}`}>
-                      {summarise(e)}
-                    </span>
-                  ))}
-                  {entries.length > 2 && (
-                    <span className="text-[9px] text-stone font-medium px-[4px]">+{entries.length - 2} more</span>
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── day editor ── */}
-      {selected && (
-        <div className="border border-fog rounded-[14px] bg-paper" style={{ padding: '16px 18px' }}>
+  // The day editor for the currently-selected day — rendered inline beneath the
+  // month that contains it, so it appears right where you clicked.
+  const editor = selected && (
+    <div className="border border-fog rounded-[14px] bg-paper mt-3" style={{ padding: '16px 18px' }}>
           <div className="flex items-center justify-between mb-3">
             <div className="font-display font-bold text-[16px]">{prettyDate(selected)}</div>
             <button type="button" onClick={() => setSelected(null)} aria-label="Close"
@@ -342,7 +305,59 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
             </div>
           </div>
         </div>
-      )}
+  );
+
+  return (
+    <div className="flex flex-col gap-5">
+      {months.map(({ year, month }) => {
+        const monthIdx = year * 12 + month;
+        return (
+          <div key={monthIdx}>
+            <div className="font-display font-bold text-[17px] mb-2 px-1">{MONTHS[month]} {year}</div>
+            <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
+              <div className="grid grid-cols-7 border-b border-fog">
+                {WEEKDAYS.map(d => (
+                  <div key={d} className="text-[11px] font-bold uppercase text-stone text-center py-[7px]" style={{ letterSpacing: '.05em' }}>{d}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7">
+                {monthCells(year, month).map((iso, i) => {
+                  if (!iso) return <div key={`b${i}`} className="min-h-[74px] border-r border-b border-fog/60 bg-bone/40 last:border-r-0" />;
+                  const entries = byDate.get(iso) ?? [];
+                  const dayNum = Number(iso.slice(8));
+                  const isToday = iso === todayIso;
+                  const isSelected = iso === selected;
+                  return (
+                    <button
+                      key={iso}
+                      type="button"
+                      onClick={() => openDay(iso)}
+                      className={`min-h-[74px] border-r border-b border-fog/60 last:border-r-0 text-left p-[5px] flex flex-col gap-[3px] transition-colors ${
+                        isSelected ? 'bg-strength/10' : 'hover:bg-fog/30'
+                      }`}
+                    >
+                      <span className={`text-[12px] font-semibold leading-none inline-flex items-center justify-center w-[19px] h-[19px] rounded-full ${
+                        isToday ? 'bg-hero text-onhero' : 'text-ink'
+                      }`}>{dayNum}</span>
+                      <span className="flex flex-col gap-[2px] overflow-hidden">
+                        {entries.slice(0, 2).map((e, idx) => (
+                          <span key={idx} className={`text-[9.5px] leading-[1.25] font-medium px-[4px] py-[1px] rounded-[4px] truncate ${CHIP[e.kind]}`}>
+                            {summarise(e)}
+                          </span>
+                        ))}
+                        {entries.length > 2 && (
+                          <span className="text-[9px] text-stone font-medium px-[4px]">+{entries.length - 2} more</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {selectedIdx === monthIdx && editor}
+          </div>
+        );
+      })}
     </div>
   );
 }
