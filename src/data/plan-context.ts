@@ -132,6 +132,7 @@ export interface PaceCheck {
   actual_zone: string | null;    // the zone the actual pace fell in
   actual_hr: number | null;      // avg HR (bpm), the effort signal
   actual_hr_zone: string | null; // the HR zone that HR fell in, e.g. "Z1 Recovery"
+  elevation_gain_m: number | null; // total climb (metres) — the terrain signal
   effort_note: string | null;    // decoupling read when HR effort and pace diverge
   verdict: string;               // plain-language on-plan / OUTSIDE-plan judgement
 }
@@ -148,6 +149,7 @@ export interface RecentSession {
   actual: {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
+    elevation_gain_m: number | null;
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
   } | null;
   pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
@@ -387,6 +389,7 @@ function plannedRunZone(name: string, description: string | null, targetPace: st
 function buildPaceCheck(
   s: { session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
   actualPaceMinKm: number | null, ngpMinKm: number | null, actualHr: number | null,
+  elevationGainM: number | null, distanceKm: number | null,
   zones: ZoneMap, hrBands: HrBand[],
 ): PaceCheck | null {
   if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
@@ -396,11 +399,15 @@ function buildPaceCheck(
   const ngpSec = ngpMinKm != null ? Math.round(ngpMinKm * 60) : null;
   // Judge zone/effort by grade-adjusted pace (NGP) when we have it: a hilly run
   // comes in slow on the watch, but NGP is the effort-honest pace and the fair
-  // basis for "did you run the right zone". No raw ascent is stored on
-  // completed_workouts — NGP is the only grade signal, and a big raw-vs-NGP gap
-  // is itself the "this was hilly" flag.
+  // basis for "did you run the right zone". A big raw-vs-NGP gap, or a lot of
+  // climb per km, marks the run as hilly; NGP is what actually corrects the pace.
   const effortSec = ngpSec ?? rawSec;
-  const hilly = ngpSec != null && Math.abs(rawSec - ngpSec) >= 8;
+  const mPerKm = elevationGainM != null && distanceKm ? elevationGainM / distanceKm : null;
+  const hilly = (ngpSec != null && Math.abs(rawSec - ngpSec) >= 8) || (mPerKm != null && mPerKm >= 10);
+  // Human-readable terrain tag, e.g. "116 m climb (14 m/km)".
+  const elevTag = elevationGainM != null
+    ? `${elevationGainM} m climb${mPerKm != null ? ` (${Math.round(mPerKm)} m/km)` : ''}`
+    : 'hilly';
   const actualPace = `${secondsToPace(rawSec)}/km`;
   const actualNgp = ngpSec != null ? `${secondsToPace(ngpSec)}/km` : null;
   const actualZone = zoneFromPace(secondsToPace(effortSec), zones);
@@ -432,8 +439,9 @@ function buildPaceCheck(
       actual_zone: actualZoneLabel,
       actual_hr: actualHr,
       actual_hr_zone: actualHrZoneLabel,
+      elevation_gain_m: elevationGainM,
       effort_note: null, // whole-run average is a blend across zones — decoupling read isn't meaningful
-      verdict: 'structured multi-zone session — assess each segment against its own target, not the whole-run average',
+      verdict: `structured multi-zone session — assess each segment against its own target, not the whole-run average${hilly ? ` (${elevTag})` : ''}`,
     };
   }
 
@@ -446,12 +454,12 @@ function buildPaceCheck(
   const lo = Math.min(a, b), hi = Math.max(a, b);
   const plannedLabel = `${planned.key} ${planned.name}`;
   const plannedWindow = `${planned.paceMin}–${planned.paceMax}/km`;
-  // On hills the effort-honest pace is NGP; show both so the coach sees why.
-  const paceShown = hilly && actualNgp ? `${actualNgp} grade-adjusted (raw ${actualPace} — hilly)` : actualPace;
+  // On hills the effort-honest pace is NGP; show both, with the climb, so the coach sees why.
+  const paceShown = hilly && actualNgp ? `${actualNgp} grade-adjusted (raw ${actualPace} — ${elevTag})` : actualPace;
 
   let verdict: string;
   if (effortSec >= lo && effortSec <= hi) {
-    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})${hilly && actualNgp ? `, on grade-adjusted pace ${actualNgp} (raw ${actualPace} — hilly)` : ''}`;
+    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})${hilly && actualNgp ? `, on grade-adjusted pace ${actualNgp} (raw ${actualPace} — ${elevTag})` : ''}`;
   } else {
     const easier = effortSec > hi; // a slower pace is an easier effort
     const gap = actualZone ? Math.abs(actualZone.sortOrder - planned.sortOrder) : 0;
@@ -464,8 +472,8 @@ function buildPaceCheck(
   return {
     planned_zone: plannedLabel, planned_window: plannedWindow,
     actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel,
-    actual_hr: actualHr, actual_hr_zone: actualHrZoneLabel, effort_note: effortNote,
-    verdict,
+    actual_hr: actualHr, actual_hr_zone: actualHrZoneLabel, elevation_gain_m: elevationGainM,
+    effort_note: effortNote, verdict,
   };
 }
 
@@ -485,7 +493,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, perceived_effort, fuel_carbs_per_h, source')
         .in('plan_session_id', ids)
     : null;
   const completed = completedRes?.data ?? [];
@@ -501,6 +509,8 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
     const actualPaceMinKm = c && c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null;
     const ngpMinKm = c && c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null;
     const avgHr = c && c.actual_avg_hr != null ? Number(c.actual_avg_hr) : null;
+    const elevGainM = c && c.actual_elevation_gain_m != null ? Number(c.actual_elevation_gain_m) : null;
+    const distanceKm = c && c.actual_distance_km != null ? Number(c.actual_distance_km) : null;
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -522,6 +532,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         ngp_min_km: ngpMinKm,
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
+        elevation_gain_m: elevGainM,
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
@@ -535,7 +546,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
           target_pace: (s.target_pace as string | null) ?? null,
           structure: s.structure,
         },
-        actualPaceMinKm, ngpMinKm, avgHr, zones, hrBands,
+        actualPaceMinKm, ngpMinKm, avgHr, elevGainM, distanceKm, zones, hrBands,
       ) : null,
     };
   });
