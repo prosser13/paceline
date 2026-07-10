@@ -9,6 +9,9 @@
 // here is best-effort and behind a diagnostic endpoint before it goes near the cron.
 
 import crypto from 'node:crypto';
+import { getCachedBearer, saveCachedBearer } from '@/data/garmin-auth';
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 const API = 'https://connectapi.garmin.com';
 const CONSUMER_URL = 'https://thegarth.s3.amazonaws.com/oauth_consumer.json';
@@ -52,33 +55,51 @@ function oauth1Header(url: string, method: string, ck: string, cs: string, token
   return 'OAuth ' + Object.keys(all).sort().map(k => `${pct(k)}="${pct(all[k])}"`).join(', ');
 }
 
-// Cached OAuth2 bearer (valid ~1 h). Re-minted from the OAuth1 token on expiry.
+// In-process bearer cache (fast path within one warm instance); the DB
+// (`garmin_auth`) is the cross-invocation cache.
 let bearerCache: { token: string; expiresAt: number } | null = null;
 
-export async function getBearer(force = false): Promise<string> {
-  if (!force && bearerCache && bearerCache.expiresAt > Date.now() + 60_000) return bearerCache.token;
+// Exchange the OAuth1 token for an OAuth2 bearer, retrying briefly on 429 (Garmin
+// rate-limits this endpoint). Throws with the HTTP status on persistent failure.
+async function exchangeBearer(): Promise<{ token: string; expiresAt: number }> {
   const token = process.env.GARMIN_OAUTH_TOKEN, secret = process.env.GARMIN_OAUTH_TOKEN_SECRET;
   if (!token || !secret) throw new Error('GARMIN_OAUTH_TOKEN / GARMIN_OAUTH_TOKEN_SECRET not set');
 
   const { key: ck, secret: cs } = await getConsumer();
   const url = `${API}/oauth-service/oauth/exchange/user/2.0`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      Authorization: oauth1Header(url, 'POST', ck, cs, token, secret),
-      'User-Agent': EXCHANGE_UA,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: '',
-    cache: 'no-store',
-  });
-  if (!res.ok) {
+
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: oauth1Header(url, 'POST', ck, cs, token, secret),
+        'User-Agent': EXCHANGE_UA,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Accept: 'application/json',
+      },
+      body: '',
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const j = await res.json();
+      return { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+    }
     const t = (await res.text().catch(() => '')).slice(0, 200);
+    if (res.status === 429 && attempt < 2) { await sleep(2500 * (attempt + 1)); continue; }
     throw new Error(`OAuth2 exchange HTTP ${res.status}${t ? ` — ${t}` : ''}`);
   }
-  const j = await res.json();
-  bearerCache = { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
-  return bearerCache.token;
+}
+
+export async function getBearer(force = false): Promise<string> {
+  if (!force && bearerCache && bearerCache.expiresAt > Date.now() + 60_000) return bearerCache.token;
+  if (!force) {
+    const cached = await getCachedBearer();               // cross-invocation (DB) cache
+    if (cached) return (bearerCache = cached).token;
+  }
+  const fresh = await exchangeBearer();
+  bearerCache = fresh;
+  await saveCachedBearer(fresh.token, fresh.expiresAt).catch(() => { /* best-effort cache */ });
+  return fresh.token;
 }
 
 // A connectapi call authorised with the bearer. Caller handles non-2xx.
@@ -104,7 +125,7 @@ export interface GarminTestResult {
 // (Cloudflare/geo blocks show up here) and whether the stored token is valid.
 export async function garminConnectTest(): Promise<GarminTestResult> {
   try {
-    await getBearer(true);
+    await getBearer();   // reuse the cached bearer if valid; only exchanges when needed
   } catch (e) {
     return { ok: false, stage: 'exchange', exchangeOk: false, error: e instanceof Error ? e.message : String(e) };
   }
