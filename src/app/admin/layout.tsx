@@ -1,13 +1,13 @@
 export const dynamic = 'force-dynamic';
 
-import { createClient } from '@/lib/supabase-server';
+import { getViewer } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/auth/login');
+  // Owner or an allowlisted viewer only — not any authenticated account. Admin
+  // writes are already owner-gated via requireUser; this closes the read hole.
+  if (!(await getViewer())) redirect('/auth/login');
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
