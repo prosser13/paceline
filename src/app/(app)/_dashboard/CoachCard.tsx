@@ -25,7 +25,7 @@ function renderBody(md: string) {
 function timeOf(msg: CoachMessage): string | null {
   try {
     return new Date(msg.created_at)
-      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Europe/London' })
       .toLowerCase().replace(' ', '');
   } catch { return null; }
 }

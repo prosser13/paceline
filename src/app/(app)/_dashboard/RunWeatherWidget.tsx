@@ -5,8 +5,17 @@
 // honest effort read — the plan target itself never changes. Preview only; picking
 // a time doesn't schedule the run.
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { heatPenalty, type RunHourCondition } from '@/lib/weather';
+
+// The athlete's current local hour, client-side only: null during SSR and the first
+// hydration paint (so server and client agree), then the real hour once mounted.
+// Reading `new Date()` during render instead would disagree between the server's UTC
+// hour and the client's local hour and break hydration (React #418).
+const noopSubscribe = () => () => {};
+function useClientHour(): number | null {
+  return useSyncExternalStore(noopSubscribe, () => new Date().getHours(), () => null);
+}
 
 function secToPace(sec: number): string {
   const s = Math.round(sec);
@@ -29,15 +38,15 @@ export default function RunWeatherWidget({
   locationLabel: string | null;
   away: boolean;
 }) {
-  // Hide past hours (today). new Date() on the client → the athlete's local hour,
-  // which for a London-based athlete matches the forecast's Europe/London hours.
-  const nowHour = new Date().getHours();
-  const options = hours.filter(h => h.hour >= nowHour);
-  const usable = options.length ? options : hours.slice(-1);   // late-evening fallback
-  const initial = usable.find(h => h.hour === defaultHour) ?? usable[0];
-  const [hour, setHour] = useState<number>(initial.hour);
+  // Hide past hours (today), but only once mounted — the server renders all hours and
+  // the client filters after hydration (see useClientHour), so the two agree.
+  const nowHour = useClientHour();
+  const [selected, setSelected] = useState<number>(defaultHour);
 
-  const cond = usable.find(h => h.hour === hour) ?? usable[0];
+  const options = nowHour == null ? hours : hours.filter(h => h.hour >= nowHour);
+  const usable = options.length ? options : hours.slice(-1);   // late-evening fallback
+  const cond = usable.find(h => h.hour === selected)
+    ?? usable.find(h => h.hour === defaultHour) ?? usable[0];
   const pen = heatPenalty(cond.tempC, cond.dewC, planPaceSec);
   const applies = pen.secPerKm >= 3;
   const adjusted = planPaceSec + pen.secPerKm;
@@ -54,7 +63,7 @@ export default function RunWeatherWidget({
 
       <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: '12px' }}>
         <label className="text-[11px] uppercase text-stone tracking-[.04em]">Conditions at</label>
-        <select value={hour} onChange={e => setHour(Number(e.target.value))}
+        <select value={cond.hour} onChange={e => setSelected(Number(e.target.value))}
           className="bg-bone border border-fog rounded-[8px] px-[9px] py-[5px] text-[12.5px] text-ink font-mono focus:outline-none focus:border-stone">
           {usable.map(h => <option key={h.hour} value={h.hour}>{hourLabel(h.hour)}</option>)}
         </select>
