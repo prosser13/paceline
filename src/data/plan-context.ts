@@ -392,10 +392,18 @@ function buildPaceCheck(
   if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
   if (actualPaceMinKm == null) return null;
 
-  const actualSec = Math.round(actualPaceMinKm * 60);
-  const actualPace = `${secondsToPace(actualSec)}/km`;
-  const actualNgp = ngpMinKm != null ? `${secondsToPace(Math.round(ngpMinKm * 60))}/km` : null;
-  const actualZone = zoneFromPace(secondsToPace(actualSec), zones);
+  const rawSec = Math.round(actualPaceMinKm * 60);
+  const ngpSec = ngpMinKm != null ? Math.round(ngpMinKm * 60) : null;
+  // Judge zone/effort by grade-adjusted pace (NGP) when we have it: a hilly run
+  // comes in slow on the watch, but NGP is the effort-honest pace and the fair
+  // basis for "did you run the right zone". No raw ascent is stored on
+  // completed_workouts — NGP is the only grade signal, and a big raw-vs-NGP gap
+  // is itself the "this was hilly" flag.
+  const effortSec = ngpSec ?? rawSec;
+  const hilly = ngpSec != null && Math.abs(rawSec - ngpSec) >= 8;
+  const actualPace = `${secondsToPace(rawSec)}/km`;
+  const actualNgp = ngpSec != null ? `${secondsToPace(ngpSec)}/km` : null;
+  const actualZone = zoneFromPace(secondsToPace(effortSec), zones);
   const actualZoneLabel = actualZone ? `${actualZone.key} ${actualZone.name}` : null;
 
   // Effort read: which HR zone the average HR fell in. Effort = HR × pace, so this
@@ -438,17 +446,19 @@ function buildPaceCheck(
   const lo = Math.min(a, b), hi = Math.max(a, b);
   const plannedLabel = `${planned.key} ${planned.name}`;
   const plannedWindow = `${planned.paceMin}–${planned.paceMax}/km`;
+  // On hills the effort-honest pace is NGP; show both so the coach sees why.
+  const paceShown = hilly && actualNgp ? `${actualNgp} grade-adjusted (raw ${actualPace} — hilly)` : actualPace;
 
   let verdict: string;
-  if (actualSec >= lo && actualSec <= hi) {
-    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})`;
+  if (effortSec >= lo && effortSec <= hi) {
+    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})${hilly && actualNgp ? `, on grade-adjusted pace ${actualNgp} (raw ${actualPace} — hilly)` : ''}`;
   } else {
-    const easier = actualSec > hi; // a slower pace is an easier effort
+    const easier = effortSec > hi; // a slower pace is an easier effort
     const gap = actualZone ? Math.abs(actualZone.sortOrder - planned.sortOrder) : 0;
     const mag = gap >= 2 ? `${gap} zones ${easier ? 'easier' : 'harder'}`
       : gap === 1 ? `a full zone ${easier ? 'easier' : 'harder'}`
       : easier ? 'slower' : 'faster';
-    verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${actualPace}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
+    verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${paceShown}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
   }
 
   return {
