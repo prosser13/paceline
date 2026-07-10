@@ -22,6 +22,7 @@ import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
 import TrainingLocationClient from './TrainingLocationClient';
 import ChangeLogClient from './ChangeLogClient';
+import SignOutClient from './SignOutClient';
 import {
   saveBikeHrZones,
   type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
@@ -201,12 +202,17 @@ export default async function SettingsPage() {
           />
         </SettingsCard>
 
-        <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null} last>
+        <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null}>
           <SettingsClient
             connected={!!strava?.athlete_name}
             athleteName={strava?.athlete_name ?? null}
             lastSyncedAt={strava?.last_synced_at ?? null}
           />
+        </SettingsCard>
+
+        <SettingsCard cat="Account" color="var(--color-stone)" title="Session"
+          subtitle="Sign out of this device." last>
+          <SignOutClient />
         </SettingsCard>
       </div>
     </>
