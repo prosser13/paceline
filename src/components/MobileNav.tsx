@@ -9,14 +9,14 @@ import type { MouseEvent } from 'react';
 // horizontally through four station buttons; a red runner dot glides along the
 // line to whichever section is active (paceline = the line of runners setting
 // the pace). Words stay visible at every station; targets are ≥48dp. Hidden on
-// md+ where the persistent Sidebar takes over.
+// md+ where the persistent Sidebar takes over. The four primary sections live
+// here; the full nav (Strength, Availability, Settings…) is in the top-right
+// burger menu (see MobileMenu).
 const STATIONS = [
   { href: '/', label: 'Dashboard', match: (p: string) => p === '/' },
   { href: '/plan', label: 'Plan', match: (p: string) => p.startsWith('/plan') },
   { href: '/races', label: 'Races', match: (p: string) => p.startsWith('/races') },
-  { href: '/strength', label: 'Strength', match: (p: string) => p.startsWith('/strength') },
   { href: '/benchmarks', label: 'Benchmarks', match: (p: string) => p.startsWith('/benchmarks') },
-  { href: '/availability', label: 'Avail', match: (p: string) => p.startsWith('/availability') },
 ] as const;
 
 // Even horizontal spacing per station, so the runner + line math scale with count.
