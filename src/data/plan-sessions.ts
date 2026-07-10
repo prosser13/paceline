@@ -206,7 +206,7 @@ export async function getEarliestSessionDate(): Promise<string | null> {
 export async function listUpcomingRunsForSync(from: string, to: string) {
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at, intervals_workout_hash')
+    .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at, intervals_workout_hash, intervals_workout_override')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .eq('activity_type', 'running')
