@@ -1,4 +1,4 @@
-import { getCurrentUser } from '@/lib/supabase-server';
+import { getViewer } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import MobileNav from '@/components/MobileNav';
@@ -14,10 +14,11 @@ import { todayISO } from '@/lib/dates';
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  // Shares the request-cached lookup with the pages below, so this resolves
-  // without an extra auth round-trip.
-  const user = await getCurrentUser();
-  if (!user) redirect('/auth/login');
+  // Owner or an allowlisted read-only viewer may enter; anyone else is bounced to
+  // login. Shares the request-cached session lookup with the pages below, so this
+  // resolves without an extra auth round-trip.
+  const viewer = await getViewer();
+  if (!viewer) redirect('/auth/login');
 
   const todayStr = todayISO();
   const plans = await listNavPlans();
