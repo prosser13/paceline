@@ -20,12 +20,16 @@ const KIND_LABEL: Record<AvailabilityKind, string> = {
 };
 
 // activity_limited stores lowercase canonical values; label + a short form for chips.
+// Strength is special: it's never fully unavailable — bodyweight work is always
+// possible wherever you are — so barring it means "no strength equipment", not "no
+// strength". The label/chip say so; the future coach reads it that way (downgrade
+// to bodyweight rather than drop the session).
 const ACTIVITY_OPTIONS: { value: string; label: string; short: string }[] = [
-  { value: 'running',  label: 'Running',  short: 'run' },
-  { value: 'cycling',  label: 'Cycling',  short: 'bike' },
-  { value: 'swimming', label: 'Swimming', short: 'swim' },
-  { value: 'strength', label: 'Strength', short: 'strength' },
-  { value: 'yoga',     label: 'Yoga',     short: 'yoga' },
+  { value: 'running',  label: 'Running',              short: 'run' },
+  { value: 'cycling',  label: 'Cycling',              short: 'bike' },
+  { value: 'swimming', label: 'Swimming',             short: 'swim' },
+  { value: 'strength', label: 'Strength (equipment)', short: 'strength gear' },
+  { value: 'yoga',     label: 'Yoga',                 short: 'yoga' },
 ];
 
 const EQUIPMENT_PRESETS = ['Dumbbells', 'Barbell', 'Bench', 'Kettlebell', 'Machine/Cable', 'Bands', 'Pull-up bar'];
@@ -279,18 +283,25 @@ export default function AvailabilityCalendar({ initial }: { initial: Availabilit
                 )}
 
                 {d.kind === 'activity_limited' && (
-                  <div className="flex flex-wrap gap-[6px]">
-                    {ACTIVITY_OPTIONS.map(a => {
-                      const on = d.items.includes(a.value);
-                      return (
-                        <button key={a.value} type="button" onClick={() => toggleItem(d._key, a.value)}
-                          className={`text-[12px] font-medium px-[10px] py-[5px] rounded-[8px] border transition-colors ${
-                            on ? 'bg-hard/15 border-hard/40 text-hard' : 'bg-paper border-fog text-stone hover:border-stone'
-                          }`}>
-                          {on ? '✕ ' : ''}{a.label}
-                        </button>
-                      );
-                    })}
+                  <div className="flex flex-col gap-[6px]">
+                    <div className="flex flex-wrap gap-[6px]">
+                      {ACTIVITY_OPTIONS.map(a => {
+                        const on = d.items.includes(a.value);
+                        return (
+                          <button key={a.value} type="button" onClick={() => toggleItem(d._key, a.value)}
+                            className={`text-[12px] font-medium px-[10px] py-[5px] rounded-[8px] border transition-colors ${
+                              on ? 'bg-hard/15 border-hard/40 text-hard' : 'bg-paper border-fog text-stone hover:border-stone'
+                            }`}>
+                            {on ? '✕ ' : ''}{a.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {d.items.includes('strength') && (
+                      <p className="text-[11px] text-stone leading-snug">
+                        Bodyweight exercises are always possible — barring strength just means no equipment (weights, machines, bench, bands).
+                      </p>
+                    )}
                   </div>
                 )}
 
