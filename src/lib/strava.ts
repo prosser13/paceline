@@ -26,6 +26,7 @@ export interface StravaActivity {
   average_speed?: number;     // m/s
   average_watts?: number;     // rides with a power meter / smart trainer
   weighted_average_watts?: number;
+  total_elevation_gain?: number; // metres — the terrain/hilliness signal
 }
 
 interface TokenResponse {
@@ -250,6 +251,9 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
   // Strava id → average power (rides only) — kept here because the stored activity
   // row doesn't carry watts; used to write the ride completion's actual_avg_power.
   const powerByStravaId = new Map(relevant.map(a => [a.id, a.average_watts != null ? Math.round(a.average_watts) : null]));
+  // Strava id → total elevation gain (metres) — the terrain/hilliness signal the
+  // coach reads alongside NGP; kept here as the stored activity row doesn't carry it.
+  const elevByStravaId = new Map(relevant.map(a => [a.id, a.total_elevation_gain != null ? Math.round(a.total_elevation_gain) : null]));
   // Strava id → moving time in seconds — the precise duration stored on the
   // completion so a race time reads 34:02, not the minute-rounded 34:00.
   const secsByStravaId = new Map(relevant.map(a => [a.id, a.moving_time]));
@@ -374,6 +378,8 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
       actual_avg_hr:          activity.avg_hr ?? null,
       // Rides carry average power; runs/strength/yoga don't.
       actual_avg_power:       kind === 'ride' ? (powerByStravaId.get(activity.strava_activity_id) ?? null) : null,
+      // Elevation gain (metres) — the terrain signal; only meaningful for runs/rides.
+      actual_elevation_gain_m: kind === 'strength' || kind === 'yoga' ? null : (elevByStravaId.get(activity.strava_activity_id) ?? null),
       strava_activity_id:     activity.strava_activity_id,
       source:                 'strava',
       // Rides carry no distance-segment pacing; store empty arrays (not null) so

@@ -9,6 +9,10 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { todayISO } from '@/lib/dates';
+import {
+  resolveZone, zoneFromPace, normalizeStructure, paceToSeconds, secondsToPace,
+  type ZoneMap, type PaceZone,
+} from '@/lib/plan-structure';
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
@@ -115,6 +119,24 @@ export interface PlanContext {
   };
 }
 
+// A deterministic "did the run stay in its prescribed zone?" verdict, computed so
+// the coach never has to infer zone adherence from the session's name or HR — and
+// never mis-reads a decimal min/km (5.28) as clock time (5:28). Paces are already
+// formatted "m:ss/km". Also carries the effort read (avg HR + its HR zone) so the
+// coach weighs effort = HR × pace, not pace alone, and can spot decoupling.
+export interface PaceCheck {
+  planned_zone: string;          // e.g. "Z2 Aerobic Endurance", or "mixed (Z2 + Z1)"
+  planned_window: string | null; // e.g. "4:10–4:54/km" (null for mixed workouts)
+  actual_pace: string;           // e.g. "5:17/km"
+  actual_ngp: string | null;     // grade-adjusted, when available
+  actual_zone: string | null;    // the zone the actual pace fell in
+  actual_hr: number | null;      // avg HR (bpm), the effort signal
+  actual_hr_zone: string | null; // the HR zone that HR fell in, e.g. "Z1 Recovery"
+  elevation_gain_m: number | null; // total climb (metres) — the terrain signal
+  effort_note: string | null;    // decoupling read when HR effort and pace diverge
+  verdict: string;               // plain-language on-plan / OUTSIDE-plan judgement
+}
+
 export interface RecentSession {
   id: string;
   scheduled_date: string;
@@ -127,8 +149,13 @@ export interface RecentSession {
   actual: {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
+    elevation_gain_m: number | null;
+    decoupling_pct: number | null;   // aerobic decoupling (cardiac drift); >0 = worse
+    pace_decay_pct: number | null;   // final-third pace vs first two-thirds; >0 = faded, <0 = negative split
+    durability: string | null;       // interpreted long-run durability read (long runs only)
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
   } | null;
+  pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
 }
 
 // Assemble the briefing as of `asOf` (YYYY-MM-DD; defaults to today, UTC).
@@ -148,21 +175,26 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   const recentFrom = addDays(today, -RECENT_DAYS);
   const recentTo = throughToday ? today : addDays(today, -1);
 
+  // Pace + HR zones drive the per-run pace/effort check in the `recent` list, so
+  // resolve them (cached reads) before the main wave and reuse the rows for
+  // zones.pace_zones / zones.hr_zones.
+  const [paceZones, hrZones] = await Promise.all([listPaceZones(), listHrZones()]);
+  const runZones = buildRunZoneMap(paceZones);
+  const runHrBands = buildHrBands(hrZones);
+
   const [
     activePlan, upcomingRaces, currentWeek, upcoming, recent,
-    wellness, threshold, paceZones, hrConfig, hrZones, powerConfig, powerZones,
+    wellness, threshold, hrConfig, powerConfig, powerZones,
     constraints, coaching, recentChanges, strengthSummary, activeNiggles, thresholdSuggestion, fuelMap,
   ] = await Promise.all([
     getActivePlan(today),
     getUpcomingRaces(today),
     getCurrentWeek(today),
     getUpcomingSessions(upcomingFrom, upcomingTo),
-    getRecentSessions(recentFrom, recentTo),
+    getRecentSessions(recentFrom, recentTo, runZones, runHrBands),
     getWellnessCacheRow(),
     getThresholdPace(),
-    listPaceZones(),
     getHrConfig(),
-    listHrZones(),
     getPowerConfig(),
     listPowerZones(),
     listPlanConstraints(),
@@ -299,11 +331,186 @@ async function getUpcomingSessions(from: string, to: string): Promise<Record<str
   return (data ?? []) as unknown as Record<string, unknown>[];
 }
 
+// A ZoneMap (keyed Z1..Zn) from the raw pace_zones rows — the shape
+// normalizeStructure / zoneFromPace consume. Local mini-builder so the briefing
+// doesn't need to fetch all four zone tables just to check run paces.
+function buildRunZoneMap(rows: readonly Record<string, unknown>[]): ZoneMap {
+  const m: ZoneMap = {};
+  for (const z of rows) {
+    const key = z.zone_key as string;
+    if (!key) continue;
+    m[key] = { key, name: z.name as string, paceMin: z.pace_min as string, paceMax: z.pace_max as string, sortOrder: z.sort_order as number };
+  }
+  return m;
+}
+
+// Run HR zones as ordered bands, for classifying an avg HR into an effort zone.
+interface HrBand { key: string; name: string; min: number; max: number; sortOrder: number }
+function buildHrBands(rows: readonly Record<string, unknown>[]): HrBand[] {
+  return rows
+    .map(z => ({ key: z.zone_key as string, name: z.name as string, min: Number(z.hr_min), max: Number(z.hr_max), sortOrder: Number(z.sort_order) }))
+    .filter(b => b.key)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+// The HR zone a bpm value falls in; the nearest band when it's outside every window.
+function hrZoneFromBpm(bpm: number, bands: HrBand[]): HrBand | null {
+  if (!bands.length) return null;
+  for (const b of bands) if (bpm >= b.min && bpm <= b.max) return b;
+  let best = bands[0], bestDist = Infinity;
+  for (const b of bands) {
+    const dist = bpm < b.min ? b.min - bpm : bpm > b.max ? bpm - b.max : 0;
+    if (dist < bestDist) { bestDist = dist; best = b; }
+  }
+  return best;
+}
+
+// Long-run durability read — the key endurance signal for the ultra. Only
+// meaningful on longer efforts (the long-run session types, or anything ≥15 km):
+// on a short easy run cardiac drift and a final-third split are noise, so we
+// don't editorialise them. decouplingPct > 0 = HR drifted up for the same effort
+// (worse); paceDecayPct > 0 = faded in the last third, < 0 = negative split.
+const LONG_RUN_TYPES = ['LR', 'MLR'];
+function durabilityNote(sessionType: string, distanceKm: number | null, decouplingPct: number | null, paceDecayPct: number | null): string | null {
+  const isLong = LONG_RUN_TYPES.includes(sessionType) || (distanceKm != null && distanceKm >= 15);
+  if (!isLong) return null;
+  if (decouplingPct == null && paceDecayPct == null) return null;
+  const parts: string[] = [];
+  if (decouplingPct != null) {
+    const q = decouplingPct <= 5 ? 'strong aerobic durability'
+      : decouplingPct <= 10 ? 'moderate cardiac drift'
+      : 'high aerobic decoupling — fatigue, heat, or under-fuelling';
+    parts.push(`HR-pace decoupling ${decouplingPct.toFixed(1)}% (${q})`);
+  }
+  if (paceDecayPct != null) {
+    const q = paceDecayPct <= 0 ? 'held or negative-split the finish'
+      : paceDecayPct <= 5 ? 'minor final-third fade'
+      : 'notable final-third fade';
+    parts.push(`final-third pace ${paceDecayPct > 0 ? '+' : ''}${paceDecayPct.toFixed(1)}% (${q})`);
+  }
+  return parts.join('; ');
+}
+
+const NON_RUN_TYPES = ['STRENGTH', 'CORE', 'YOGA', 'REST'];
+
+// Distinct pace-zone keys a structured run spans (empty when unstructured).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function structureZoneKeys(structure: any, zones: ZoneMap): string[] {
+  const steps = normalizeStructure(Array.isArray(structure) ? structure : null, zones);
+  const keys = new Set<string>();
+  for (const st of steps) {
+    if (st.kind === 'segment') { if (st.zoneKey) keys.add(st.zoneKey); }
+    else for (const sub of st.steps) if (sub.zoneKey) keys.add(sub.zoneKey);
+  }
+  return [...keys];
+}
+
+// The single prescribed zone for an easy/steady run: the zone token in its
+// description/name ("Z2", "ultra", …), else the zone containing the authored
+// target pace. Null when there's no zone signal at all.
+function plannedRunZone(name: string, description: string | null, targetPace: string | null, zones: ZoneMap): PaceZone | null {
+  return resolveZone(`${description ?? ''} ${name ?? ''}`, targetPace, zones);
+}
+
+// Deterministic pace-vs-prescribed-zone verdict for a completed run. Returns null
+// for non-runs, sessions without an actual pace, or runs with no zone to check
+// against (so the coach falls back to the raw actuals, as before).
+function buildPaceCheck(
+  s: { session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
+  actualPaceMinKm: number | null, ngpMinKm: number | null, actualHr: number | null,
+  elevationGainM: number | null, distanceKm: number | null,
+  zones: ZoneMap, hrBands: HrBand[],
+): PaceCheck | null {
+  if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
+  if (actualPaceMinKm == null) return null;
+
+  const rawSec = Math.round(actualPaceMinKm * 60);
+  const ngpSec = ngpMinKm != null ? Math.round(ngpMinKm * 60) : null;
+  // Judge zone/effort by grade-adjusted pace (NGP) when we have it: a hilly run
+  // comes in slow on the watch, but NGP is the effort-honest pace and the fair
+  // basis for "did you run the right zone". A big raw-vs-NGP gap, or a lot of
+  // climb per km, marks the run as hilly; NGP is what actually corrects the pace.
+  const effortSec = ngpSec ?? rawSec;
+  const mPerKm = elevationGainM != null && distanceKm ? elevationGainM / distanceKm : null;
+  const hilly = (ngpSec != null && Math.abs(rawSec - ngpSec) >= 8) || (mPerKm != null && mPerKm >= 10);
+  // Human-readable terrain tag, e.g. "116 m climb (14 m/km)".
+  const elevTag = elevationGainM != null
+    ? `${elevationGainM} m climb${mPerKm != null ? ` (${Math.round(mPerKm)} m/km)` : ''}`
+    : 'hilly';
+  const actualPace = `${secondsToPace(rawSec)}/km`;
+  const actualNgp = ngpSec != null ? `${secondsToPace(ngpSec)}/km` : null;
+  const actualZone = zoneFromPace(secondsToPace(effortSec), zones);
+  const actualZoneLabel = actualZone ? `${actualZone.key} ${actualZone.name}` : null;
+
+  // Effort read: which HR zone the average HR fell in. Effort = HR × pace, so this
+  // is what tells the coach whether an easy-looking pace actually came easy.
+  const hrZone = actualHr != null ? hrZoneFromBpm(actualHr, hrBands) : null;
+  const actualHrZoneLabel = hrZone ? `${hrZone.key} ${hrZone.name}` : null;
+
+  // Decoupling read: HR effort vs the effort the actual pace implies.
+  let effortNote: string | null = null;
+  if (actualZone && hrZone) {
+    const gap = hrZone.sortOrder - actualZone.sortOrder;
+    if (gap >= 2) effortNote = 'HR effort well above the running pace — likely fatigue, heat, or hills';
+    else if (gap === 1) effortNote = 'HR effort a touch above the running pace';
+    else if (gap <= -1) effortNote = 'HR below the effort the pace implies — it came comfortably';
+  }
+
+  // Multi-zone structured workout: no single whole-run verdict — flag it so the
+  // coach reads it per segment rather than judging the average.
+  const structureKeys = s.structure ? structureZoneKeys(s.structure, zones) : [];
+  if (structureKeys.length > 1) {
+    return {
+      planned_zone: `mixed (${structureKeys.join(' + ')})`,
+      planned_window: null,
+      actual_pace: actualPace,
+      actual_ngp: actualNgp,
+      actual_zone: actualZoneLabel,
+      actual_hr: actualHr,
+      actual_hr_zone: actualHrZoneLabel,
+      elevation_gain_m: elevationGainM,
+      effort_note: null, // whole-run average is a blend across zones — decoupling read isn't meaningful
+      verdict: `structured multi-zone session — assess each segment against its own target, not the whole-run average${hilly ? ` (${elevTag})` : ''}`,
+    };
+  }
+
+  const planned = structureKeys.length === 1
+    ? (zones[structureKeys[0]] ?? null)
+    : plannedRunZone(s.name, s.description, s.target_pace, zones);
+  if (!planned) return null;
+
+  const a = paceToSeconds(planned.paceMin) ?? 0, b = paceToSeconds(planned.paceMax) ?? 0;
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  const plannedLabel = `${planned.key} ${planned.name}`;
+  const plannedWindow = `${planned.paceMin}–${planned.paceMax}/km`;
+  // On hills the effort-honest pace is NGP; show both, with the climb, so the coach sees why.
+  const paceShown = hilly && actualNgp ? `${actualNgp} grade-adjusted (raw ${actualPace} — ${elevTag})` : actualPace;
+
+  let verdict: string;
+  if (effortSec >= lo && effortSec <= hi) {
+    verdict = `on plan — ran in the prescribed ${plannedLabel} (${plannedWindow})${hilly && actualNgp ? `, on grade-adjusted pace ${actualNgp} (raw ${actualPace} — ${elevTag})` : ''}`;
+  } else {
+    const easier = effortSec > hi; // a slower pace is an easier effort
+    const gap = actualZone ? Math.abs(actualZone.sortOrder - planned.sortOrder) : 0;
+    const mag = gap >= 2 ? `${gap} zones ${easier ? 'easier' : 'harder'}`
+      : gap === 1 ? `a full zone ${easier ? 'easier' : 'harder'}`
+      : easier ? 'slower' : 'faster';
+    verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${paceShown}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
+  }
+
+  return {
+    planned_zone: plannedLabel, planned_window: plannedWindow,
+    actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel,
+    actual_hr: actualHr, actual_hr_zone: actualHrZoneLabel, elevation_gain_m: elevationGainM,
+    effort_note: effortNote, verdict,
+  };
+}
+
 // Planned sessions in [from, to] annotated with their actuals (from completed_workouts).
-async function getRecentSessions(from: string, to: string): Promise<RecentSession[]> {
+async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBands: HrBand[]): Promise<RecentSession[]> {
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, session_type, name, priority, status, distance_km, target_pace, estimated_tss, estimated_duration')
+    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, structure')
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .order('scheduled_date');
@@ -315,7 +522,7 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
         .in('plan_session_id', ids)
     : null;
   const completed = completedRes?.data ?? [];
@@ -328,6 +535,13 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
   return (sessions ?? []).map(s => {
     const c = bySession.get(s.id as string);
     const isRest = (s.session_type as string) === 'REST';
+    const actualPaceMinKm = c && c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null;
+    const ngpMinKm = c && c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null;
+    const avgHr = c && c.actual_avg_hr != null ? Number(c.actual_avg_hr) : null;
+    const elevGainM = c && c.actual_elevation_gain_m != null ? Number(c.actual_elevation_gain_m) : null;
+    const distanceKm = c && c.actual_distance_km != null ? Number(c.actual_distance_km) : null;
+    const decouplingPct = c && c.decoupling_pct != null ? Number(c.decoupling_pct) : null;
+    const paceDecayPct = c && c.pace_decay_pct != null ? Number(c.pace_decay_pct) : null;
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -345,14 +559,29 @@ async function getRecentSessions(from: string, to: string): Promise<RecentSessio
       actual: c ? {
         distance_km: c.actual_distance_km != null ? Number(c.actual_distance_km) : null,
         duration_mins: c.actual_duration_mins != null ? Number(c.actual_duration_mins) : null,
-        avg_pace_min_km: c.actual_avg_pace_min_km != null ? Number(c.actual_avg_pace_min_km) : null,
-        ngp_min_km: c.actual_ngp_min_km != null ? Number(c.actual_ngp_min_km) : null,
+        avg_pace_min_km: actualPaceMinKm,
+        ngp_min_km: ngpMinKm,
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
+        elevation_gain_m: elevGainM,
+        decoupling_pct: decouplingPct,
+        pace_decay_pct: paceDecayPct,
+        durability: durabilityNote(s.session_type as string, distanceKm, decouplingPct, paceDecayPct),
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
       } : null,
+      pace_check: c ? buildPaceCheck(
+        {
+          session_type: s.session_type as string,
+          activity_type: (s.activity_type as string | null) ?? null,
+          name: s.name as string,
+          description: (s.description as string | null) ?? null,
+          target_pace: (s.target_pace as string | null) ?? null,
+          structure: s.structure,
+        },
+        actualPaceMinKm, ngpMinKm, avgHr, elevGainM, distanceKm, zones, hrBands,
+      ) : null,
     };
   });
 }
