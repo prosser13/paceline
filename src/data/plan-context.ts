@@ -150,6 +150,9 @@ export interface RecentSession {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
     elevation_gain_m: number | null;
+    decoupling_pct: number | null;   // aerobic decoupling (cardiac drift); >0 = worse
+    pace_decay_pct: number | null;   // final-third pace vs first two-thirds; >0 = faded, <0 = negative split
+    durability: string | null;       // interpreted long-run durability read (long runs only)
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
   } | null;
   pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
@@ -362,6 +365,32 @@ function hrZoneFromBpm(bpm: number, bands: HrBand[]): HrBand | null {
   return best;
 }
 
+// Long-run durability read — the key endurance signal for the ultra. Only
+// meaningful on longer efforts (the long-run session types, or anything ≥15 km):
+// on a short easy run cardiac drift and a final-third split are noise, so we
+// don't editorialise them. decouplingPct > 0 = HR drifted up for the same effort
+// (worse); paceDecayPct > 0 = faded in the last third, < 0 = negative split.
+const LONG_RUN_TYPES = ['LR', 'MLR'];
+function durabilityNote(sessionType: string, distanceKm: number | null, decouplingPct: number | null, paceDecayPct: number | null): string | null {
+  const isLong = LONG_RUN_TYPES.includes(sessionType) || (distanceKm != null && distanceKm >= 15);
+  if (!isLong) return null;
+  if (decouplingPct == null && paceDecayPct == null) return null;
+  const parts: string[] = [];
+  if (decouplingPct != null) {
+    const q = decouplingPct <= 5 ? 'strong aerobic durability'
+      : decouplingPct <= 10 ? 'moderate cardiac drift'
+      : 'high aerobic decoupling — fatigue, heat, or under-fuelling';
+    parts.push(`HR-pace decoupling ${decouplingPct.toFixed(1)}% (${q})`);
+  }
+  if (paceDecayPct != null) {
+    const q = paceDecayPct <= 0 ? 'held or negative-split the finish'
+      : paceDecayPct <= 5 ? 'minor final-third fade'
+      : 'notable final-third fade';
+    parts.push(`final-third pace ${paceDecayPct > 0 ? '+' : ''}${paceDecayPct.toFixed(1)}% (${q})`);
+  }
+  return parts.join('; ');
+}
+
 const NON_RUN_TYPES = ['STRENGTH', 'CORE', 'YOGA', 'REST'];
 
 // Distinct pace-zone keys a structured run spans (empty when unstructured).
@@ -493,7 +522,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
         .in('plan_session_id', ids)
     : null;
   const completed = completedRes?.data ?? [];
@@ -511,6 +540,8 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
     const avgHr = c && c.actual_avg_hr != null ? Number(c.actual_avg_hr) : null;
     const elevGainM = c && c.actual_elevation_gain_m != null ? Number(c.actual_elevation_gain_m) : null;
     const distanceKm = c && c.actual_distance_km != null ? Number(c.actual_distance_km) : null;
+    const decouplingPct = c && c.decoupling_pct != null ? Number(c.decoupling_pct) : null;
+    const paceDecayPct = c && c.pace_decay_pct != null ? Number(c.pace_decay_pct) : null;
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -533,6 +564,9 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         avg_hr: (c.actual_avg_hr as number | null) ?? null,
         avg_power: (c.actual_avg_power as number | null) ?? null,
         elevation_gain_m: elevGainM,
+        decoupling_pct: decouplingPct,
+        pace_decay_pct: paceDecayPct,
+        durability: durabilityNote(s.session_type as string, distanceKm, decouplingPct, paceDecayPct),
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
