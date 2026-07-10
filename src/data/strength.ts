@@ -71,10 +71,16 @@ export interface ResolveCtx {
 
 const roundHalf = (n: number): number => Math.round(n * 2) / 2;
 
+// Exercises we deliberately hold at their current prescription — never rated or
+// progressed. The glute bridge walkout (id 81) is a control/stability move we keep
+// steady rather than load up.
+const HELD_IDS = new Set<number>([81]);
+
 // A stretch / mobility / activation exercise is never rated or progressed — it
-// would just get longer. Everything else (loaded lifts + bodyweight strength
-// moves + core holds) is progressable.
+// would just get longer. Held exercises (above) are likewise fixed. Everything else
+// (loaded lifts + bodyweight strength moves + core holds) is progressable.
 export function progressable(ex: Exercise): boolean {
+  if (HELD_IDS.has(ex.id)) return false;
   return ex.movementPattern !== 'mobility' && ex.movementPattern !== 'activation';
 }
 
