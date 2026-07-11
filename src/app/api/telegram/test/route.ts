@@ -3,6 +3,7 @@
 // so only you can trigger it. Visit /api/telegram/test in the browser.
 import { getCurrentUser } from '@/lib/auth';
 import { sendTelegramMessage } from '@/lib/telegram';
+import { getTelegramChatId } from '@/data/user-integrations';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,8 @@ async function handle(): Promise<Response> {
   if (!(await getCurrentUser())) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  const result = await sendTelegramMessage('<b>Paceline</b>\n\nTelegram is wired up — nightly coach reviews will land here. ✅');
+  const chatId = await getTelegramChatId();
+  const result = await sendTelegramMessage(chatId, '<b>Paceline</b>\n\nTelegram is wired up — nightly coach reviews will land here. ✅');
   return Response.json(result, { status: result.ok ? 200 : 502 });
 }
 

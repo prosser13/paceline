@@ -1,22 +1,26 @@
 // Reads + writes for `plan_sessions` and `completed_workouts` — a user's planned
-// training and its Strava-matched actuals. One home for user-scoped access so
-// per-user scoping later lands here.
+// training and its Strava-matched actuals. One home for user-scoped access.
 //
-// Out of scope by design: the admin CMS (admin/sessions/*) edits plans on behalf
-// of a selected user and stays on supabaseAdmin directly (cross-user, is_admin
-// gated). The Strava sync engine (lib/strava.ts) still reads/writes these tables
-// directly pending its dedicated hardening pass.
+// Multi-tenant: every query is scoped to the current user via `currentUserId()`
+// (src/lib/scope.ts). The Strava sync engine (lib/strava.ts) calls these inside a
+// `runWithUser(userId, …)` scope, so its reads/writes resolve to the right user too.
+//
+// Out of scope by design: the admin CMS (admin/sessions/*) edits plans on behalf of
+// a selected user and stays on supabaseAdmin directly (cross-user).
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { sessionTss, parseThresholdPace } from '@/lib/run-tss';
 
 // ── plan_sessions ────────────────────────────────────────────
 
 // All sessions scheduled within [from, to], run/strength order by am_pm.
 export async function listSessionsBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .order('scheduled_date', { ascending: true })
@@ -27,9 +31,11 @@ export async function listSessionsBetween(from: string, to: string) {
 // Scheduled date + distance (+ type, to flag race days) for sessions within
 // [from, to] (weekly volume).
 export async function listSessionDistancesBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date, distance_km, session_type, activity_type')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to);
   return data ?? [];
@@ -38,9 +44,11 @@ export async function listSessionDistancesBetween(from: string, to: string) {
 // Completed-workout TSS keyed by date within [from, to] — for the weekly-load
 // trend (done vs planned). Uses the stored `tss` column.
 export async function listCompletedTssBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, tss')
+    .eq('user_id', userId)
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -52,9 +60,11 @@ export async function listPlannedTssBetween(
   from: string,
   to: string,
 ): Promise<{ date: string; tss: number }[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date, estimated_tss')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .not('estimated_tss', 'is', null);
@@ -73,9 +83,11 @@ export async function listPlannedTssBetween(
 export async function listSessionDistancesForPlan(
   planId: number,
 ): Promise<{ scheduled_date: string; distance_km: number | null; session_type: string | null; activity_type: string | null }[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date, distance_km, session_type, activity_type')
+    .eq('user_id', userId)
     .eq('plan_id', planId);
   return (data ?? []).map(r => ({
     scheduled_date: r.scheduled_date as string,
@@ -90,9 +102,11 @@ export async function listSessionDistancesForPlan(
 export async function listRunningDoneForPlan(
   planId: number,
 ): Promise<{ date: string; km: number }[]> {
+  const userId = await currentUserId();
   const { data: runRows } = await supabaseAdmin
     .from('plan_sessions')
     .select('id')
+    .eq('user_id', userId)
     .eq('plan_id', planId)
     .eq('activity_type', 'running');
   const ids = (runRows ?? []).map(r => r.id as string);
@@ -101,6 +115,7 @@ export async function listRunningDoneForPlan(
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_distance_km')
+    .eq('user_id', userId)
     .in('plan_session_id', ids);
 
   return (data ?? [])
@@ -111,9 +126,11 @@ export async function listRunningDoneForPlan(
 // Completed *running* distances since `since` (all plans) as date + km — bucketed
 // into weeks by the caller for the weekly-volume standout.
 export async function listRunningDoneSince(since: string): Promise<{ date: string; km: number }[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_distance_km, plan_sessions!inner(activity_type)')
+    .eq('user_id', userId)
     .gte('completed_date', since)
     .not('actual_distance_km', 'is', null)
     .eq('plan_sessions.activity_type', 'running');
@@ -127,9 +144,11 @@ export async function listRunningDoneSince(since: string): Promise<{ date: strin
 export async function listRecentRaces(
   since: string,
 ): Promise<{ date: string; name: string; targetPace: string | null; distanceKm: number | null; mins: number | null }[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_duration_mins, plan_sessions!inner(name, session_type, target_pace, distance_km)')
+    .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.session_type', 'RACE');
   return (data ?? []).map(r => {
@@ -148,9 +167,11 @@ export async function listRecentRaces(
 // One plan's sessions in schedule order — the plan page only ever renders a single
 // plan, so scope the read to it rather than fetching every plan's history.
 export async function listSessionsForPlan(planId: number) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('user_id', userId)
     .eq('plan_id', planId)
     .order('scheduled_date')
     .order('am_pm');
@@ -160,9 +181,11 @@ export async function listSessionsForPlan(planId: number) {
 // Prescription fields for one planned session (copied into a live strength
 // session), or null.
 export async function getPlanSessionPrescription(id: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('estimated_duration, structure, rationale')
+    .eq('user_id', userId)
     .eq('id', id)
     .single();
   return data;
@@ -170,9 +193,11 @@ export async function getPlanSessionPrescription(id: string) {
 
 // Sessions in a plan whose target_pace matches `pace` (goal-pace cascade).
 export async function listSessionsByTargetPace(planId: number, pace: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, session_type, target_pace, target_pace_end, structure')
+    .eq('user_id', userId)
     .eq('plan_id', planId)
     .eq('target_pace', pace);
   return data ?? [];
@@ -184,15 +209,18 @@ export async function updatePlanSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   patch: Record<string, any>,
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from('plan_sessions').update(patch).eq('id', id);
+  const userId = await currentUserId();
+  const { error } = await supabaseAdmin.from('plan_sessions').update(patch).eq('user_id', userId).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
 // Earliest scheduled date across all sessions (Strava sync start), or null.
 export async function getEarliestSessionDate(): Promise<string | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date')
+    .eq('user_id', userId)
     .order('scheduled_date')
     .limit(1)
     .maybeSingle();
@@ -204,9 +232,11 @@ export async function getEarliestSessionDate(): Promise<string | null> {
 // 'running' on strength rows too (a data quirk), so session_type must also exclude
 // the non-run and race types — you follow a structured run, you don't follow a race.
 export async function listUpcomingRunsForSync(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, name, structure, distance_km, target_pace, session_type, intervals_event_id, intervals_synced_at, intervals_workout_hash, intervals_workout_override')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .eq('activity_type', 'running')
@@ -220,9 +250,11 @@ export async function listUpcomingRunsForSync(from: string, to: string) {
 // cleanup: any of these NOT in the current run set (e.g. edited to a rest/race, or
 // their structure removed) has a stale event that should be deleted.
 export async function listIntervalEventsInWindow(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, name, intervals_event_id')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .not('intervals_event_id', 'is', null);
@@ -232,9 +264,11 @@ export async function listIntervalEventsInWindow(from: string, to: string) {
 // The intervals.icu event id for a session (if any) — used to delete the event
 // when the session itself is deleted from the plan.
 export async function getIntervalEventId(id: string): Promise<string | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('intervals_event_id')
+    .eq('user_id', userId)
     .eq('id', id)
     .maybeSingle();
   return (data?.intervals_event_id as string | null) ?? null;
@@ -242,9 +276,11 @@ export async function getIntervalEventId(id: string): Promise<string | null> {
 
 // Minimal session fields for Strava activity matching.
 export async function listSessionsForMatching() {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, distance_km, structure, activity_type, session_type, estimated_duration');
+    .select('id, scheduled_date, distance_km, structure, activity_type, session_type, estimated_duration')
+    .eq('user_id', userId);
   return data ?? [];
 }
 
@@ -252,9 +288,11 @@ export async function listSessionsForMatching() {
 // skip sessions that are already filled, so a second same-day activity (e.g. a
 // second yoga session) lands on the next open session instead of being orphaned.
 export async function listCompletedSessionIds(): Promise<string[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id');
+    .select('plan_session_id')
+    .eq('user_id', userId);
   return (data ?? []).map(r => r.plan_session_id as string).filter(Boolean);
 }
 
@@ -263,9 +301,11 @@ export async function listCompletedSessionIds(): Promise<string[]> {
 // so a single activity can't roll onto a second open same-day session on a later
 // sync (e.g. one yoga session filling both the day's warm-up and stretch slots).
 export async function listCompletedStravaActivityIds(): Promise<number[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('strava_activity_id, merged_strava_ids');
+    .select('strava_activity_id, merged_strava_ids')
+    .eq('user_id', userId);
   const ids: number[] = [];
   for (const r of data ?? []) {
     if (r.strava_activity_id != null) ids.push(r.strava_activity_id as number);
@@ -278,9 +318,11 @@ export async function listCompletedStravaActivityIds(): Promise<number[]> {
 
 // Summary fields for completions within [from, to] (last-7-days stats).
 export async function listCompletedBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, tss')
+    .eq('user_id', userId)
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -288,9 +330,11 @@ export async function listCompletedBetween(from: string, to: string) {
 
 // Stored TSS per completion + the sport it belongs to (for the run-load split).
 export async function listSportLoadBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('tss, plan_sessions(session_type, activity_type)')
+    .eq('user_id', userId)
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -300,9 +344,11 @@ export async function listSportLoadBetween(from: string, to: string) {
 // before `beforeDate`, paired with the planned session it belongs to. Powers
 // the dashboard's "Recently completed" card (typically yesterday's run).
 export async function getMostRecentCompletedSession(beforeDate: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, strava_activity_id, plan_sessions!inner(*)')
+    .eq('user_id', userId)
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
     .order('completed_date', { ascending: false })
@@ -319,9 +365,11 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
 // The RACE plan_session for a race guide slug (races are planned sessions), or
 // null. Shaped for SessionHero's PlanSession. Latest by date if several.
 export async function getRaceSessionBySlug(slug: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, session_type, activity_type, name, description, distance_km, target_pace, target_pace_end, estimated_tss, estimated_duration, rationale, status, intensity, profile_shape, structure')
+    .eq('user_id', userId)
     .eq('race_slug', slug)
     .eq('session_type', 'RACE')
     .order('scheduled_date', { ascending: false })
@@ -333,9 +381,11 @@ export async function getRaceSessionBySlug(slug: string) {
 // Finish time + date for every race that has a completion, keyed by race_slug —
 // for the races index (archived races show their result).
 export async function listRaceFinishes(): Promise<Record<string, { secs: number | null; date: string | null }>> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('actual_duration_secs, actual_duration_mins, completed_date, plan_sessions!inner(race_slug, session_type, scheduled_date)')
+    .eq('user_id', userId)
     .eq('plan_sessions.session_type', 'RACE');
   const out: Record<string, { secs: number | null; date: string | null }> = {};
   for (const row of data ?? []) {
@@ -352,9 +402,11 @@ export async function listRaceFinishes(): Promise<Record<string, { secs: number 
 
 // The completion's id + strava id for a session (for a targeted split recompute).
 export async function getCompletionRefForSession(planSessionId: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, strava_activity_id, segment_actuals')
+    .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -362,9 +414,11 @@ export async function getCompletionRefForSession(planSessionId: string) {
 
 // The completion for one planned session, or null.
 export async function getCompletedForSession(planSessionId: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items')
+    .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -374,18 +428,22 @@ export async function getCompletedForSession(planSessionId: string) {
 // "today" list) — each row carries its plan_session_id so the caller can key them.
 export async function listCompletedForSessions(planSessionIds: string[]) {
   if (!planSessionIds.length) return [];
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items')
+    .eq('user_id', userId)
     .in('plan_session_id', planSessionIds);
   return data ?? [];
 }
 
 // Completed date + distance within [from, to] (weekly done volume).
 export async function listCompletedDistancesBetween(from: string, to: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_distance_km, plan_sessions(session_type, activity_type)')
+    .eq('user_id', userId)
     .gte('completed_date', from)
     .lte('completed_date', to);
   return data ?? [];
@@ -397,15 +455,18 @@ const COMPLETED_DISPLAY_COLS = 'id, plan_session_id, actual_distance_km, actual_
 // plan_session_id, scoped so the page (and its client payload) don't carry every
 // completion in history. Two steps (session ids → completions) keeps the shape flat.
 export async function listCompletedForPlan(planId: number) {
+  const userId = await currentUserId();
   const { data: sess } = await supabaseAdmin
     .from('plan_sessions')
     .select('id')
+    .eq('user_id', userId)
     .eq('plan_id', planId);
   const ids = (sess ?? []).map(s => s.id as string);
   if (!ids.length) return [];
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select(COMPLETED_DISPLAY_COLS)
+    .eq('user_id', userId)
     .in('plan_session_id', ids);
   return data ?? [];
 }
@@ -413,9 +474,11 @@ export async function listCompletedForPlan(planId: number) {
 // The completion's identity for the merge feature: its id, primary Strava id and
 // the ids already merged in.
 export async function getCompletionForMerge(planSessionId: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, completed_date, strava_activity_id, merged_strava_ids')
+    .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
   return data;
@@ -427,29 +490,35 @@ export async function updateCompletedForSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   patch: Record<string, any>,
 ): Promise<void> {
-  await supabaseAdmin.from('completed_workouts').update(patch).eq('plan_session_id', planSessionId);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('completed_workouts').update(patch).eq('user_id', userId).eq('plan_session_id', planSessionId);
 }
 
 // Whether a planned session already has a logged completion (Strava idempotency).
 export async function completedWorkoutExistsForSession(planSessionId: string): Promise<boolean> {
+  const userId = await currentUserId();
   const { count } = await supabaseAdmin
     .from('completed_workouts')
     .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
     .eq('plan_session_id', planSessionId);
   return !!(count && count > 0);
 }
 
-// Insert a completion (Strava sync).
+// Insert a completion (Strava sync). The user id is injected from scope so callers
+// (the sync engine) don't have to thread it into every row they build.
 export async function insertCompletedWorkout(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   row: Record<string, any>,
 ): Promise<void> {
-  await supabaseAdmin.from('completed_workouts').insert(row);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('completed_workouts').insert({ ...row, user_id: userId });
 }
 
 // Remove the completion(s) for a planned session (manual unlink).
 export async function deleteCompletedForSession(planSessionId: string): Promise<void> {
-  await supabaseAdmin.from('completed_workouts').delete().eq('plan_session_id', planSessionId);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('completed_workouts').delete().eq('user_id', userId).eq('plan_session_id', planSessionId);
 }
 
 // Insert a plan session (promoting an off-plan activity into the plan); returns its id.
@@ -457,22 +526,26 @@ export async function insertPlanSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   row: Record<string, any>,
 ): Promise<string | null> {
-  const { data } = await supabaseAdmin.from('plan_sessions').insert(row).select('id').single();
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('plan_sessions').insert({ ...row, user_id: userId }).select('id').single();
   return data?.id ?? null;
 }
 
 // Delete a plan session (undo a promotion).
 export async function deletePlanSession(id: string): Promise<void> {
-  await supabaseAdmin.from('plan_sessions').delete().eq('id', id);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('plan_sessions').delete().eq('user_id', userId).eq('id', id);
 }
 
 // Strava completions still missing per-segment pace or HR, capped at `limit`.
 export async function listCompletedMissingSegments(limit: number) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, plan_session_id, strava_activity_id, actual_avg_hr, actual_ngp_min_km')
     // Runs missing per-segment pacing OR (runs only — non-null pace) missing NGP.
     // Rides have empty (not null) segments and null pace, so they never match.
+    .eq('user_id', userId)
     .or('segment_actuals.is.null,segment_hr.is.null,and(actual_avg_pace_min_km.not.is.null,actual_ngp_min_km.is.null)')
     .eq('source', 'strava')
     .limit(limit);
@@ -485,7 +558,8 @@ export async function updateCompletedWorkout(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   patch: Record<string, any>,
 ): Promise<void> {
-  await supabaseAdmin.from('completed_workouts').update(patch).eq('id', id);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('completed_workouts').update(patch).eq('user_id', userId).eq('id', id);
 }
 
 // Stamp the Garmin RPE (perceived_exertion, 1–10) onto the completion for a Strava
@@ -494,9 +568,11 @@ export async function updateCompletedWorkout(
 // (§6E), so the sync must NOT overwrite them or it would clobber a hand-entered
 // value. Only stamp run completions (and off-plan/unknown, assumed runs).
 export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number): Promise<boolean> {
+  const userId = await currentUserId();
   const { data: rows } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, plan_sessions(session_type, activity_type)')
+    .eq('user_id', userId)
     .eq('strava_activity_id', stravaId);
   const ids = (rows ?? []).filter(r => {
     const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
@@ -509,6 +585,7 @@ export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .update({ perceived_effort: rpe })
+    .eq('user_id', userId)
     .in('id', ids)
     .select('id');
   return !!(data && data.length);
@@ -516,16 +593,19 @@ export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number
 
 // Manual RPE (1–10) for a completed non-run session, keyed by plan_session_id.
 export async function setSessionEffort(planSessionId: string, rpe: number): Promise<void> {
-  await supabaseAdmin.from('completed_workouts').update({ perceived_effort: rpe }).eq('plan_session_id', planSessionId);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('completed_workouts').update({ perceived_effort: rpe }).eq('user_id', userId).eq('plan_session_id', planSessionId);
 }
 
 // Long runs (run = has a pace; ≥20 km) that carry HR but no decoupling yet — the
 // backfill set for long-run quality on activities synced before the metric existed.
 // HR-gated so rows that can never compute decoupling aren't re-fetched forever.
 export async function listLongRunsMissingQuality(limit: number) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, strava_activity_id')
+    .eq('user_id', userId)
     .eq('source', 'strava')
     .is('decoupling_pct', null)
     .not('actual_avg_hr', 'is', null)
@@ -540,13 +620,15 @@ export async function listLongRunsMissingQuality(limit: number) {
 // Called after a sync (new actuals / backfilled NGP) and whenever threshold pace
 // or power zones change in Settings, so stored TSS can never go stale. Inputs are
 // read UNCACHED so it always reflects the just-committed state; only changed rows
-// are written.
+// are written. Scoped to the current user.
 export async function recomputeAllCompletedTss(): Promise<void> {
+  const userId = await currentUserId();
   const [{ data: cfg }, { data: pz }, { data: rows }] = await Promise.all([
-    supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle(),
-    supabaseAdmin.from('power_zones').select('zone_key, power_max'),
+    supabaseAdmin.from('app_config').select('threshold_pace_per_km').eq('user_id', userId).limit(1).maybeSingle(),
+    supabaseAdmin.from('power_zones').select('zone_key, power_max').eq('user_id', userId),
     supabaseAdmin.from('completed_workouts')
-      .select('id, tss, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_power'),
+      .select('id, tss, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_power')
+      .eq('user_id', userId),
   ]);
 
   const threshMinKm = parseThresholdPace((cfg?.threshold_pace_per_km as string | null) ?? '3:40');
@@ -561,6 +643,6 @@ export async function recomputeAllCompletedTss(): Promise<void> {
     const prev = r.tss != null ? Number(r.tss) : null;
     return tss === prev
       ? Promise.resolve()
-      : supabaseAdmin.from('completed_workouts').update({ tss }).eq('id', r.id);
+      : supabaseAdmin.from('completed_workouts').update({ tss }).eq('user_id', userId).eq('id', r.id);
   }));
 }

@@ -13,6 +13,7 @@ import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches'
 import { activityKind } from '@/lib/activity-types';
 import { computeNgp, computeLongRunQuality } from '@/lib/run-tss';
 import { timedFetch } from '@/lib/http';
+import { currentUserId } from '@/lib/scope';
 
 export interface StravaActivity {
   id: number;
@@ -198,17 +199,21 @@ function hmmToMins(d: string | null | undefined): number | null {
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
 }
 
-// Single-flight guard: the webhook (fires on every activity create/edit) and the
-// manual sync both call syncActivities, and Strava can push several events at once.
-// Coalescing overlapping runs within an instance avoids racing the token refresh
-// and hammering the Strava API; the DB's partial unique index on
+// Single-flight guard, keyed per user: the webhook (fires on every activity
+// create/edit) and the manual sync both call syncActivities, and Strava can push
+// several events at once. Coalescing overlapping runs for the SAME user within an
+// instance avoids racing the token refresh and hammering the Strava API, while two
+// different users can still sync concurrently. The DB's partial unique index on
 // completed_workouts(plan_session_id) backstops any cross-instance overlap.
-let syncInFlight: Promise<{ synced: number; matched: number }> | null = null;
+const syncInFlight = new Map<string, Promise<{ synced: number; matched: number }>>();
 
-export function syncActivities(): Promise<{ synced: number; matched: number }> {
-  if (syncInFlight) return syncInFlight;
-  syncInFlight = runSyncActivities().finally(() => { syncInFlight = null; });
-  return syncInFlight;
+export async function syncActivities(): Promise<{ synced: number; matched: number }> {
+  const userId = await currentUserId();
+  const existing = syncInFlight.get(userId);
+  if (existing) return existing;
+  const p = runSyncActivities().finally(() => { syncInFlight.delete(userId); });
+  syncInFlight.set(userId, p);
+  return p;
 }
 
 async function runSyncActivities(): Promise<{ synced: number; matched: number }> {

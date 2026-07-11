@@ -1,4 +1,5 @@
-import { isAuthorizedRequest } from '@/lib/auth';
+import { resolveAuthorizedUserId } from '@/lib/auth';
+import { runWithUser } from '@/lib/scope';
 import { applyPlanChange, revertPlanChange, type PlanChangeInput } from '@/data/plan-mutations';
 import { NextResponse } from 'next/server';
 
@@ -16,7 +17,8 @@ import { NextResponse } from 'next/server';
 // (applied | duplicate), 409 (proposal_only — needs approval, nothing changed),
 // 422 (rejected), 400 (bad JSON body), 401.
 export async function POST(request: Request) {
-  if (!(await isAuthorizedRequest(request))) {
+  const userId = await resolveAuthorizedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -27,13 +29,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const result = typeof body.revert_adjustment_id === 'string'
-    ? await revertPlanChange(
-        body.revert_adjustment_id,
-        body.actor === 'claude' ? 'claude' : 'user',
-        typeof body.reason === 'string' ? body.reason : undefined,
-      )
-    : await applyPlanChange(body as unknown as PlanChangeInput);
+  const result = await runWithUser(userId, () =>
+    typeof body.revert_adjustment_id === 'string'
+      ? revertPlanChange(
+          body.revert_adjustment_id as string,
+          body.actor === 'claude' ? 'claude' : 'user',
+          typeof body.reason === 'string' ? body.reason : undefined,
+        )
+      : applyPlanChange(body as unknown as PlanChangeInput));
 
   const status = result.ok ? 200 : result.status === 'proposal_only' ? 409 : 422;
   return NextResponse.json(result, { status });

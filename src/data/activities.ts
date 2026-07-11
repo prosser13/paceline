@@ -1,30 +1,39 @@
 // Reads + writes for the `activities` table — raw Strava activities cached
-// locally by the sync engine. One home for this table's access.
+// locally by the sync engine. One home for this table's access, scoped per user.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
-// Upsert synced activities (conflict on the Strava id).
+// Upsert synced activities (conflict on the per-user Strava id).
 export async function upsertActivities(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   rows: Record<string, any>[],
 ): Promise<void> {
-  await supabaseAdmin.from('activities').upsert(rows, { onConflict: 'strava_activity_id' });
+  const userId = await currentUserId();
+  const scoped = rows.map(r => ({ ...r, user_id: userId }));
+  // strava_activity_id is globally unique (Strava ids never collide across athletes),
+  // so the existing single-column unique is the correct conflict target.
+  await supabaseAdmin.from('activities').upsert(scoped, { onConflict: 'strava_activity_id' });
 }
 
 // Stored activity rows (with UUIDs + timing) for the given Strava ids.
 export async function listActivitiesByStravaIds(stravaIds: number[]) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('id, strava_activity_id, activity_date, distance_km, duration_mins, avg_pace_min_km, avg_hr')
+    .eq('user_id', userId)
     .in('strava_activity_id', stravaIds);
   return data ?? [];
 }
 
 // One stored activity by its Strava id (manual link needs its actuals).
 export async function getActivityByStravaId(stravaId: number) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('id, strava_activity_id, activity_date, activity_type, name, distance_km, duration_mins, moving_time_secs, avg_pace_min_km, avg_hr')
+    .eq('user_id', userId)
     .eq('strava_activity_id', stravaId)
     .maybeSingle();
   return data;
@@ -33,9 +42,11 @@ export async function getActivityByStravaId(stravaId: number) {
 // Parts needed to combine activities into one (the merge feature). Power comes
 // from the raw Strava payload (the `activities` table has no power column).
 export async function getActivitiesForMerge(stravaIds: number[]) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('strava_activity_id, activity_type, distance_km, duration_mins, moving_time_secs, avg_hr, avg_pace_min_km, raw_data')
+    .eq('user_id', userId)
     .in('strava_activity_id', stravaIds);
   return (data ?? []).map(a => ({
     stravaActivityId: Number(a.strava_activity_id),
@@ -53,18 +64,22 @@ export async function getActivitiesForMerge(stravaIds: number[]) {
 // strava_activity_id → display name (for showing what a completion absorbed).
 export async function getActivityNamesByStravaIds(stravaIds: number[]) {
   if (!stravaIds.length) return [];
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('strava_activity_id, name')
+    .eq('user_id', userId)
     .in('strava_activity_id', stravaIds);
   return (data ?? []).map(a => ({ stravaActivityId: Number(a.strava_activity_id), name: (a.name as string | null) ?? null }));
 }
 
 // strava_activity_id → avg_hr, for backfilling completions missing HR.
 export async function getActivityHrByStravaIds(stravaIds: number[]) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('strava_activity_id, avg_hr')
+    .eq('user_id', userId)
     .in('strava_activity_id', stravaIds);
   return data ?? [];
 }
@@ -90,10 +105,12 @@ export async function listOffPlanActivitiesBetween(
   from: string,
   to: string,
 ): Promise<OffPlanActivity[]> {
+  const userId = await currentUserId();
   const [{ data: acts }, { data: matched }] = await Promise.all([
     supabaseAdmin
       .from('activities')
       .select('id, strava_activity_id, activity_date, activity_type, name, distance_km, duration_mins, avg_hr, avg_pace_min_km')
+      .eq('user_id', userId)
       .gte('activity_date', from)
       .lte('activity_date', to)
       .order('activity_date', { ascending: false }),
@@ -103,7 +120,8 @@ export async function listOffPlanActivitiesBetween(
     // small table.
     supabaseAdmin
       .from('completed_workouts')
-      .select('strava_activity_id, merged_strava_ids'),
+      .select('strava_activity_id, merged_strava_ids')
+      .eq('user_id', userId),
   ]);
 
   // An activity is "accounted for" if it's a completion's primary activity OR was

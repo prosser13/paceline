@@ -8,6 +8,7 @@
 // adjustment path so every change is auditable and reversible.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import {
   resolveZone, zoneFromPace, normalizeStructure, paceToSeconds, secondsToPace,
@@ -297,9 +298,11 @@ function detectRpeOverreach(recent: RecentSession[]): PlanContext['rpe_overreach
 
 // The plan whose [start_date, end_date] contains `asOf` (first by sort_order).
 async function getActivePlan(asOf: string): Promise<Record<string, unknown> | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('*')
+    .eq('user_id', userId)
     .lte('start_date', asOf)
     .gte('end_date', asOf)
     .order('sort_order')
@@ -309,9 +312,11 @@ async function getActivePlan(asOf: string): Promise<Record<string, unknown> | nu
 }
 
 async function getUpcomingRaces(asOf: string): Promise<Record<string, unknown>[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, race_date, distance_km, target_time, target_pace, strength_priority')
+    .eq('user_id', userId)
     .eq('kind', 'race')
     .gte('race_date', asOf)
     .order('race_date');
@@ -319,9 +324,11 @@ async function getUpcomingRaces(asOf: string): Promise<Record<string, unknown>[]
 }
 
 async function getUpcomingSessions(from: string, to: string): Promise<Record<string, unknown>[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select(SESSION_FIELDS)
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .order('scheduled_date')
@@ -520,9 +527,11 @@ function buildPaceCheck(
 
 // Planned sessions in [from, to] annotated with their actuals (from completed_workouts).
 async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBands: HrBand[]): Promise<RecentSession[]> {
+  const userId = await currentUserId();
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, structure')
+    .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
     .order('scheduled_date');
@@ -535,6 +544,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
     ? await supabaseAdmin
         .from('completed_workouts')
         .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
+        .eq('user_id', userId)
         .in('plan_session_id', ids)
     : null;
   const completed = completedRes?.data ?? [];
@@ -603,9 +613,11 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
 // Selects actor/operation/reason (the agent-era columns); chip_used is legacy and
 // always null for agent-made changes, so it carried no "why".
 async function getRecentChanges(): Promise<Record<string, unknown>[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('adjustment_logs')
     .select('id, plan_session_id, actor, operation, reason, before_state, after_state, logged_at')
+    .eq('user_id', userId)
     .order('logged_at', { ascending: false })
     .limit(CHANGE_LOG_LIMIT);
   return (data ?? []) as Record<string, unknown>[];

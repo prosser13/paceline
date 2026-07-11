@@ -15,6 +15,7 @@ import {
 import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
+import { upsertUserIntegrations } from '@/data/user-integrations';
 import { geocodePlace } from '@/lib/weather';
 import { correctThreshold } from '@/data/threshold-suggestion';
 import { revalidatePath } from 'next/cache';
@@ -46,6 +47,30 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
   revalidatePath('/plan');
   revalidatePath('/');
 
+  return { ok: true };
+}
+
+export interface IntegrationsInput {
+  intervalsAthleteId: string;
+  intervalsApiKey: string;   // empty string = leave existing key unchanged (write-only field)
+  telegramChatId: string;
+  intervalsWorkoutSync: boolean;
+}
+
+// Save the current user's integration credentials. The API key is write-only: an
+// empty value leaves the stored key untouched (so the UI never has to echo it back).
+export async function saveIntegrations(input: IntegrationsInput) {
+  await requireUser();
+  const patch: Parameters<typeof upsertUserIntegrations>[0] = {
+    intervals_athlete_id:   input.intervalsAthleteId.trim() || null,
+    telegram_chat_id:       input.telegramChatId.trim() || null,
+    intervals_workout_sync: input.intervalsWorkoutSync,
+  };
+  if (input.intervalsApiKey.trim()) {
+    patch.intervals_api_key = input.intervalsApiKey.trim();
+  }
+  await upsertUserIntegrations(patch);
+  revalidatePath('/settings');
   return { ok: true };
 }
 

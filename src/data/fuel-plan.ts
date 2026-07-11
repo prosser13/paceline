@@ -4,6 +4,7 @@
 // the rows/heroes and the coach context all read one source of truth.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { getGoalMarathon } from '@/data/benchmarks';
 import { fuelPlanForSessions, type FuelTarget } from '@/lib/fuel-progression';
 
@@ -14,9 +15,11 @@ export type { FuelTarget };
 export async function getFuelPlanForGoalBlock(asOf: string): Promise<Map<string, FuelTarget>> {
   const goal = await getGoalMarathon(asOf);
   if (!goal) return new Map();
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, scheduled_date, session_type, activity_type, distance_km')
+    .eq('user_id', userId)
     .eq('plan_id', goal.id);
   return fuelPlanForSessions((data ?? []) as {
     id: string; scheduled_date: string; session_type: string | null;

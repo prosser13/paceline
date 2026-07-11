@@ -8,6 +8,7 @@
 // stays in src/lib/intervals.ts.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 export interface WellnessDay {
   date: string;                       // yyyy-mm-dd
@@ -35,19 +36,22 @@ const READ_COLS =
 // number of rows written.
 export async function upsertWellnessDays(rows: WellnessDay[]): Promise<number> {
   if (!rows.length) return 0;
-  const payload = rows.map(r => ({ ...r, synced_at: new Date().toISOString() }));
+  const userId = await currentUserId();
+  const payload = rows.map(r => ({ ...r, user_id: userId, synced_at: new Date().toISOString() }));
   const { error } = await supabaseAdmin
     .from('wellness_days')
-    .upsert(payload, { onConflict: 'date' });
+    .upsert(payload, { onConflict: 'user_id,date' });
   if (error) throw new Error(`wellness_days upsert failed: ${error.message}`);
   return rows.length;
 }
 
 // The most recent stored day, or null.
 export async function getLatestWellnessDay(): Promise<WellnessDay | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('wellness_days')
     .select(READ_COLS)
+    .eq('user_id', userId)
     .order('date', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -57,9 +61,11 @@ export async function getLatestWellnessDay(): Promise<WellnessDay | null> {
 // Recent days in ascending date order (for trend tiles). `days` counts back from
 // the latest stored row.
 export async function listRecentWellnessDays(days = 30): Promise<WellnessDay[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('wellness_days')
     .select(READ_COLS)
+    .eq('user_id', userId)
     .order('date', { ascending: false })
     .limit(days);
   return ((data as WellnessDay[] | null) ?? []).reverse();

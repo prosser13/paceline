@@ -3,8 +3,7 @@
 // else `home`. One home for this cluster so per-user scoping lands here later.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-
-const CONFIG_ID = 1;
+import { currentUserId } from '@/lib/scope';
 
 export interface WeatherConfig {
   home_lat: number | null;
@@ -19,10 +18,11 @@ export interface WeatherConfig {
 export interface EffectiveLocation { lat: number; lng: number; label: string | null; away: boolean; }
 
 export async function getWeatherConfig(): Promise<WeatherConfig | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('weather_config')
     .select('home_lat, home_lng, home_label, override_lat, override_lng, override_label, default_hour')
-    .eq('id', CONFIG_ID)
+    .eq('user_id', userId)
     .maybeSingle();
   return (data as WeatherConfig | null) ?? null;
 }
@@ -41,20 +41,23 @@ export function effectiveLocation(cfg: WeatherConfig | null): EffectiveLocation 
 }
 
 export async function setHomeLocation(lat: number, lng: number, label: string | null, defaultHour: number): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('weather_config').upsert({
-    id: CONFIG_ID, home_lat: lat, home_lng: lng, home_label: label,
+    user_id: userId, home_lat: lat, home_lng: lng, home_label: label,
     default_hour: defaultHour, updated_at: new Date().toISOString(),
-  }, { onConflict: 'id' });
+  }, { onConflict: 'user_id' });
 }
 
 export async function setOverrideLocation(lat: number, lng: number, label: string | null): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('weather_config').update({
     override_lat: lat, override_lng: lng, override_label: label, updated_at: new Date().toISOString(),
-  }).eq('id', CONFIG_ID);
+  }).eq('user_id', userId);
 }
 
 export async function clearOverrideLocation(): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('weather_config').update({
     override_lat: null, override_lng: null, override_label: null, updated_at: new Date().toISOString(),
-  }).eq('id', CONFIG_ID);
+  }).eq('user_id', userId);
 }

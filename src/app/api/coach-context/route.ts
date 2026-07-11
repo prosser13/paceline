@@ -1,4 +1,5 @@
-import { isAuthorizedRequest } from '@/lib/auth';
+import { resolveAuthorizedUserId } from '@/lib/auth';
+import { runWithUser } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { upsertCoachContext } from '@/data/coach';
 import { NextResponse } from 'next/server';
@@ -11,7 +12,8 @@ import { NextResponse } from 'next/server';
 //   POST /api/coach-context
 //   { summary: string }
 export async function POST(request: Request) {
-  if (!(await isAuthorizedRequest(request))) {
+  const userId = await resolveAuthorizedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
 
   const today = todayISO();
   try {
-    await upsertCoachContext(summary, today);
+    await runWithUser(userId, () => upsertCoachContext(summary, today));
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save' }, { status: 500 });
   }

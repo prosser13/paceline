@@ -4,6 +4,7 @@
 // The pure rule table lives in strength-progression-rules.ts.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { STRENGTH_EXERCISES } from './strength-exercises';
 import { progressable, type ExerciseStateLite, type SessionIntent } from './strength';
 import {
@@ -21,7 +22,8 @@ function stateIntentFor(intent: string): 'strength' | 'maintain' | null {
 
 // ── tuning + mode ────────────────────────────────────────────
 export async function getStrengthTuning(): Promise<StrengthTuning> {
-  const { data } = await supabaseAdmin.from('strength_tuning').select('*').eq('id', 1).maybeSingle();
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('strength_tuning').select('*').eq('user_id', userId).maybeSingle();
   if (!data) return DEFAULT_TUNING;
   return {
     weightUpStreak: data.weight_up_streak ?? DEFAULT_TUNING.weightUpStreak,
@@ -35,26 +37,29 @@ export async function getStrengthTuning(): Promise<StrengthTuning> {
 }
 
 export async function getProgressionMode(): Promise<ProgressionMode> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('coaching_prefs').select('strength_progression_mode').eq('id', 1).maybeSingle();
+    .from('coaching_prefs').select('strength_progression_mode').eq('user_id', userId).maybeSingle();
   const m = data?.strength_progression_mode;
   return m === 'progressive' || m === 'maintenance' ? m : 'hybrid';
 }
 
 export async function setProgressionMode(mode: ProgressionMode): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('coaching_prefs')
-    .upsert({ id: 1, strength_progression_mode: mode }, { onConflict: 'id' });
+    .upsert({ user_id: userId, strength_progression_mode: mode }, { onConflict: 'user_id' });
 }
 
 // Coach write-hook: adjust the tunable engine knobs, logged (exercise_id 0
 // sentinel) so the change is inspectable and reversible. `patch` uses snake_case
 // column names, e.g. { weight_up_streak: 2 }.
 export async function updateStrengthTuning(patch: Record<string, number>, reason: string): Promise<void> {
-  const { data: before } = await supabaseAdmin.from('strength_tuning').select('*').eq('id', 1).maybeSingle();
-  await supabaseAdmin.from('strength_tuning').upsert({ id: 1, ...patch }, { onConflict: 'id' });
-  const { data: after } = await supabaseAdmin.from('strength_tuning').select('*').eq('id', 1).maybeSingle();
+  const userId = await currentUserId();
+  const { data: before } = await supabaseAdmin.from('strength_tuning').select('*').eq('user_id', userId).maybeSingle();
+  await supabaseAdmin.from('strength_tuning').upsert({ user_id: userId, ...patch }, { onConflict: 'user_id' });
+  const { data: after } = await supabaseAdmin.from('strength_tuning').select('*').eq('user_id', userId).maybeSingle();
   await supabaseAdmin.from('strength_progression_events').insert({
-    user_id: null, exercise_id: 0, intent: 'tuning', session_id: null,
+    user_id: userId, exercise_id: 0, intent: 'tuning', session_id: null,
     kind: 'tuning', reason, before_state: before, after_state: after,
   });
 }
@@ -70,9 +75,11 @@ interface StateRow {
 
 // All saved state rows (both intents), for the builder + the engine.
 async function listExerciseState(): Promise<StateRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('strength_exercise_state')
-    .select('exercise_id, intent, current_reps, current_weight_kg, consecutive_easy');
+    .select('exercise_id, intent, current_reps, current_weight_kg, consecutive_easy')
+    .eq('user_id', userId);
   return (data ?? []) as StateRow[];
 }
 
@@ -106,8 +113,9 @@ interface UpsertState {
 }
 
 async function upsertExerciseState(s: UpsertState): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('strength_exercise_state').upsert({
-    user_id: null,
+    user_id: userId,
     exercise_id: s.exerciseId,
     intent: s.intent,
     current_reps: s.reps,
@@ -129,8 +137,9 @@ interface EventInput {
 }
 
 async function insertProgressionEvent(e: EventInput): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('strength_progression_events').insert({
-    user_id: null,
+    user_id: userId,
     exercise_id: e.exerciseId,
     intent: e.intent,
     session_id: e.sessionId,
@@ -142,16 +151,18 @@ async function insertProgressionEvent(e: EventInput): Promise<void> {
 }
 
 async function sessionHasEvents(sessionId: string): Promise<boolean> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('strength_progression_events').select('id').eq('session_id', sessionId).limit(1);
+    .from('strength_progression_events').select('id').eq('user_id', userId).eq('session_id', sessionId).limit(1);
   return (data?.length ?? 0) > 0;
 }
 
 // Recent progression events (for the history view + the coach reference).
 export async function listRecentProgressionEvents(limit = 40) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('strength_progression_events')
-    .select('*').order('logged_at', { ascending: false }).limit(limit);
+    .select('*').eq('user_id', userId).order('logged_at', { ascending: false }).limit(limit);
   return data ?? [];
 }
 
@@ -159,6 +170,7 @@ export async function listRecentProgressionEvents(limit = 40) {
 // is set up, what it has been doing, and where a lift may be stalling (rated hard
 // repeatedly with no progress) so the coach can propose a tuning tweak.
 export async function getStrengthCoachSummary() {
+  const userId = await currentUserId();
   const [mode, tuning, events, { data: hardRatings }] = await Promise.all([
     getProgressionMode(),
     getStrengthTuning(),
@@ -168,6 +180,7 @@ export async function getStrengthCoachSummary() {
     supabaseAdmin
       .from('strength_session_exercises')
       .select('exercise_id, difficulty, strength_sessions!inner(completed_at)')
+      .eq('user_id', userId)
       .gte('difficulty', 4)
       .not('strength_sessions.completed_at', 'is', null)
       .order('completed_at', { ascending: false, referencedTable: 'strength_sessions' })
@@ -202,8 +215,9 @@ const LIB = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
 // Run the double-progression engine over a completed session. Idempotent: if
 // it has already produced events, it does nothing on a re-run.
 export async function evaluateProgressionAfterSession(sessionId: string): Promise<void> {
+  const userId = await currentUserId();
   const { data: session } = await supabaseAdmin
-    .from('strength_sessions').select('id, intent, modifier').eq('id', sessionId).maybeSingle();
+    .from('strength_sessions').select('id, intent, modifier').eq('user_id', userId).eq('id', sessionId).maybeSingle();
   if (!session) return;
 
   const si = stateIntentFor(session.intent);
@@ -217,7 +231,7 @@ export async function evaluateProgressionAfterSession(sessionId: string): Promis
 
   const [{ data: exRows }, tuning, mode, stateRows] = await Promise.all([
     supabaseAdmin.from('strength_session_exercises')
-      .select('exercise_id, difficulty, is_done').eq('session_id', sessionId),
+      .select('exercise_id, difficulty, is_done').eq('user_id', userId).eq('session_id', sessionId),
     getStrengthTuning(),
     getProgressionMode(),
     listExerciseState(),
@@ -267,12 +281,13 @@ export async function evaluateProgressionAfterSession(sessionId: string): Promis
 // Promote a one-off in-session edit into persistent state ("keep this going
 // forward"). Reads the session exercise's current reps/weight and saves them.
 export async function promoteOverride(sessionExerciseId: string): Promise<void> {
+  const userId = await currentUserId();
   const { data: row } = await supabaseAdmin
     .from('strength_session_exercises')
-    .select('exercise_id, reps_value, weight_kg, session_id').eq('id', sessionExerciseId).maybeSingle();
+    .select('exercise_id, reps_value, weight_kg, session_id').eq('user_id', userId).eq('id', sessionExerciseId).maybeSingle();
   if (!row) return;
   const { data: session } = await supabaseAdmin
-    .from('strength_sessions').select('intent').eq('id', row.session_id).maybeSingle();
+    .from('strength_sessions').select('intent').eq('user_id', userId).eq('id', row.session_id).maybeSingle();
   const si = stateIntentFor(session?.intent ?? 'maintain');
   if (!si) return;
   const ex = LIB.get(row.exercise_id);

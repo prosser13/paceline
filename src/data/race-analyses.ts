@@ -1,6 +1,7 @@
 // Coach's race debrief, keyed by slug. Generated on demand from the race result.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 export interface RaceAnalysis {
   headline: string;
@@ -10,8 +11,9 @@ export interface RaceAnalysis {
 }
 
 export async function getRaceAnalysis(slug: string): Promise<RaceAnalysis | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('race_analyses').select('headline, body_md, model, created_at').eq('slug', slug).maybeSingle();
+    .from('race_analyses').select('headline, body_md, model, created_at').eq('user_id', userId).eq('slug', slug).maybeSingle();
   if (!data) return null;
   return {
     headline: data.headline as string,
@@ -24,6 +26,7 @@ export async function getRaceAnalysis(slug: string): Promise<RaceAnalysis | null
 export async function upsertRaceAnalysis(
   slug: string, a: { headline: string; bodyMd: string; model: string | null },
 ): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('race_analyses')
-    .upsert({ slug, headline: a.headline, body_md: a.bodyMd, model: a.model, created_at: new Date().toISOString() }, { onConflict: 'slug' });
+    .upsert({ user_id: userId, slug, headline: a.headline, body_md: a.bodyMd, model: a.model, created_at: new Date().toISOString() }, { onConflict: 'user_id,slug' });
 }

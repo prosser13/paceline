@@ -5,6 +5,7 @@
 // should UPDATE plan_sessions for planning reasons. See docs/plan-agent.md.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { getCoachingPrefs } from '@/data/coaching';
 import { getCurrentWeek } from '@/data/plans';
@@ -67,8 +68,10 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   if (actor !== 'claude' && actor !== 'user') return reject('actor must be "claude" or "user"');
   if (!input.patch || typeof input.patch !== 'object') return reject('patch is required');
 
+  const userId = await currentUserId();
+
   // Idempotency: a repeated key is a no-op (a re-run of the same intent).
-  const existing = await findByKey(idempotency_key);
+  const existing = await findByKey(userId, idempotency_key);
   if (existing) return { ok: true, applied: false, status: 'duplicate', adjustment_id: existing };
 
   // Only editable fields; reject the whole change if it reaches for a locked one.
@@ -83,6 +86,7 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   const { data: session } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('user_id', userId)
     .eq('id', session_id)
     .maybeSingle();
   if (!session) return reject('session not found');
@@ -151,12 +155,13 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   const before: Record<string, unknown> = {};
   for (const k of Object.keys(patch)) before[k] = session[k as keyof typeof session] ?? null;
 
-  const { error: updErr } = await supabaseAdmin.from('plan_sessions').update(patch).eq('id', session_id);
+  const { error: updErr } = await supabaseAdmin.from('plan_sessions').update(patch).eq('user_id', userId).eq('id', session_id);
   if (updErr) return reject(`update failed: ${updErr.message}`);
 
   const { data: logRow, error: logErr } = await supabaseAdmin
     .from('adjustment_logs')
     .insert({
+      user_id:         userId,
       plan_session_id: session_id,
       operation:       'update',
       actor,
@@ -175,11 +180,11 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     // captured `before` here could undo the winner's change if this run read the
     // session before the winner's update landed.
     if (logErr.code === '23505') {
-      const dup = await findByKey(idempotency_key);
+      const dup = await findByKey(userId, idempotency_key);
       return { ok: true, applied: false, status: 'duplicate', adjustment_id: dup };
     }
     // Log write failed for another reason — undo the session change so state + audit stay in lockstep.
-    await supabaseAdmin.from('plan_sessions').update(before).eq('id', session_id);
+    await supabaseAdmin.from('plan_sessions').update(before).eq('user_id', userId).eq('id', session_id);
     return reject(`could not record change: ${logErr.message}`);
   }
 
@@ -195,6 +200,7 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     const { data: week } = await supabaseAdmin
       .from('plan_weeks')
       .select('week_number, purpose')
+      .eq('user_id', userId)
       .eq('plan_id', session.plan_id)
       .lte('date_from', effDate)
       .gte('date_to', effDate)
@@ -226,9 +232,11 @@ export async function revertPlanChange(
   actor: 'claude' | 'user' = 'user',
   reason = 'revert',
 ): Promise<PlanChangeResult> {
+  const userId = await currentUserId();
   const { data: log } = await supabaseAdmin
     .from('adjustment_logs')
     .select('id, plan_session_id, before_state, after_state, operation')
+    .eq('user_id', userId)
     .eq('id', adjustmentId)
     .maybeSingle();
   if (!log) return reject('adjustment not found');
@@ -240,12 +248,13 @@ export async function revertPlanChange(
 
   // Reverting the same change twice is a no-op.
   const key = `revert:${adjustmentId}`;
-  const existing = await findByKey(key);
+  const existing = await findByKey(userId, key);
   if (existing) return { ok: true, applied: false, status: 'duplicate', adjustment_id: existing };
 
   const { data: session } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('user_id', userId)
     .eq('id', log.plan_session_id)
     .maybeSingle();
   if (!session) return reject('session not found');
@@ -261,12 +270,13 @@ export async function revertPlanChange(
   }
   if (!Object.keys(restore).length) return reject('nothing to revert (no editable before-state)');
 
-  const { error: updErr } = await supabaseAdmin.from('plan_sessions').update(restore).eq('id', log.plan_session_id);
+  const { error: updErr } = await supabaseAdmin.from('plan_sessions').update(restore).eq('user_id', userId).eq('id', log.plan_session_id);
   if (updErr) return reject(`revert failed: ${updErr.message}`);
 
   const { data: logRow, error: logErr } = await supabaseAdmin
     .from('adjustment_logs')
     .insert({
+      user_id:         userId,
       plan_session_id: log.plan_session_id,
       operation:       'revert',
       actor,
@@ -283,9 +293,9 @@ export async function revertPlanChange(
     // we already applied at line 258 — do NOT roll back to `current` (that would
     // undo the winner's revert if this run read the row before the winner's update).
     if (logErr.code === '23505') {
-      return { ok: true, applied: false, status: 'duplicate', adjustment_id: await findByKey(key) };
+      return { ok: true, applied: false, status: 'duplicate', adjustment_id: await findByKey(userId, key) };
     }
-    await supabaseAdmin.from('plan_sessions').update(current).eq('id', log.plan_session_id);
+    await supabaseAdmin.from('plan_sessions').update(current).eq('user_id', userId).eq('id', log.plan_session_id);
     return reject(`could not record revert: ${logErr.message}`);
   }
 
@@ -309,9 +319,11 @@ export interface AdjustmentEntry {
 // The change log for the review card — recent entries with their session context,
 // each flagged if it's already been reverted.
 export async function listAdjustments(limit = 50): Promise<AdjustmentEntry[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('adjustment_logs')
     .select('id, actor, operation, reason, before_state, after_state, logged_at, plan_sessions(name, scheduled_date, session_type)')
+    .eq('user_id', userId)
     .order('logged_at', { ascending: false })
     .limit(limit);
 
@@ -319,6 +331,7 @@ export async function listAdjustments(limit = 50): Promise<AdjustmentEntry[]> {
   const { data: reverts } = await supabaseAdmin
     .from('adjustment_logs')
     .select('idempotency_key')
+    .eq('user_id', userId)
     .like('idempotency_key', 'revert:%');
   const revertedIds = new Set((reverts ?? []).map(r => (r.idempotency_key as string).slice('revert:'.length)));
 
@@ -338,10 +351,11 @@ export async function listAdjustments(limit = 50): Promise<AdjustmentEntry[]> {
   });
 }
 
-async function findByKey(key: string): Promise<string | null> {
+async function findByKey(userId: string, key: string): Promise<string | null> {
   const { data } = await supabaseAdmin
     .from('adjustment_logs')
     .select('id')
+    .eq('user_id', userId)
     .eq('idempotency_key', key)
     .maybeSingle();
   return (data?.id as string | undefined) ?? null;

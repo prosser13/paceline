@@ -1,6 +1,7 @@
 import { after } from 'next/server';
 import { syncActivities } from '@/lib/strava';
-import { getStravaAthleteId } from '@/data/strava-connection';
+import { getUserIdByStravaAthlete } from '@/data/strava-connection';
+import { runWithUser } from '@/lib/scope';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -32,14 +33,17 @@ export async function POST(req: Request) {
   const subId = process.env.STRAVA_SUBSCRIPTION_ID;
   if (subId && String(event.subscription_id ?? '') !== subId) return new Response('ok', { status: 200 });
 
-  const athleteId = await getStravaAthleteId();
-  if (athleteId != null && event.owner_id != null && Number(event.owner_id) !== athleteId) {
-    return new Response('ok', { status: 200 });
-  }
+  // Strava events carry no session — route the event to the owning user by the
+  // Strava athlete id (event.owner_id). Unknown athlete → ignore (but 200 so Strava
+  // doesn't retry).
+  if (event.owner_id == null) return new Response('ok', { status: 200 });
+  const userId = await getUserIdByStravaAthlete(Number(event.owner_id));
+  if (!userId) return new Response('ok', { status: 200 });
 
   after(async () => {
     try {
-      await syncActivities();   // single-flighted in src/lib/strava.ts
+      // Open the owner's data scope so the sync reads/writes their rows + creds.
+      await runWithUser(userId, () => syncActivities());   // single-flighted per user
     } catch (err) {
       console.error('Strava webhook sync failed:', err);
     }
