@@ -18,6 +18,7 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getCurrentUser as getSessionUser } from './supabase-server';
+import { getImpersonatedUserId } from './impersonation';
 
 const store = new AsyncLocalStorage<string>();
 
@@ -34,6 +35,11 @@ export function runWithUser<T>(userId: string, fn: () => Promise<T>): Promise<T>
 export async function currentUserId(): Promise<string> {
   const explicit = store.getStore();
   if (explicit) return explicit;
+  // An owner "viewing as" another user (impersonation.ts) scopes all reads to the
+  // target. Owner-gated and validated there; null for everyone else. Writes are
+  // separately blocked (getCurrentUser in auth.ts), so this only ever widens reads.
+  const impersonated = await getImpersonatedUserId();
+  if (impersonated) return impersonated;
   const user = await getSessionUser();
   if (!user) {
     throw new Error(
