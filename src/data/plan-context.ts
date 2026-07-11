@@ -412,17 +412,28 @@ function plannedRunZone(name: string, description: string | null, targetPace: st
   return resolveZone(`${description ?? ''} ${name ?? ''}`, targetPace, zones);
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "2026-07-08" → "8 Jul", so a quoted pace_check verdict carries its own date and
+// the coach can't mis-pair a pace with the wrong day.
+function fmtShortDate(iso: string): string {
+  const m = Number(iso.slice(5, 7)), d = Number(iso.slice(8, 10));
+  return m >= 1 && m <= 12 && d ? `${d} ${MONTHS[m - 1]}` : iso;
+}
+
 // Deterministic pace-vs-prescribed-zone verdict for a completed run. Returns null
 // for non-runs, sessions without an actual pace, or runs with no zone to check
-// against (so the coach falls back to the raw actuals, as before).
+// against (so the coach falls back to the raw actuals, as before). The verdict is
+// prefixed with the session's date so the coach quotes pace + date as one fact.
 function buildPaceCheck(
-  s: { session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
+  s: { scheduled_date: string; session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
   actualPaceMinKm: number | null, ngpMinKm: number | null, actualHr: number | null,
   elevationGainM: number | null, distanceKm: number | null,
   zones: ZoneMap, hrBands: HrBand[],
 ): PaceCheck | null {
   if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
   if (actualPaceMinKm == null) return null;
+
+  const dateLabel = fmtShortDate(s.scheduled_date);
 
   const rawSec = Math.round(actualPaceMinKm * 60);
   const ngpSec = ngpMinKm != null ? Math.round(ngpMinKm * 60) : null;
@@ -470,7 +481,7 @@ function buildPaceCheck(
       actual_hr_zone: actualHrZoneLabel,
       elevation_gain_m: elevationGainM,
       effort_note: null, // whole-run average is a blend across zones — decoupling read isn't meaningful
-      verdict: `structured multi-zone session — assess each segment against its own target, not the whole-run average${hilly ? ` (${elevTag})` : ''}`,
+      verdict: `${dateLabel}: structured multi-zone session — assess each segment against its own target, not the whole-run average (actual_pace ${actualPace} is a blend, NOT an easy-run pace)${hilly ? ` — ${elevTag}` : ''}`,
     };
   }
 
@@ -497,6 +508,7 @@ function buildPaceCheck(
       : easier ? 'slower' : 'faster';
     verdict = `OUTSIDE plan — ran ${mag} than prescribed: target ${plannedLabel} (${plannedWindow}), actual ${paceShown}${actualZoneLabel ? ` = ${actualZoneLabel}` : ''}`;
   }
+  verdict = `${dateLabel}: ${verdict}`;
 
   return {
     planned_zone: plannedLabel, planned_window: plannedWindow,
@@ -573,6 +585,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
       } : null,
       pace_check: c ? buildPaceCheck(
         {
+          scheduled_date: s.scheduled_date as string,
           session_type: s.session_type as string,
           activity_type: (s.activity_type as string | null) ?? null,
           name: s.name as string,
