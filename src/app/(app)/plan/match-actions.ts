@@ -6,6 +6,7 @@ import { getActivityByStravaId, getActivitiesForMerge } from '@/data/activities'
 import {
   insertCompletedWorkout, completedWorkoutExistsForSession, deleteCompletedForSession,
   insertPlanSession, deletePlanSession, getCompletionForMerge, updateCompletedForSession,
+  recomputeAllCompletedTss,
 } from '@/data/plan-sessions';
 import { insertSessionMatch, deleteSessionMatch } from '@/data/session-matches';
 import { combineActivities } from '@/lib/activity-merge';
@@ -157,7 +158,14 @@ async function recomputeCompletion(planSessionId: string, primaryStravaId: numbe
     merged_strava_ids: mergedIds,
     segment_actuals:   cleared,
     segment_hr:        cleared,
+    // NGP can't be validly stitched across two separate activities' streams, so it's
+    // lost on merge (null). When a run is back to a single activity the sync's NGP
+    // backfill refills it. TSS then derives from average pace until it does.
+    actual_ngp_min_km: null,
   });
+  // TSS is stored (not derived on read), so recompute it from the new totals —
+  // otherwise the merged session keeps the pre-merge (single-activity) TSS.
+  await recomputeAllCompletedTss();
   return kind;
 }
 

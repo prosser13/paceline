@@ -155,6 +155,11 @@ export interface RecentSession {
     pace_decay_pct: number | null;   // final-third pace vs first two-thirds; >0 = faded, <0 = negative split
     durability: string | null;       // interpreted long-run durability read (long runs only)
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
+    // When the athlete stitched two+ Strava activities into this one session, the
+    // individual activities that make it up (primary first). Null for a normal
+    // single-activity completion. The `actual.*` fields above are the COMBINED
+    // totals; NGP is dropped on a merge, so TSS/pace here are average-pace based.
+    merged_from: { name: string | null; distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null; avg_hr: number | null }[] | null;
   } | null;
   pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
 }
@@ -543,7 +548,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
         .eq('user_id', userId)
         .in('plan_session_id', ids)
     : null;
@@ -552,6 +557,36 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const bySession = new Map<string, (typeof completed)[number]>();
   for (const c of completed ?? []) {
     if (c.plan_session_id) bySession.set(c.plan_session_id as string, c);
+  }
+
+  // For any completion stitched from several Strava activities, fetch the
+  // constituent activities so the coach sees the separate runs (and the fact of
+  // the merge), not just the combined totals. One batched read for all of them.
+  const mergedIdsBySession = new Map<string, number[]>();  // plan_session_id → [primary, ...merged]
+  const allActivityIds = new Set<number>();
+  for (const c of completed ?? []) {
+    const merged = ((c.merged_strava_ids as number[] | null) ?? []).map(Number).filter(Boolean);
+    if (!merged.length || !c.plan_session_id) continue;
+    const ordered = [...(c.strava_activity_id != null ? [Number(c.strava_activity_id)] : []), ...merged];
+    mergedIdsBySession.set(c.plan_session_id as string, ordered);
+    ordered.forEach(id => allActivityIds.add(id));
+  }
+  const activityById = new Map<number, { name: string | null; distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null; avg_hr: number | null }>();
+  if (allActivityIds.size) {
+    const { data: acts } = await supabaseAdmin
+      .from('activities')
+      .select('strava_activity_id, name, distance_km, duration_mins, avg_pace_min_km, avg_hr')
+      .eq('user_id', userId)
+      .in('strava_activity_id', [...allActivityIds]);
+    for (const a of acts ?? []) {
+      activityById.set(Number(a.strava_activity_id), {
+        name: (a.name as string | null) ?? null,
+        distance_km: a.distance_km != null ? Number(a.distance_km) : null,
+        duration_mins: a.duration_mins != null ? Number(a.duration_mins) : null,
+        avg_pace_min_km: a.avg_pace_min_km != null ? Number(a.avg_pace_min_km) : null,
+        avg_hr: a.avg_hr != null ? Number(a.avg_hr) : null,
+      });
+    }
   }
 
   return (sessions ?? []).map(s => {
@@ -592,6 +627,12 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
+        merged_from: (() => {
+          const idsForSession = mergedIdsBySession.get(s.id as string);
+          if (!idsForSession) return null;
+          const parts = idsForSession.map(id => activityById.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+          return parts.length ? parts : null;
+        })(),
       } : null,
       pace_check: c ? buildPaceCheck(
         {
