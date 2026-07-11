@@ -2,7 +2,7 @@
 // (src/app/page.tsx) and its sub-components need, in one place.
 
 import { cache } from 'react';
-import { getCurrentUser } from '@/lib/supabase-server';
+import { getViewedUser } from '@/lib/impersonation';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
@@ -213,7 +213,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     fuelMap,
     fuelProducts,
   ] = await Promise.all([
-    getCurrentUser(),
+    getViewedUser(),
     listSessionsBetween(todayStr, weekEndStr),
     listCompletedBetween(weekAgoStr, todayStr),
     getThresholdPace(),

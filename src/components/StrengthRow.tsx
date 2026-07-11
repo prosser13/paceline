@@ -104,7 +104,7 @@ export default function StrengthRow({
               </span>
             )}
           </div>
-          {focus && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{focus}</div>}
+          {focus && <div className="text-[14.5px] leading-snug mt-[3px] text-stone">{focus}</div>}
         </div>
         <div className="shrink-0 text-right w-[78px]">
           <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[19px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>

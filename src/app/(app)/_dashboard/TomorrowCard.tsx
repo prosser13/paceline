@@ -7,7 +7,7 @@
 import { resolveSport } from '@/lib/sports/registry';
 import { normalizeStructure, type ZoneMap, type HrZoneMap } from '@/lib/plan-structure';
 import { normalizeCyclingStructure, type PowerZoneMap, type BikeHrZoneMap } from '@/lib/cycling';
-import { WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM } from '@/components/session-ui';
+import { WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM, fmtClock, yogaFlowSeconds } from '@/components/session-ui';
 import { CyclingSegmentDetail } from '@/components/CyclingRow';
 import { StrengthDetailTable, type StrengthEx } from '@/components/StrengthRow';
 import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
@@ -69,9 +69,11 @@ export default function TomorrowCard({
     if (exercises.length > 0) detail = <StrengthDetailTable exercises={exercises} />;
   } else {
     // yoga / other
-    big = humanHMM(session.estimated_duration) ?? session.name;
+    const poses = (session.structure as Array<{ name?: string; pose?: string; reps?: number; reps_type?: string; sets?: number }> | null) ?? [];
+    // Total time = Σ pose holds (default for every yoga flow); fall back to any stored duration.
+    const flowSec = yogaFlowSeconds(poses);
+    big = flowSec > 0 ? fmtClock(flowSec) : (humanHMM(session.estimated_duration) ?? session.name);
     sub = session.description ?? null;
-    const poses = (session.structure as Array<{ name?: string; pose?: string }> | null) ?? [];
     if (poses.length > 0) {
       detail = (
         <ul className="text-[13px] leading-[1.7]">

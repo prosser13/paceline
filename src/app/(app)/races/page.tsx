@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { listRaceGuides } from '@/data/races';
 import { getPlanBySlug } from '@/data/plans';
 import { listRaceFinishes } from '@/data/plan-sessions';
-import { getViewer } from '@/lib/auth';
+import { getViewedUser } from '@/lib/impersonation';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
 import { todayISO } from '@/lib/dates';
 import type { RaceGuide } from '@/data/races/types';
@@ -27,16 +27,18 @@ interface Card { guide: RaceGuide; date: string | null; finishSecs: number | nul
 export default async function RacesPage() {
   const guides = listRaceGuides();
   const [viewer, plans, finishes] = await Promise.all([
-    getViewer(),
+    getViewedUser(),
     Promise.all(guides.map(async g => ({ slug: g.slug, plan: await getPlanBySlug(g.slug) }))),
     listRaceFinishes(),
   ]);
   const planBySlug = Object.fromEntries(plans.map(p => [p.slug, p.plan]));
 
-  // "Your races" = guides tagged with the logged-in user's email (see the
-  // ownerEmails tag on each guide). A plans row isn't a reliable owner signal —
-  // B-race tune-ups run inside another plan have no plans row of their own.
-  const email = viewer?.user.email?.toLowerCase() ?? null;
+  // "Your races" = guides tagged with the viewed user's email (see the ownerEmails
+  // tag on each guide). Uses the EFFECTIVE viewer so that while an owner is viewing as
+  // another athlete, "your races" reflects THEIR races, not the owner's. A plans row
+  // isn't a reliable owner signal — B-race tune-ups run inside another plan have no
+  // plans row of their own.
+  const email = viewer?.email?.toLowerCase() ?? null;
   const isMine = (g: RaceGuide) => !!email && (g.ownerEmails ?? []).some(e => e.toLowerCase() === email);
 
   const todayStr = todayISO();
