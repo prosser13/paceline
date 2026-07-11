@@ -173,3 +173,20 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
 - [ ] `O(streams × segments)` scans in `computeSegmentActuals`/`computeSegmentHr` → two-pointer.
 - [ ] Distance-less run sessions can never match a Strava activity (`strava.ts:320` requires
   `distance_km > 0`) — intentional? comment it either way.
+
+## Considered & declined (don't re-litigate)
+
+- **Per-segment reconstruction for merged runs** (discussed 2026-07-11). Idea: instead of the
+  whole-run collapse (`collapseToWholeRun`, PR #209), stitch the two merged activities' distance/time
+  streams by cumulative distance and re-run `computeSegmentActuals` over the join — the boundary
+  segment (where run 1 ends) gets `run1-tail + run2-head`, then run 2 continues into the remaining
+  segments. **Mechanically clean** (reuses the existing matcher; the boundary split falls out of
+  time-at-distance interpolation). **Declined for now** because merge does double duty: (A) one
+  continuous run accidentally split into two files, where this is *correct*; and (B) two genuinely
+  separate efforts dropped on one planned slot — e.g. today's 5 km parkrun (08:02) + 16 km run (11:16),
+  3 h apart, on the 21 km long run — where concatenating and slicing against the planned Z2/ultra
+  structure fabricates real-looking-but-meaningless splits. If revisited: **gate on time-contiguity**
+  (`run2.start − (run1.start + run1.elapsed)` small → reconstruct; else keep the collapse). Caveats:
+  Strava streams are prod-only (no local verification), needs the stitch in the merge action **plus** a
+  backfill (the current backfill deliberately skips merged runs), order parts by start time, and keep
+  NGP/decoupling null across the join regardless.
