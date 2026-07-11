@@ -102,11 +102,18 @@ export default function McpClient({
         </div>
       </div>
 
-      <p className="text-[12px] text-stone/80 leading-snug">
-        Add paceline as a custom MCP connector in Claude using the Server URL above, with the token as the
-        <span className="font-mono"> Bearer </span> authorization. It exposes read-only tools for your plan,
-        sessions, zones, races and recent workouts. Regenerating replaces the old token; revoking disconnects it.
-      </p>
+      <div className="text-[12px] text-stone/80 leading-snug space-y-[6px]">
+        <p>
+          <span className="font-semibold text-stone">Claude web / desktop:</span> add the Server URL as a custom
+          connector and sign in when prompted — no token needed (it uses OAuth).
+        </p>
+        <p>
+          <span className="font-semibold text-stone">Claude Code:</span> use the token above as the
+          <span className="font-mono"> Authorization: Bearer </span> header. Regenerating replaces the old token;
+          revoking disconnects it.
+        </p>
+        <p>Either way it exposes read-only tools for your plan, sessions, zones, races and recent workouts.</p>
+      </div>
     </div>
   );
 }
