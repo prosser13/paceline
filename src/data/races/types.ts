@@ -55,6 +55,10 @@ export interface RaceGuide {
   eventName: string;
   /** Race priority — drives the A/B/C colour, matching the plan page. */
   priority: 'A' | 'B' | 'C';
+  /** Emails of the users doing this race — drives the "Your Races" vs "Other
+   *  Races" split on the races list. Lowercased-compared. Omit/empty = library
+   *  race nobody's assigned to (shows under "Other Races" for everyone). */
+  ownerEmails?: string[];
   organiser?: string | null;
   region: string;                    // "South Wales coast"
   start: { name: string; lat: number; lng: number };
