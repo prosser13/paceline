@@ -95,6 +95,29 @@ export async function listRacePlans(): Promise<RacePlanRow[]> {
   return (data ?? []) as RacePlanRow[];
 }
 
+export interface UpcomingPlan {
+  name: string;
+  start_date: string;
+  end_date: string | null;
+  slug: string | null;
+}
+
+// The next training block that hasn't started yet — the earliest plan whose
+// start_date is after `fromDate`. Drives the dashboard "starts in N days" state
+// when no block is currently active. Null when nothing is scheduled ahead.
+export async function getUpcomingPlan(fromDate: string): Promise<UpcomingPlan | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('plans')
+    .select('name, start_date, end_date, slug')
+    .eq('user_id', userId)
+    .gt('start_date', fromDate)
+    .order('start_date', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data as UpcomingPlan | null) ?? null;
+}
+
 // Next upcoming race on/after `fromDate`, or null.
 const _getNextRace = unstable_cache(
   async (userId: string, fromDate: string): Promise<NextRace | null> => {

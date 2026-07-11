@@ -5,7 +5,7 @@ import { cache } from 'react';
 import { getViewedUser } from '@/lib/impersonation';
 import { getWellnessCached } from '@/lib/intervals';
 import {
-  getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks,
+  getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks, getUpcomingPlan,
 } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import {
@@ -96,6 +96,9 @@ export interface DashboardData {
   thresholdPace: string;
 
   hasPlanWeek: boolean;
+  // Shown in place of "No active training block" when nothing is active but a block
+  // is scheduled ahead (e.g. "Swansea Bay 10K · Starts Mon 13 Jul · in 2 days").
+  upcomingBlock: { name: string; startDateStr: string; daysToStart: number } | null;
   weekLabel: string;
   weekPurpose: string | null;
   weekNumber: number | null;   // current week number within the plan
@@ -387,6 +390,18 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const weekLabel   = weekRow ? `${weekRow.phase} · Week ${weekRow.week_number}` : 'This week';
   const weekPurpose = (weekRow?.purpose as string | null) ?? null;
 
+  // No active block today → surface the next scheduled one ("Starts Mon 13 Jul")
+  // instead of a bare "No active training block". Only queried on that path.
+  let upcomingBlock: DashboardData['upcomingBlock'] = null;
+  if (!weekRow) {
+    const up = await getUpcomingPlan(todayStr);
+    if (up?.start_date) {
+      const t = new Date(); t.setHours(0, 0, 0, 0);
+      const daysToStart = Math.ceil((new Date(up.start_date + 'T00:00:00').getTime() - t.getTime()) / 86400000);
+      upcomingBlock = { name: up.name, startDateStr: fmtWeekdayDate(up.start_date), daysToStart };
+    }
+  }
+
   let daysToRace: number | null = null;
   if (raceRow?.race_date) {
     const t = new Date(); t.setHours(0, 0, 0, 0);
@@ -546,6 +561,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     upcomingWithRest, windowDays,
     zones, hrZones, powerZones, bikeHrZones, thresholdPace,
     hasPlanWeek: !!weekRow,
+    upcomingBlock,
     weekLabel, weekPurpose,
     weekNumber: (weekRow?.week_number as number | null) ?? null,
     weeksTotal: (planWeeks?.length as number | undefined) ?? null,
