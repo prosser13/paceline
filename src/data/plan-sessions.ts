@@ -542,14 +542,18 @@ export async function listCompletedMissingSegments(limit: number) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, strava_activity_id, actual_avg_hr, actual_ngp_min_km')
+    .select('id, plan_session_id, strava_activity_id, actual_avg_hr, actual_ngp_min_km, merged_strava_ids')
     // Runs missing per-segment pacing OR (runs only — non-null pace) missing NGP.
     // Rides have empty (not null) segments and null pace, so they never match.
     .eq('user_id', userId)
     .or('segment_actuals.is.null,segment_hr.is.null,and(actual_avg_pace_min_km.not.is.null,actual_ngp_min_km.is.null)')
     .eq('source', 'strava')
     .limit(limit);
-  return data ?? [];
+  // Skip MERGED runs: they're stitched from ≥2 Strava activities, so NGP + per-segment
+  // pacing can't be validly derived from the primary activity's streams alone (that
+  // would apply one run's grade-adjusted pace to the whole combined run and re-inflate
+  // TSS). They deliberately keep null NGP + [] segments and a pace-based TSS.
+  return (data ?? []).filter(r => !((r.merged_strava_ids as number[] | null)?.length));
 }
 
 // Patch a completion (Strava backfill).
@@ -604,7 +608,7 @@ export async function listLongRunsMissingQuality(limit: number) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, strava_activity_id')
+    .select('id, strava_activity_id, merged_strava_ids')
     .eq('user_id', userId)
     .eq('source', 'strava')
     .is('decoupling_pct', null)
@@ -612,7 +616,9 @@ export async function listLongRunsMissingQuality(limit: number) {
     .not('actual_avg_pace_min_km', 'is', null)
     .gte('actual_distance_km', 20)
     .limit(limit);
-  return (data ?? []) as { id: string; strava_activity_id: number | null }[];
+  // Skip merged runs — decoupling/pace-decay can't be derived from the primary
+  // activity's partial streams (see listCompletedMissingSegments).
+  return (data ?? []).filter(r => !((r.merged_strava_ids as number[] | null)?.length)) as { id: string; strava_activity_id: number | null }[];
 }
 
 // Recompute + store `tss` for every completion from the CURRENT threshold pace and
