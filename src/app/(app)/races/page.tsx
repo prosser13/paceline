@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { listRaceGuides } from '@/data/races';
 import { getPlanBySlug } from '@/data/plans';
 import { listRaceFinishes } from '@/data/plan-sessions';
+import { getViewer } from '@/lib/auth';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
 import { todayISO } from '@/lib/dates';
 import type { RaceGuide } from '@/data/races/types';
@@ -25,11 +26,18 @@ interface Card { guide: RaceGuide; date: string | null; finishSecs: number | nul
 
 export default async function RacesPage() {
   const guides = listRaceGuides();
-  const [plans, finishes] = await Promise.all([
+  const [viewer, plans, finishes] = await Promise.all([
+    getViewer(),
     Promise.all(guides.map(async g => ({ slug: g.slug, plan: await getPlanBySlug(g.slug) }))),
     listRaceFinishes(),
   ]);
   const planBySlug = Object.fromEntries(plans.map(p => [p.slug, p.plan]));
+
+  // "Your races" = guides tagged with the logged-in user's email (see the
+  // ownerEmails tag on each guide). A plans row isn't a reliable owner signal —
+  // B-race tune-ups run inside another plan have no plans row of their own.
+  const email = viewer?.user.email?.toLowerCase() ?? null;
+  const isMine = (g: RaceGuide) => !!email && (g.ownerEmails ?? []).some(e => e.toLowerCase() === email);
 
   const todayStr = todayISO();
   const cards: Card[] = guides.map(guide => ({
@@ -38,11 +46,16 @@ export default async function RacesPage() {
     finishSecs: finishes[guide.slug]?.secs ?? null,
   }));
 
-  // Archived = the race date is in the past. Future/undated first (soonest first);
-  // archived below (most recent first).
+  // Archived = the race date is in the past. Upcoming/undated split into the user's
+  // own races and the rest of the library; archived (any) collected below.
   const isArchived = (c: Card) => !!c.date && c.date < todayStr;
-  const future = cards.filter(c => !isArchived(c)).sort((a, b) => (a.date ?? '9999') < (b.date ?? '9999') ? -1 : 1);
-  const archived = cards.filter(isArchived).sort((a, b) => (a.date ?? '') > (b.date ?? '') ? -1 : 1);
+  const bySoonest = (a: Card, b: Card) => ((a.date ?? '9999') < (b.date ?? '9999') ? -1 : 1);
+  const byRecent = (a: Card, b: Card) => ((a.date ?? '') > (b.date ?? '') ? -1 : 1);
+
+  const upcoming = cards.filter(c => !isArchived(c));
+  const yours = upcoming.filter(c => isMine(c.guide)).sort(bySoonest);
+  const others = upcoming.filter(c => !isMine(c.guide)).sort(bySoonest);
+  const archived = cards.filter(isArchived).sort(byRecent);
 
   return (
     <>
@@ -52,16 +65,23 @@ export default async function RacesPage() {
           Race-day command centre — course, targets, weather, pacing, fuelling and kit for each event.
         </p>
 
-        {future.length > 0 && (
+        <SectionLabel>Your races</SectionLabel>
+        {yours.length > 0 ? (
+          <div className="grid sm:grid-cols-2 gap-[14px]">{yours.map(c => <RaceCard key={c.guide.slug} {...c} />)}</div>
+        ) : (
+          <p className="text-[14px] text-stone/70 mb-[4px]">No upcoming races assigned to you yet.</p>
+        )}
+
+        {others.length > 0 && (
           <>
-            <SectionLabel>Upcoming</SectionLabel>
-            <div className="grid sm:grid-cols-2 gap-[14px]">{future.map(c => <RaceCard key={c.guide.slug} {...c} />)}</div>
+            <SectionLabel className="mt-[28px]">Other races</SectionLabel>
+            <div className="grid sm:grid-cols-2 gap-[14px]">{others.map(c => <RaceCard key={c.guide.slug} {...c} />)}</div>
           </>
         )}
 
         {archived.length > 0 && (
           <>
-            <SectionLabel className="mt-[28px]">Archived</SectionLabel>
+            <SectionLabel className="mt-[28px]">Archive</SectionLabel>
             <div className="grid sm:grid-cols-2 gap-[14px]">{archived.map(c => <RaceCard key={c.guide.slug} {...c} archived />)}</div>
           </>
         )}

@@ -18,6 +18,7 @@ export const LONDON_MARATHON: RaceGuide = {
   slug: 'london-marathon',
   eventName: 'London Marathon',
   priority: 'A',
+  ownerEmails: ['bethanaprosser@gmail.com'],
   organiser: 'London Marathon Events',
   region: 'London — point-to-point, Blackheath to The Mall',
   start: { name: 'Blackheath, Greenwich', lat: 51.47309, lng: 0.01158 },

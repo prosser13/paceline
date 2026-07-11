@@ -8,6 +8,7 @@ export const PORTHCAWL_10K: RaceGuide = {
   slug: 'porthcawl-10km',
   eventName: 'Brecon Carreg Porthcawl 10K',
   priority: 'B',
+  ownerEmails: ['prosser13@gmail.com'],
   organiser: 'Run 4 Wales',
   region: 'Porthcawl, South Wales — closed-road coastal loop',
   start: { name: 'Porthcawl Pavilion, Promenade', lat: 51.47847, lng: -3.69867 },

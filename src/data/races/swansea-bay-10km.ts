@@ -14,6 +14,7 @@ export const SWANSEA_BAY_10K: RaceGuide = {
   slug: 'swansea-bay-10km',
   eventName: 'Swansea Bay 10K',
   priority: 'A',
+  ownerEmails: ['bethanaprosser@gmail.com'],
   organiser: 'Swansea Council',
   region: 'Swansea Bay, South Wales — flat seafront out-and-back',
   start: { name: 'Swansea Bay promenade', lat: 51.61112, lng: -3.96879 },

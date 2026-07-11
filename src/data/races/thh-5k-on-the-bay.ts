@@ -9,6 +9,7 @@ export const THH_5K_ON_THE_BAY: RaceGuide = {
   slug: 'thh-5k-on-the-bay',
   eventName: 'Tri Hard Harriers 5k on the Bay',
   priority: 'B',
+  ownerEmails: ['prosser13@gmail.com'],
   organiser: 'Tri Hard Harriers',
   region: 'Swansea Bay — Blackpill seafront',
   start: { name: 'Blackpill Lido, Swansea Bay', lat: 51.59832, lng: -3.99340 },

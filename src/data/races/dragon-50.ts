@@ -8,6 +8,7 @@ export const DRAGON_50: RaceGuide = {
   slug: 'dragon-50',
   eventName: 'Dragon Coastal 50 Mile Ultra',
   priority: 'A',
+  ownerEmails: ['prosser13@gmail.com'],
   organiser: 'Run Walk Crawl',
   region: 'South Wales coast — Kenfig to Cardiff Bay',
   start: { name: 'Kenfig Nature Reserve', lat: 51.5031, lng: -3.7283 },
