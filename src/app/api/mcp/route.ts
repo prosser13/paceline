@@ -10,7 +10,9 @@
 // own data via currentUserId(). Issue a token in Settings → Claude (MCP).
 
 import { resolveMcpToken } from '@/data/mcp-tokens';
+import { resolveAccessToken } from '@/data/oauth';
 import { runWithUser } from '@/lib/scope';
+import { originFromRequest } from '@/lib/base-url';
 import { TOOL_DEFS, callTool } from '@/lib/mcp/tools';
 
 export const dynamic = 'force-dynamic';
@@ -35,11 +37,17 @@ function bearer(request: Request): string | null {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const userId = await resolveMcpToken(bearer(request));
+  const token = bearer(request);
+  // Accept either an OAuth access token (Claude connector flow) or a personal
+  // bearer token (Settings → Claude (MCP)); both map to a user.
+  const userId = (await resolveAccessToken(token, Date.now())) ?? (await resolveMcpToken(token));
   if (!userId) {
+    // Point the client at the protected-resource metadata so it can discover the
+    // OAuth authorization server and start the connector flow (RFC 9728).
+    const resourceMeta = `${originFromRequest(request)}/.well-known/oauth-protected-resource`;
     return Response.json(
       { jsonrpc: '2.0', id: null, error: { code: -32001, message: 'Unauthorized' } },
-      { status: 401, headers: { 'WWW-Authenticate': 'Bearer' } },
+      { status: 401, headers: { 'WWW-Authenticate': `Bearer resource_metadata="${resourceMeta}"` } },
     );
   }
 
