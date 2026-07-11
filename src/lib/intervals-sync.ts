@@ -15,6 +15,7 @@ import {
 } from '@/data/plan-sessions';
 import { structureToWorkoutText, easyRunText } from '@/lib/intervals-workout';
 import { pushWorkoutEvent, deleteIntervalEvent } from '@/lib/intervals';
+import { getIntervalsCreds, getIntervalsWorkoutSync } from '@/data/user-integrations';
 
 // Default pace zone for a run with no structure and no target pace, by session type.
 // Mirrors src/data/sessions.ts: a recovery run is Z1, every other easy/aerobic run
@@ -63,12 +64,13 @@ function hashText(s: string): string {
 }
 
 export async function syncUpcomingRunWorkouts(days = DEFAULT_DAYS, force = false): Promise<WorkoutSyncResult> {
-  const flagEnabled = process.env.INTERVALS_WORKOUT_SYNC === '1';
-  const keyPresent = !!process.env.INTERVALS_API_KEY;
+  const creds = await getIntervalsCreds();
+  const flagEnabled = await getIntervalsWorkoutSync();
+  const keyPresent = !!(creds.apiKey && creds.athleteId);
   const base = { ok: false as const, pushed: 0, cleared: 0, unchanged: 0, flagEnabled, keyPresent };
 
-  if (!flagEnabled && !force) return { ...base, error: 'disabled (set INTERVALS_WORKOUT_SYNC=1, or pass force)' };
-  if (!keyPresent)           return { ...base, error: 'INTERVALS_API_KEY is not set' };
+  if (!flagEnabled && !force) return { ...base, error: 'disabled (enable "push workouts to Garmin" in Settings → Integrations, or pass force)' };
+  if (!keyPresent)           return { ...base, error: 'intervals.icu is not configured for this user' };
 
   const from = todayISO();
   const to = addDaysISO(from, Math.max(1, days) - 1);

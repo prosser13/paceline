@@ -18,13 +18,14 @@ export function mdToTelegramHtml(md: string): string {
   return escaped.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 }
 
-// Send a message to the configured chat. `text` may contain the light HTML above.
-// Returns {ok:false, error} (never throws) when unconfigured or on any failure.
-export async function sendTelegramMessage(text: string): Promise<TelegramResult> {
+// Send a message to a specific chat. `text` may contain the light HTML above.
+// The bot token is a shared app credential (env); the recipient `chatId` is
+// per-user (from user_integrations). Returns {ok:false, error} (never throws) when
+// unconfigured or on any failure.
+export async function sendTelegramMessage(chatId: string | null | undefined, text: string): Promise<TelegramResult> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!token) return { ok: false, error: 'TELEGRAM_BOT_TOKEN is not set' };
-  if (!chatId) return { ok: false, error: 'TELEGRAM_CHAT_ID is not set' };
+  if (!chatId) return { ok: false, error: 'No Telegram chat id configured for this user' };
 
   try {
     const res = await timedFetch(`${API}/bot${token}/sendMessage`, {

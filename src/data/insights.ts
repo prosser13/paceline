@@ -4,6 +4,7 @@
 // min-sample guarded so it never makes a claim off a handful of points.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { parseThresholdPace } from '@/lib/run-tss';
@@ -49,9 +50,11 @@ export async function computeLifestyleInsight(asOf?: string): Promise<LifestyleI
 async function sleepVsPace(
   since: string, sleepByDate: Map<string, number>, wk: string,
 ): Promise<LifestyleInsight | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_avg_pace_min_km, plan_sessions!inner(target_pace, activity_type)')
+    .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
 

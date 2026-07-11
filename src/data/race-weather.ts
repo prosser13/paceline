@@ -2,6 +2,7 @@
 // "conditions on the day" without re-fetching (and archive data can't disappear).
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import type { RaceForecast } from '@/lib/weather';
 
 export interface RaceWeather {
@@ -10,8 +11,9 @@ export interface RaceWeather {
 }
 
 export async function getRaceWeather(slug: string): Promise<RaceWeather | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('race_weather').select('forecast, source').eq('slug', slug).maybeSingle();
+    .from('race_weather').select('forecast, source').eq('user_id', userId).eq('slug', slug).maybeSingle();
   if (!data?.forecast) return null;
   return { forecast: data.forecast as RaceForecast, source: data.source as string };
 }
@@ -19,6 +21,7 @@ export async function getRaceWeather(slug: string): Promise<RaceWeather | null> 
 export async function upsertRaceWeather(
   slug: string, raceDate: string | null, forecast: RaceForecast, source: string,
 ): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('race_weather')
-    .upsert({ slug, race_date: raceDate, forecast, source }, { onConflict: 'slug' });
+    .upsert({ user_id: userId, slug, race_date: raceDate, forecast, source }, { onConflict: 'user_id,slug' });
 }

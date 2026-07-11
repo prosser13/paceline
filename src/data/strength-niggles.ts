@@ -2,6 +2,7 @@
 // rules that turn a niggle into per-exercise effects live in strength-injuries.ts.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import type { ActiveNiggle, NiggleArea, NiggleSeverity, InjuryEffect } from './strength-injuries';
 
 interface NiggleRow {
@@ -26,24 +27,28 @@ function toActive(r: NiggleRow): ActiveNiggle {
 
 // Active niggles, mapped to the shape the rules engine consumes.
 export async function listActiveNiggles(): Promise<ActiveNiggle[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('strength_niggles').select('*').eq('active', true).order('created_at', { ascending: false });
+    .from('strength_niggles').select('*').eq('user_id', userId).eq('active', true).order('created_at', { ascending: false });
   return (data ?? []).map(r => toActive(r as NiggleRow));
 }
 
 // Full rows (active + resolved) for a management view.
 export async function listAllNiggles(): Promise<NiggleRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
-    .from('strength_niggles').select('*').order('active', { ascending: false }).order('created_at', { ascending: false });
+    .from('strength_niggles').select('*').eq('user_id', userId).order('active', { ascending: false }).order('created_at', { ascending: false });
   return (data ?? []) as NiggleRow[];
 }
 
 export async function insertNiggle(area: NiggleArea, severity: NiggleSeverity, note: string | null): Promise<void> {
-  await supabaseAdmin.from('strength_niggles').insert({ user_id: null, body_area: area, severity, note });
+  const userId = await currentUserId();
+  await supabaseAdmin.from('strength_niggles').insert({ user_id: userId, body_area: area, severity, note });
 }
 
 export async function setNiggleActiveRow(id: string, active: boolean): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('strength_niggles')
     .update({ active, resolved_at: active ? null : new Date().toISOString() })
-    .eq('id', id);
+    .eq('user_id', userId).eq('id', id);
 }

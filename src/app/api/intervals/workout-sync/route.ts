@@ -9,13 +9,17 @@
 //   POST /api/intervals/workout-sync[?force=1][?days=7]
 
 import { getCurrentUser, isCronRequest } from '@/lib/auth';
+import { runWithUser } from '@/lib/scope';
+import { listUsersWithIntegrations } from '@/data/user-integrations';
 import { syncUpcomingRunWorkouts } from '@/lib/intervals-sync';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 async function handle(request: Request): Promise<Response> {
-  if (!isCronRequest(request) && !(await getCurrentUser())) {
+  const cron = isCronRequest(request);
+  const sessionUser = cron ? null : await getCurrentUser();
+  if (!cron && !sessionUser) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -25,8 +29,22 @@ async function handle(request: Request): Promise<Response> {
   // Default to the same 7-day window the cron uses (override with ?days=N).
   const days = Number.isFinite(daysRaw) && daysRaw > 0 ? Math.min(14, Math.floor(daysRaw)) : 7;
 
-  const result = await syncUpcomingRunWorkouts(days, force);
-  return Response.json(result, { status: result.ok ? 200 : 502 });
+  // Cron → sync every configured user; session → just the logged-in user.
+  const userIds = cron ? await listUsersWithIntegrations() : [sessionUser!.id];
+  const results: Record<string, unknown> = {};
+  for (const userId of userIds) {
+    try {
+      results[userId] = await runWithUser(userId, () => syncUpcomingRunWorkouts(days, force));
+    } catch (err) {
+      results[userId] = { ok: false, error: String(err) };
+    }
+  }
+  // Single-user (session) call keeps the old flat shape for the settings UI.
+  if (!cron) {
+    const only = results[sessionUser!.id] as { ok?: boolean } | undefined;
+    return Response.json(only ?? { ok: false }, { status: only?.ok ? 200 : 502 });
+  }
+  return Response.json({ ok: true, users: userIds.length, results }, { status: 200 });
 }
 
 export const GET = handle;

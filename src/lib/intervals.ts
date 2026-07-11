@@ -4,10 +4,14 @@ import {
 } from '@/data/wellness-cache';
 import { upsertWellnessDays, type WellnessDay } from '@/data/wellness-days';
 import { setPerceivedEffortByStravaId } from '@/data/plan-sessions';
+import { getIntervalsCreds } from '@/data/user-integrations';
 import { timedFetch } from '@/lib/http';
 
-const ATHLETE_ID = 'i330821';
-const BASE = `https://intervals.icu/api/v1/athlete/${ATHLETE_ID}`;
+// Multi-tenant: the intervals.icu athlete id and API key are per-user (from
+// user_integrations), resolved from the current scope via `getIntervalsCreds()`.
+// Every request builds its base URL + auth header from that user's creds. Callers
+// run either inside an authenticated request or a `runWithUser(userId, …)` scope
+// (cron/webhook), so the right user's creds are always in scope.
 
 const EFFORT_TO_ZONE: Record<string, number> = {
   easy:       2,
@@ -18,13 +22,23 @@ const EFFORT_TO_ZONE: Record<string, number> = {
   sprint:     6,
 };
 
-function authHeaders() {
-  const key = process.env.INTERVALS_API_KEY;
-  if (!key) throw new Error('INTERVALS_API_KEY not configured');
-  const encoded = Buffer.from(`API_KEY:${key}`).toString('base64');
+interface IntervalsCtx {
+  base: string;
+  headers: Record<string, string>;
+}
+
+// Resolve the current user's intervals.icu base URL + auth headers, or null when
+// the user hasn't configured intervals.icu (no athlete id / API key).
+async function intervalsCtx(): Promise<IntervalsCtx | null> {
+  const { athleteId, apiKey } = await getIntervalsCreds();
+  if (!athleteId || !apiKey) return null;
+  const encoded = Buffer.from(`API_KEY:${apiKey}`).toString('base64');
   return {
-    Authorization: `Basic ${encoded}`,
-    'Content-Type': 'application/json',
+    base: `https://intervals.icu/api/v1/athlete/${athleteId}`,
+    headers: {
+      Authorization: `Basic ${encoded}`,
+      'Content-Type': 'application/json',
+    },
   };
 }
 
@@ -86,14 +100,16 @@ function sessionToEvent(session: PlanSession) {
 }
 
 export async function syncSession(session: PlanSession): Promise<string> {
+  const ctx = await intervalsCtx();
+  if (!ctx) throw new Error('intervals.icu is not configured for this user');
   const event = sessionToEvent(session);
 
   const isUpdate = Boolean(session.intervals_event_id);
-  const url    = isUpdate ? `${BASE}/events/${session.intervals_event_id}` : `${BASE}/events`;
+  const url    = isUpdate ? `${ctx.base}/events/${session.intervals_event_id}` : `${ctx.base}/events`;
   const method = isUpdate ? 'PUT' : 'POST';
   const body   = isUpdate ? JSON.stringify(event) : JSON.stringify([event]);
 
-  const res = await timedFetch(url, { method, headers: authHeaders(), body }, { label: 'intervals' });
+  const res = await timedFetch(url, { method, headers: ctx.headers, body }, { label: 'intervals' });
   if (!res) throw new Error(`intervals.icu ${method} unreachable`);
 
   if (!res.ok) {
@@ -132,11 +148,12 @@ const WELLNESS_HISTORY_DAYS = 42;
 /**
  * One intervals.icu wellness call covering the last 42 days — both the latest
  * form snapshot and the trend series derive from it (the old code made two
- * separate calls to the same endpoint). Returns null if the key is missing or
- * the API call fails.
+ * separate calls to the same endpoint). Returns null if the user hasn't configured
+ * intervals.icu or the API call fails.
  */
 async function fetchWellnessFromApi(): Promise<WellnessSnapshot | null> {
-  if (!process.env.INTERVALS_API_KEY) return null;
+  const ctx = await intervalsCtx();
+  if (!ctx) return null;
 
   const today  = new Date();
   const newest = isoDay(today);
@@ -144,8 +161,8 @@ async function fetchWellnessFromApi(): Promise<WellnessSnapshot | null> {
 
   try {
     const res = await timedFetch(
-      `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
-      { headers: authHeaders(), cache: 'no-store' },
+      `${ctx.base}/wellness?oldest=${oldest}&newest=${newest}`,
+      { headers: ctx.headers, cache: 'no-store' },
       { label: 'intervals' },
     );
     if (!res || !res.ok) return null;
@@ -266,19 +283,19 @@ const WELLNESS_SYNC_WINDOW_DAYS = 14;
 // Fetch a rolling window of daily wellness records from intervals.icu, mapped to
 // our row shape. Throws with the intervals.icu HTTP status on a failed request so
 // callers can surface a precise reason (auth vs. outage vs. empty).
-async function fetchWellnessRows(windowDays: number): Promise<WellnessDay[]> {
+async function fetchWellnessRows(ctx: IntervalsCtx, windowDays: number): Promise<WellnessDay[]> {
   const today  = new Date();
   const newest = isoDay(today);
   const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
   const res = await timedFetch(
-    `${BASE}/wellness?oldest=${oldest}&newest=${newest}`,
-    { headers: authHeaders(), cache: 'no-store' },
+    `${ctx.base}/wellness?oldest=${oldest}&newest=${newest}`,
+    { headers: ctx.headers, cache: 'no-store' },
     { label: 'intervals' },
   );
   if (!res) throw new Error('intervals.icu wellness request unreachable (timeout)');
   if (!res.ok) {
     const body = (await res.text().catch(() => '')).slice(0, 160);
-    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
+    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check the intervals.icu API key)' : ''}${body ? ` — ${body}` : ''}`);
   }
   const rows = (await res.json()) as IntervalsWellnessRow[];
   return rows.filter(r => r.id).map(mapWellnessRow);
@@ -286,8 +303,9 @@ async function fetchWellnessRows(windowDays: number): Promise<WellnessDay[]> {
 
 // Convenience wrapper — the recent window mapped to rows, or null on any failure.
 export async function fetchWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessDay[] | null> {
-  if (!process.env.INTERVALS_API_KEY) return null;
-  try { return await fetchWellnessRows(windowDays); } catch { return null; }
+  const ctx = await intervalsCtx();
+  if (!ctx) return null;
+  try { return await fetchWellnessRows(ctx, windowDays); } catch { return null; }
 }
 
 export interface WellnessSyncResult {
@@ -300,15 +318,16 @@ export interface WellnessSyncResult {
 // Pull the recent wellness window and upsert it into `wellness_days`. Idempotent
 // — safe to run on every scheduled tick; re-running overwrites each day with its
 // latest values (intervals revises a day's record for a day or two afterward).
-// Returns a specific error (key-unset vs. request-failed) so the sync route/logs
-// say exactly what's wrong.
+// Returns a specific error (not-configured vs. request-failed) so the sync
+// route/logs say exactly what's wrong.
 export async function syncWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<WellnessSyncResult> {
-  if (!process.env.INTERVALS_API_KEY) {
-    return { ok: false, days: 0, latest: null, error: 'INTERVALS_API_KEY is not set in this environment' };
+  const ctx = await intervalsCtx();
+  if (!ctx) {
+    return { ok: false, days: 0, latest: null, error: 'intervals.icu is not configured for this user' };
   }
   let rows: WellnessDay[];
   try {
-    rows = await fetchWellnessRows(windowDays);
+    rows = await fetchWellnessRows(ctx, windowDays);
   } catch (e) {
     return { ok: false, days: 0, latest: null, error: `intervals.icu request failed — ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -338,19 +357,19 @@ function stravaIdOf(a: IntervalsActivity): number | null {
   return null;
 }
 
-async function fetchActivityRpe(windowDays: number): Promise<{ stravaId: number; rpe: number }[]> {
+async function fetchActivityRpe(ctx: IntervalsCtx, windowDays: number): Promise<{ stravaId: number; rpe: number }[]> {
   const today = new Date();
   const newest = isoDay(today);
   const oldest = isoDay(new Date(today.getTime() - windowDays * 86_400_000));
   const res = await timedFetch(
-    `${BASE}/activities?oldest=${oldest}&newest=${newest}`,
-    { headers: authHeaders(), cache: 'no-store' },
+    `${ctx.base}/activities?oldest=${oldest}&newest=${newest}`,
+    { headers: ctx.headers, cache: 'no-store' },
     { label: 'intervals' },
   );
   if (!res) throw new Error('intervals.icu activities request unreachable (timeout)');
   if (!res.ok) {
     const body = (await res.text().catch(() => '')).slice(0, 160);
-    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check INTERVALS_API_KEY)' : ''}${body ? ` — ${body}` : ''}`);
+    throw new Error(`HTTP ${res.status}${res.status === 401 || res.status === 403 ? ' (check the intervals.icu API key)' : ''}${body ? ` — ${body}` : ''}`);
   }
   const acts = (await res.json()) as IntervalsActivity[];
   const out: { stravaId: number; rpe: number }[] = [];
@@ -369,10 +388,11 @@ export interface RpeSyncResult { ok: boolean; updated: number; error?: string }
 // Pull recent activity RPE and stamp it onto matching completions. Idempotent —
 // re-writes the same value each run. Best-effort; called from the wellness sync.
 export async function syncActivityRpe(windowDays = WELLNESS_SYNC_WINDOW_DAYS): Promise<RpeSyncResult> {
-  if (!process.env.INTERVALS_API_KEY) return { ok: false, updated: 0, error: 'INTERVALS_API_KEY is not set' };
+  const ctx = await intervalsCtx();
+  if (!ctx) return { ok: false, updated: 0, error: 'intervals.icu is not configured for this user' };
   let items: { stravaId: number; rpe: number }[];
   try {
-    items = await fetchActivityRpe(windowDays);
+    items = await fetchActivityRpe(ctx, windowDays);
   } catch (e) {
     return { ok: false, updated: 0, error: `intervals.icu activities request failed — ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -394,6 +414,8 @@ export async function pushWorkoutEvent(args: {
   name: string;
   description: string;
 }): Promise<string> {
+  const ctx = await intervalsCtx();
+  if (!ctx) throw new Error('intervals.icu is not configured for this user');
   const event: Record<string, unknown> = {
     category: 'WORKOUT',
     type: 'Run',
@@ -404,11 +426,11 @@ export async function pushWorkoutEvent(args: {
   // POST /events and PUT /events/{id} both take a SINGLE event object. (The array
   // form is only for POST /events/bulk — sending an array here is a JSON parse error.)
   const body = JSON.stringify(event);
-  const create = () => timedFetch(`${BASE}/events`, { method: 'POST', headers: authHeaders(), body }, { label: 'intervals' });
+  const create = () => timedFetch(`${ctx.base}/events`, { method: 'POST', headers: ctx.headers, body }, { label: 'intervals' });
 
   let method = 'POST';
   let res = args.eventId
-    ? await timedFetch(`${BASE}/events/${args.eventId}`, { method: (method = 'PUT'), headers: authHeaders(), body }, { label: 'intervals' })
+    ? await timedFetch(`${ctx.base}/events/${args.eventId}`, { method: (method = 'PUT'), headers: ctx.headers, body }, { label: 'intervals' })
     : await create();
 
   // A stored event id can go stale if the event was deleted on intervals.icu —
@@ -430,9 +452,11 @@ export async function pushWorkoutEvent(args: {
 }
 
 export async function deleteIntervalEvent(eventId: string): Promise<void> {
-  const res = await timedFetch(`${BASE}/events/${eventId}`, {
+  const ctx = await intervalsCtx();
+  if (!ctx) throw new Error('intervals.icu is not configured for this user');
+  const res = await timedFetch(`${ctx.base}/events/${eventId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: ctx.headers,
   }, { label: 'intervals' });
   if (!res) throw new Error('intervals.icu DELETE unreachable (timeout)');
 

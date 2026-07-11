@@ -5,11 +5,12 @@
 // dashboard "trajectory" view (predicted vs target + a computed verdict), and
 // owns the weekly benchmark_snapshots that give the predicted-time trend.
 //
-// Global (single-athlete) today; this is the one place that gains user scoping
-// under multi-tenancy.
+// Per-user under multi-tenancy: every direct read/write is scoped to the current
+// user resolved via `currentUserId()`.
 
 import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
 import {
@@ -50,9 +51,11 @@ export interface RaceResult { date: string; name: string; distanceKm: number; se
 // cache()'d: the benchmarks page reaches this from ~4 call paths per load with the
 // same `since`, and cache() collapses those to one request-scoped read.
 export const listRaceResultsSince = cache(async (since: string): Promise<RaceResult[]> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('completed_date, actual_duration_secs, actual_duration_mins, actual_distance_km, plan_sessions!inner(name, session_type, distance_km)')
+    .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.session_type', 'RACE');
 
@@ -82,9 +85,11 @@ export interface LongRun {
 // ≥ 25 km (the agreed "type OR distance" rule), with their NGP + long-run quality
 // metrics + fuel log.
 export const listLongRunsSince = cache(async (since: string): Promise<LongRun[]> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
     .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_avg_hr, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, perceived_effort, plan_sessions!inner(session_type, activity_type, distance_km)')
+    .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
 
@@ -171,9 +176,11 @@ export const getEnduranceReadiness = cache(async (asOf: string): Promise<Enduran
 
 // The goal plan's biggest planned run week (km) — the "fully ready" volume anchor.
 const peakPlannedWeekKm = cache(async (planId: number): Promise<number | null> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('scheduled_date, distance_km, session_type, activity_type')
+    .eq('user_id', userId)
     .eq('plan_id', planId);
   const weeks = new Map<string, number>();
   for (const s of data ?? []) {
@@ -193,9 +200,11 @@ const peakPlannedWeekKm = cache(async (planId: number): Promise<number | null> =
 // is the raw training log the Tanda regression reads: it must see everything you
 // ran, not just sessions that matched the plan.
 const listRunTrainingSince = cache(async (since: string): Promise<TrainingLogRun[]> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('activities')
     .select('activity_date, activity_type, distance_km, duration_mins, moving_time_secs')
+    .eq('user_id', userId)
     .gte('activity_date', since);
   return (data ?? []).flatMap(a => {
     if (activityKind((a.activity_type as string) ?? '') !== 'run') return [];
@@ -288,9 +297,11 @@ export async function getExperimentalPredictions(asOf: string): Promise<Experime
 export interface BenchmarkSnapshot { week_start: string; predicted_seconds: number | null; threshold_min_km: number | null; vdot: number | null; }
 
 export const listBenchmarkSnapshotsSince = cache(async (since: string): Promise<BenchmarkSnapshot[]> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
     .select('week_start, predicted_seconds, threshold_min_km, vdot')
+    .eq('user_id', userId)
     .gte('week_start', since)
     .order('week_start');
   return ((data as BenchmarkSnapshot[] | null) ?? []);
@@ -309,6 +320,7 @@ function snapshotVdot(s: { vdot: number | null; predicted_seconds: number | null
 // — never throws into the caller.
 export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
   try {
+    const userId = await currentUserId();
     const [inputs, readiness] = await Promise.all([buildPredictionInputs(asOf), getEnduranceReadiness(asOf)]);
     const pred = predictMarathon(inputs);
     // predicted_seconds is the marathon prediction OF RECORD → endurance-adjusted
@@ -316,12 +328,13 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
     const adjusted = pred.predictedSeconds != null
       ? Math.round(pred.predictedSeconds * enduranceMultiplier(MARATHON_M, readiness.score)) : null;
     await supabaseAdmin.from('benchmark_snapshots').upsert({
+      user_id: userId,
       week_start: isoWeekStart(asOf),
       predicted_seconds: adjusted,
       threshold_min_km: inputs.thresholdMinKm,
       vdot: pred.vdot,
       computed_at: new Date().toISOString(),
-    }, { onConflict: 'week_start' });
+    }, { onConflict: 'user_id,week_start' });
   } catch { /* snapshot is a nice-to-have; a sync failure here must not break the sync */ }
 }
 
@@ -331,9 +344,11 @@ export async function writeBenchmarkSnapshot(asOf: string): Promise<void> {
 // other distances derive from the snapshot's fitness VDOT. Powers the post-race
 // "predicted vs actual" header for any distance.
 export async function getPredictedAtRace(raceDate: string, distanceM: number): Promise<number | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('benchmark_snapshots')
     .select('predicted_seconds, vdot, week_start')
+    .eq('user_id', userId)
     .lte('week_start', raceDate)
     .not('predicted_seconds', 'is', null)
     .order('week_start', { ascending: false })
@@ -462,9 +477,11 @@ function mergePhaseBands(weeks: { phase: string; date_from: string; date_to: str
 // VDOT-equivalent of the marathon target at that distance.
 export async function getTuneUpValidation(asOf: string, marathonDate: string | null, targetSeconds: number | null): Promise<TuneUp | null> {
   if (!marathonDate || targetSeconds == null) return null;
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
     .select('id, name, scheduled_date, distance_km')
+    .eq('user_id', userId)
     .eq('session_type', 'RACE')
     .lt('scheduled_date', marathonDate)
     .gte('scheduled_date', addDays(asOf, -120))
@@ -478,6 +495,7 @@ export async function getTuneUpValidation(asOf: string, marathonDate: string | n
   const { data: cws } = await supabaseAdmin
     .from('completed_workouts')
     .select('plan_session_id, actual_duration_secs, actual_duration_mins')
+    .eq('user_id', userId)
     .in('plan_session_id', races.map(r => r.id));
   const doneBy = new Map<string, number>();
   for (const c of cws ?? []) {
@@ -583,9 +601,11 @@ export interface GoalMarathon { id: number; name: string; raceDate: string | nul
 // target, not simply the chronologically-next race (which may be an ultra or a
 // tune-up of a different distance).
 export const getGoalMarathon = cache(async (asOf: string): Promise<GoalMarathon | null> => {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, race_date, target_time')
+    .eq('user_id', userId)
     .eq('kind', 'race')
     .gte('distance_km', 41.5)
     .lte('distance_km', 43)

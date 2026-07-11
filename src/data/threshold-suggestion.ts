@@ -4,6 +4,7 @@
 // threshold_checks. Suggest freely, apply conservatively, never silently.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
@@ -75,11 +76,12 @@ function isQualityZone(seg: NormSegment): boolean {
 }
 
 async function qualitySegmentSignal(asOf: string): Promise<{ signal: ThresholdEvidence | null; newestDate: string | null }> {
+  const userId = await currentUserId();
   const since = addDays(asOf, -42);
   const [{ data: runs }, paceZoneRows, hrZoneRows, hrCfg] = await Promise.all([
     supabaseAdmin.from('completed_workouts')
       .select('completed_date, segment_actuals, segment_hr, plan_sessions!inner(structure, activity_type)')
-      .gte('completed_date', since).eq('plan_sessions.activity_type', 'running'),
+      .eq('user_id', userId).gte('completed_date', since).eq('plan_sessions.activity_type', 'running'),
     listPaceZones(), listHrZones(), getHrConfig(),
   ]);
   const { zones, hrZones } = buildZoneMaps({ paceZones: paceZoneRows, hrZones: hrZoneRows, powerZones: [], bikeHrZones: [] });
@@ -184,8 +186,10 @@ export function slowerConfirmed(
 // The weekly checks before `weekStart` (newest first) — applied/reverted change
 // records are excluded; they're change markers, not weekly reads.
 async function priorWeeklyChecks(weekStart: string, limit = SLOWER_CONFIRM_CHECKS): Promise<{ gap_s: number | null; week_start: string; current_min_km: number }[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks')
     .select('gap_s, week_start, current_min_km, outcome')
+    .eq('user_id', userId)
     .lt('week_start', weekStart)
     .neq('outcome', 'applied')
     .order('week_start', { ascending: false })
@@ -197,12 +201,13 @@ async function priorWeeklyChecks(weekStart: string, limit = SLOWER_CONFIRM_CHECK
 
 // ── last change (for cooldown) — applied checks + manual edits ─
 async function lastThresholdChangeAt(currentMinKm: number): Promise<string | null> {
+  const userId = await currentUserId();
   const { data: latest } = await supabaseAdmin
-    .from('threshold_checks').select('current_min_km').order('checked_at', { ascending: false }).limit(1).maybeSingle();
+    .from('threshold_checks').select('current_min_km').eq('user_id', userId).order('checked_at', { ascending: false }).limit(1).maybeSingle();
   // Threshold changed (manually) since the last recorded check → treat as "just now".
   if (latest && Math.abs(Number(latest.current_min_km) - currentMinKm) > 0.001) return new Date().toISOString();
   const { data: applied } = await supabaseAdmin
-    .from('threshold_checks').select('checked_at').eq('outcome', 'applied').order('checked_at', { ascending: false }).limit(1).maybeSingle();
+    .from('threshold_checks').select('checked_at').eq('user_id', userId).eq('outcome', 'applied').order('checked_at', { ascending: false }).limit(1).maybeSingle();
   return (applied?.checked_at as string | undefined) ?? null;
 }
 
@@ -211,7 +216,9 @@ async function writeCheck(row: {
   weekStart: string; currentMinKm: number; estimateMinKm: number | null; gapS: number | null;
   outcome: ThresholdOutcome; commentary: string; evidence: ThresholdEvidence[]; suggestedMinKm?: number | null; status: string;
 }): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('threshold_checks').insert({
+    user_id: userId,
     week_start: row.weekStart, current_min_km: row.currentMinKm, estimate_min_km: row.estimateMinKm,
     gap_s: row.gapS != null ? Math.round(row.gapS * 10) / 10 : null, outcome: row.outcome,
     commentary: row.commentary, evidence: row.evidence, suggested_min_km: row.suggestedMinKm ?? null, status: row.status,
@@ -227,7 +234,8 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     const stamp = `Checked ${fmtDay(today)}.`;
 
     // One check per week.
-    const { data: existing } = await supabaseAdmin.from('threshold_checks').select('id').eq('week_start', weekStart).limit(1).maybeSingle();
+    const userId = await currentUserId();
+    const { data: existing } = await supabaseAdmin.from('threshold_checks').select('id').eq('user_id', userId).eq('week_start', weekStart).limit(1).maybeSingle();
     if (existing) return;
 
     // Read the threshold fresh, not via the tag-cached getThresholdPace(): a check
@@ -331,20 +339,23 @@ function mapRow(r: Record<string, unknown>): ThresholdCheck {
 }
 
 export async function getLatestThresholdCheck(): Promise<ThresholdCheck | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS)
-    .neq('outcome', 'applied').order('checked_at', { ascending: false }).limit(1).maybeSingle();
+    .eq('user_id', userId).neq('outcome', 'applied').order('checked_at', { ascending: false }).limit(1).maybeSingle();
   return data ? mapRow(data) : null;
 }
 
 export async function getPendingThresholdSuggestion(): Promise<ThresholdCheck | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS)
-    .eq('status', 'pending').order('checked_at', { ascending: false }).limit(1).maybeSingle();
+    .eq('user_id', userId).eq('status', 'pending').order('checked_at', { ascending: false }).limit(1).maybeSingle();
   return data ? mapRow(data) : null;
 }
 
 export async function listThresholdChecks(limit = 10): Promise<ThresholdCheck[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS)
-    .order('checked_at', { ascending: false }).limit(limit);
+    .eq('user_id', userId).order('checked_at', { ascending: false }).limit(limit);
   return ((data ?? []) as Record<string, unknown>[]).map(mapRow);
 }
 
@@ -352,8 +363,9 @@ export async function listThresholdChecks(limit = 10): Promise<ThresholdCheck[]>
 // before-snapshot needed to undo it. Powers the one-click Revert.
 export interface RevertableChange { id: string; beforeThreshold: string; afterThreshold: string; }
 export async function getRevertableChange(): Promise<RevertableChange | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks')
-    .select('id, current_min_km, evidence, status').eq('outcome', 'applied')
+    .select('id, current_min_km, evidence, status').eq('user_id', userId).eq('outcome', 'applied')
     .order('checked_at', { ascending: false }).limit(1).maybeSingle();
   if (!data || (data.status as string) === 'reverted') return null;
   const ev = data.evidence as { beforeThreshold?: string; afterThreshold?: string; beforeZones?: unknown } | null;
@@ -366,8 +378,9 @@ export async function getRevertableChange(): Promise<RevertableChange | null> {
 
 // Undo an applied change: restore the pre-change threshold + zones and recompute TSS.
 export async function revertThresholdChange(checkId: string): Promise<{ ok: boolean; error?: string }> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks')
-    .select('id, evidence, status').eq('id', checkId).eq('outcome', 'applied').maybeSingle();
+    .select('id, evidence, status').eq('user_id', userId).eq('id', checkId).eq('outcome', 'applied').maybeSingle();
   if (!data) return { ok: false, error: 'Not found' };
   if ((data.status as string) === 'reverted') return { ok: false, error: 'Already reverted' };
   const ev = data.evidence as { beforeThreshold?: string; beforeZones?: { zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[] } | null;
@@ -376,9 +389,10 @@ export async function revertThresholdChange(checkId: string): Promise<{ ok: bool
   await replacePaceZones(ev.beforeZones);
   await setThresholdPace(ev.beforeThreshold);   // + TSS recompute
 
-  await supabaseAdmin.from('threshold_checks').update({ status: 'reverted', resolved_at: new Date().toISOString() }).eq('id', checkId);
+  await supabaseAdmin.from('threshold_checks').update({ status: 'reverted', resolved_at: new Date().toISOString() }).eq('user_id', userId).eq('id', checkId);
   const today = todayISO();
   await supabaseAdmin.from('threshold_checks').insert({
+    user_id: userId,
     week_start: isoWeekStart(today), current_min_km: parseThresholdPace(ev.beforeThreshold), outcome: 'applied', status: 'none',
     commentary: `Reverted to ${ev.beforeThreshold}/km on ${fmtDay(today)} — threshold + zones restored, TSS recomputed.`,
     evidence: { revertOf: checkId, restoredTo: ev.beforeThreshold },
@@ -395,19 +409,22 @@ function shiftPaceStr(p: string, deltaS: number): string {
 // truth, not the tag-cached getThresholdPace / listPaceZones (which can lag a
 // just-applied change).
 async function freshThresholdMinKm(): Promise<number | null> {
-  const { data } = await supabaseAdmin.from('app_config').select('threshold_pace_per_km').limit(1).maybeSingle();
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('app_config').select('threshold_pace_per_km').eq('user_id', userId).limit(1).maybeSingle();
   const s = data?.threshold_pace_per_km as string | null | undefined;
   return s ? parseThresholdPace(s) : null;
 }
 async function freshZones(): Promise<{ zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[]> {
-  const { data } = await supabaseAdmin.from('pace_zones').select('zone_key, name, pace_min, pace_max, sort_order').order('sort_order');
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('pace_zones').select('zone_key, name, pace_min, pace_max, sort_order').eq('user_id', userId).order('sort_order');
   return (data ?? []) as { zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }[];
 }
 
 // Apply a pending suggestion: set threshold (→ TSS recompute), shift every pace-zone
 // boundary by the same delta (flat), and record the change for cooldown + history.
 export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: boolean; error?: string }> {
-  const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS).eq('id', checkId).eq('status', 'pending').maybeSingle();
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('threshold_checks').select(READ_COLS).eq('user_id', userId).eq('id', checkId).eq('status', 'pending').maybeSingle();
   if (!data || data.suggested_min_km == null) return { ok: false, error: 'No pending suggestion' };
   const check = mapRow(data);
   const currentMinKm = (await freshThresholdMinKm()) ?? check.current_min_km;   // fresh truth
@@ -423,11 +440,12 @@ export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: b
   await replacePaceZones(shifted);
   await setThresholdPace(fmtPace(suggestedMinKm));   // sets threshold across app_config + recomputes all TSS
 
-  await supabaseAdmin.from('threshold_checks').update({ status: 'accepted', resolved_at: new Date().toISOString() }).eq('id', checkId);
+  await supabaseAdmin.from('threshold_checks').update({ status: 'accepted', resolved_at: new Date().toISOString() }).eq('user_id', userId).eq('id', checkId);
   // Record the applied change — the cooldown anchor + history entry. Its evidence
   // carries the before/after (delta + prior zones) so a future revert (P2) can undo it.
   const today = todayISO();
   await supabaseAdmin.from('threshold_checks').insert({
+    user_id: userId,
     week_start: isoWeekStart(today), current_min_km: suggestedMinKm, estimate_min_km: check.estimate_min_km, outcome: 'applied', status: 'none',
     commentary: `Applied ${fmtPace(suggestedMinKm)}/km on ${fmtDay(today)} — pace zones shifted ${deltaS < 0 ? deltaS : `+${deltaS}`}s, TSS recomputed.`,
     evidence: { deltaS, beforeThreshold: fmtPace(currentMinKm), afterThreshold: fmtPace(suggestedMinKm), beforeZones: before },
@@ -437,8 +455,9 @@ export async function applyThresholdSuggestion(checkId: string): Promise<{ ok: b
 }
 
 export async function dismissThresholdSuggestion(checkId: string): Promise<{ ok: boolean }> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() })
-    .eq('id', checkId).eq('status', 'pending');
+    .eq('user_id', userId).eq('id', checkId).eq('status', 'pending');
   return { ok: true };
 }
 
@@ -447,6 +466,7 @@ export async function dismissThresholdSuggestion(checkId: string): Promise<{ ok:
 // shifts every pace zone by the matching flat delta, recomputes TSS, dismisses any
 // pending suggestion, and logs the change + reason. Resets the cooldown.
 export async function correctThreshold(targetMinKm: number, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const userId = await currentUserId();
   const currentMinKm = await freshThresholdMinKm();
   if (currentMinKm == null) return { ok: false, error: 'No threshold set' };
   const deltaS = Math.round((targetMinKm - currentMinKm) * 60);
@@ -462,11 +482,12 @@ export async function correctThreshold(targetMinKm: number, reason: string): Pro
   await setThresholdPace(fmtPace(targetMinKm));   // + TSS recompute
 
   // A manual re-base supersedes any open suggestion.
-  await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() }).eq('status', 'pending');
+  await supabaseAdmin.from('threshold_checks').update({ status: 'dismissed', resolved_at: new Date().toISOString() }).eq('user_id', userId).eq('status', 'pending');
 
   const today = todayISO();
   const cleanReason = reason.trim() || 'manual correction';
   await supabaseAdmin.from('threshold_checks').insert({
+    user_id: userId,
     week_start: isoWeekStart(today), current_min_km: targetMinKm, outcome: 'applied', status: 'none',
     commentary: `Manual correction to ${fmtPace(targetMinKm)}/km on ${fmtDay(today)} — ${cleanReason}. Zones shifted ${deltaS < 0 ? deltaS : `+${deltaS}`}s, TSS recomputed.`,
     evidence: { deltaS, beforeThreshold: fmtPace(currentMinKm), afterThreshold: fmtPace(targetMinKm), beforeZones: before, reason: cleanReason },

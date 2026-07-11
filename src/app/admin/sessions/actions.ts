@@ -49,9 +49,9 @@ export async function createSessionAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   try {
-    await requireUser();
+    const user = await requireUser();
     const data = parseSession(formData);
-    const { error } = await supabaseAdmin.from('plan_sessions').insert(data);
+    const { error } = await supabaseAdmin.from('plan_sessions').insert({ ...data, user_id: user.id });
     if (error) return { error: error.message };
   } catch (e) {
     return { error: (e as Error).message };

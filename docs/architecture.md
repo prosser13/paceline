@@ -38,8 +38,9 @@ src/lib/                     ← pure logic + integrations (see §5)
 **Auth model:** `src/proxy.ts` (Next 16's renamed middleware) only refreshes the Supabase cookie — it
 gates nothing. Gating = `(app)/layout.tsx` redirect + per-page `getCurrentUser()` + `requireUser()` in
 server actions (`src/lib/auth.ts`). Anything outside `(app)` (admin, plan-lab, api routes) must gate
-itself. There is **no** `is_admin` flag or email allowlist anywhere — "any authenticated Supabase user"
-is the only tier. The **settings pattern**: one server page awaits ~20 reads, renders one `'use client'`
+itself. Access is an email allowlist: `OWNER_EMAILS` (each owns their own data) + `VIEWER_EMAILS`
+(read-only), via `roleFor()`; no `is_admin` flag (admin is any authed owner). Data is per-user — see §9.
+The **settings pattern**: one server page awaits ~20 reads, renders one `'use client'`
 editor per card, each posting to a server action in `settings/actions.ts`; variants are parameterized by
 passing the action as a prop (e.g. `<HrZonesClient save={saveBikeHrZones}>`).
 
@@ -186,7 +187,8 @@ and Next fetch-cache on Open-Meteo (1 h forecast / 6 h race window).
 **External calls:** only `strava.ts` has timeout/retry (`timedFetch`, 15 s / 2 retries / Retry-After).
 `intervals.ts`, `weather.ts`, `telegram.ts`, `coach-generate.ts` are bare `fetch`: telegram never throws
 by contract, weather returns null on failure, intervals throws-or-nulls per function. intervals.icu
-athlete id is a hardcoded const (`intervals.ts` `ATHLETE_ID`); only the API key is env.
+athlete id + API key and the Telegram chat id are **per-user** (`user_integrations`, resolved from scope);
+`telegram.ts` takes the chat id as an argument, `intervals.ts` builds its base URL + auth per call.
 
 **Two Supabase clients:** `supabase-server.ts` (anon + cookies, RLS-respecting) and `supabase-admin.ts`
 (service role, **bypasses RLS**, server-only; falls back to placeholder URL/key so builds pass — missing
@@ -276,33 +278,48 @@ one-offs.
 
 ---
 
-## 9. Multi-tenant migration recipe (deferred milestone)
+## 9. Multi-tenant (shipped)
 
-The app is **single-user today**: no table carries `user_id`, every `src/data/*` query uses
-`supabaseAdmin`, and external creds are global (Strava `strava_connection` row `id=1`; intervals.icu
-athlete id hardcoded in `intervals.ts`, API key in env). Every table now has RLS **enabled with no
-policy** (service-role only) — the old permissive `USING(true) TO authenticated` policies were dropped
-(migration `20260709120000`), so multi-tenant just adds `USING (user_id = auth.uid())` policies rather
-than replacing permissive ones. The seams are in place: auth is centralized (`getCurrentUser`/`requireUser` in
-`src/lib/auth.ts`) and all data access funnels through `src/data/*` (the old groundwork item of routing
-`strava.ts`/`intervals.ts` through the data layer is **done**).
+The app is **multi-tenant**: multiple allowlisted accounts each log in and see only their own plan,
+sessions, races, settings, and strength plan, driven by their own Strava + intervals.icu data, with the
+coach running per-user and messaging each user's own Telegram.
 
-When multi-user ships, one coordinated milestone:
+**How scoping works.** Every owner table carries `user_id uuid NOT NULL REFERENCES auth.users(id)`. The
+data layer resolves the current user from a **request-scoped `AsyncLocalStorage`** (`src/lib/scope.ts`)
+rather than threading a `userId` param through every call site:
 
-1. **Schema** — add `user_id uuid REFERENCES auth.users(id)` to `plans`, `plan_sessions`, `plan_weeks`,
-   `completed_workouts`, `activities`, `session_matches`, `adjustment_logs`; per-user config rows for
-   `app_config`/`*_config`/`*_zones`; change `strava_connection` + `intervals_wellness_cache` PK from
-   `id` to `user_id`; add `(user_id, …)` indexes (migration `20260709120000` already added the
-   single-column hot indexes on `completed_workouts`/`activities`/`session_matches` + the plan-child FKs).
-2. **Creds** — new `user_integrations` table (Strava tokens, intervals athlete id + key), replacing the
-   env vars and the global row.
-3. **RLS** — add `USING (user_id = auth.uid())` policies (tables are already RLS-on-no-policy).
-4. **Data layer** — thread `userId` through `src/data/*`; add it to every cache key.
-5. **Callers** — each page/action/route resolves `requireUser().id`; webhook routes by `owner_id`.
-6. **Backfill** — assign existing rows to the sole user.
+- `currentUserId()` — used inside `src/data/*`: returns the explicitly-set scope, else the authenticated
+  session user. Throws if neither (a missing scope is a bug, never a silent global query).
+- `runWithUser(userId, fn)` — sets an explicit scope for callers with **no session**: the cron jobs (one
+  pass per user), the Strava webhook (routed by athlete id), the plan-agent routes (token → `PLAN_AGENT_USER_ID`),
+  and scripts.
+- **Cached reads** (`zones.ts`, `plans.ts`) can't call `currentUserId()` inside the cached body (the key
+  wouldn't vary by user), so the user id is the first argument to the `unstable_cache`-wrapped inner
+  function (folded into the key); the public fn resolves it and passes it in. Signatures are unchanged, so
+  callers didn't change.
 
-**Groundwork to keep doing now (cheap):** centralize the `id = 1` config singletons behind a
-`currentScopeId()` helper; add an owner allowlist to `getCurrentUser` (see backlog P0).
+**Access.** `OWNER_EMAILS` (comma-separated) in `src/lib/auth.ts` is the sign-in allowlist — each listed
+account owns its own data. `VIEWER_EMAILS` (read-only) is unchanged. Cross-user "viewer sees the owner's
+data" is gone: each account is scoped to itself.
+
+**Creds.** Per-user in the DB: Strava tokens/athlete id in `strava_connection` (PK `user_id`; the webhook
+maps `owner_id`→user via `getUserIdByStravaAthlete`); intervals.icu key+athlete id and Telegram chat id in
+the new `user_integrations` table (entered via Settings → Integrations). Shared app-level env: Strava
+client id/secret, the Telegram bot token, `ANTHROPIC_API_KEY`, `CRON_SECRET`, `PLAN_AGENT_TOKEN`. The old
+`INTERVALS_API_KEY` / `INTERVALS_WORKOUT_SYNC` / `TELEGRAM_CHAT_ID` env vars are no longer read.
+
+**RLS.** Every user table has an `own_rows` policy `USING (user_id = auth.uid()) WITH CHECK (…)`
+(migration `20260711120400`). The `src/data/*` layer still uses `supabaseAdmin` (service role, bypasses
+RLS), so these are defense-in-depth; correctness of isolation rests on the `.eq('user_id', …)` filters +
+`currentUserId()`.
+
+**Migrations** (all `20260711120*`): add `user_id` columns → per-user unique indexes + `user_integrations`
+→ backfill existing rows to the sole prior owner → NOT NULL + singleton `id=1` tables re-keyed to `user_id`
++ natural-key PKs → per-user composites → RLS policies. **Cron jobs** loop over
+`listUsersWithIntegrations()`, isolating per-user failures. **New user setup:** allowlist their email → they
+sign in → they connect integrations in Settings → seed a baseline with `scripts/seed-user.mjs <email>`
+(copies zones/threshold/coaching defaults) → build their plan (admin CMS or a `gen-*.mjs` generator scoped
+to their `user_id`).
 
 ---
 

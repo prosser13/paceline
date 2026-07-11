@@ -1,4 +1,5 @@
-import { isAuthorizedRequest } from '@/lib/auth';
+import { resolveAuthorizedUserId } from '@/lib/auth';
+import { runWithUser } from '@/lib/scope';
 import { getPlanContext } from '@/data/plan-context';
 import { NextResponse } from 'next/server';
 
@@ -10,7 +11,8 @@ import { NextResponse } from 'next/server';
 //
 // Usage:  GET /api/plan-context[?as_of=YYYY-MM-DD]
 export async function GET(request: Request) {
-  if (!(await isAuthorizedRequest(request))) {
+  const userId = await resolveAuthorizedUserId(request);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -19,6 +21,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'as_of must be YYYY-MM-DD' }, { status: 400 });
   }
 
-  const context = await getPlanContext(asOf);
+  const context = await runWithUser(userId, () => getPlanContext(asOf));
   return NextResponse.json(context);
 }

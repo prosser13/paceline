@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 // Coach messages — the nightly evening review (kind 'evening') and the morning
 // briefing (kind 'morning'). Generated + saved by the GitHub coach crons
@@ -19,10 +20,12 @@ const READ_COLS = 'id, created_at, for_date, headline, body_md, kind';
 // Latest of each kind (regardless of date) for the dashboard coach card. Evening
 // legacy rows predate the `kind` column, so a null kind is treated as evening.
 export async function getLatestCoachMessages(): Promise<{ morning: CoachMessage | null; evening: CoachMessage | null }> {
+  const userId = await currentUserId();
   const [evening, morning] = await Promise.all([
     supabaseAdmin
       .from('coach_messages')
       .select(READ_COLS)
+      .eq('user_id', userId)
       .or('kind.is.null,kind.eq.evening')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -30,6 +33,7 @@ export async function getLatestCoachMessages(): Promise<{ morning: CoachMessage 
     supabaseAdmin
       .from('coach_messages')
       .select(READ_COLS)
+      .eq('user_id', userId)
       .eq('kind', 'morning')
       .order('created_at', { ascending: false })
       .limit(1)
@@ -51,9 +55,11 @@ export interface CoachMessageRow {
 }
 
 export async function getCoachMessage(forDate: string, kind: CoachMessageKind): Promise<CoachMessageRow | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('coach_messages')
     .select('id, headline, body_md, delivered_at')
+    .eq('user_id', userId)
     .eq('for_date', forDate)
     .eq('kind', kind)
     .maybeSingle();
@@ -64,16 +70,18 @@ export async function getCoachMessage(forDate: string, kind: CoachMessageKind): 
 export async function insertCoachMessage(
   forDate: string, kind: CoachMessageKind, headline: string, bodyMd: string,
 ): Promise<{ id: string | null; error: { code?: string; message: string } | null }> {
+  const userId = await currentUserId();
   const { data, error } = await supabaseAdmin
     .from('coach_messages')
-    .insert({ for_date: forDate, kind, headline, body_md: bodyMd })
+    .insert({ user_id: userId, for_date: forDate, kind, headline, body_md: bodyMd })
     .select('id')
     .single();
   return { id: (data?.id as string | undefined) ?? null, error: error ?? null };
 }
 
 export async function markCoachDelivered(id: string): Promise<void> {
-  await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('id', id);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('user_id', userId).eq('id', id);
 }
 
 // The coach's rolling "athlete context" memory — a single-row table the evening
@@ -85,10 +93,11 @@ export interface CoachContext {
 }
 
 export async function getCoachContext(): Promise<CoachContext> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('coach_context')
     .select('summary, through_date')
-    .eq('id', 1)
+    .eq('user_id', userId)
     .maybeSingle();
   return {
     summary: (data?.summary as string | undefined) ?? '',
@@ -97,10 +106,11 @@ export async function getCoachContext(): Promise<CoachContext> {
 }
 
 export async function upsertCoachContext(summary: string, throughDate: string): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin
     .from('coach_context')
     .upsert(
-      { id: 1, summary, through_date: throughDate, updated_at: new Date().toISOString() },
-      { onConflict: 'id' },
+      { user_id: userId, summary, through_date: throughDate, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id' },
     );
 }

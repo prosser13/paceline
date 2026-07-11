@@ -1,14 +1,15 @@
-// The evening coach — the SOLE generator of the nightly review (the external
-// paceline-evening-coach task was retired). Driven by the GitHub Actions cron in
-// .github/workflows/evening-coach.yml, which fires several times through the
-// evening for reliability. Each fire:
+// The evening coach — the SOLE generator of the nightly review. Driven by the
+// external cron (cron-job.org), which fires several times through the evening for
+// reliability. Each fire, for each user with integrations configured:
 //   1. Generates the review at ~21:00 (9pm) London — gated on the London clock so
 //      it lands at 9pm year-round without a manual BST/GMT switch.
-//   2. Saves it (one per London day, DB-enforced) and sends it to Telegram
-//      immediately, with retries.
-//   3. If a message already exists but wasn't delivered to Telegram (a prior
-//      send failed), retries the delivery — so a generated-but-undelivered night
-//      still reaches Telegram. Delivery is tracked via coach_messages.delivered_at.
+//   2. Saves it (one per user per London day, DB-enforced) and sends it to that
+//      user's Telegram immediately, with retries.
+//   3. If a message already exists but wasn't delivered (a prior send failed),
+//      retries the delivery. Delivery is tracked via coach_messages.delivered_at.
+//
+// Multi-tenant: a cron invocation loops over all configured users, opening each
+// user's data scope with runWithUser; a browser session runs just that user.
 //
 // Auth: `Authorization: Bearer <CRON_SECRET>` for the cron; a logged-in session is
 // also accepted for manual triggering.
@@ -19,6 +20,8 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getCurrentUser, isCronRequest } from '@/lib/auth';
+import { currentUserId, runWithUser } from '@/lib/scope';
+import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { getPlanContext } from '@/data/plan-context';
 import { getCoachContext, upsertCoachContext } from '@/data/coach';
 import { generateEveningReview } from '@/lib/coach-generate';
@@ -44,11 +47,11 @@ function londonParts(): { date: string; hour: number } {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-// Send to Telegram with a few retries for transient failures (best-effort).
-async function deliverWithRetry(text: string, attempts = 3): Promise<{ ok: boolean; error?: string }> {
+// Send to that user's Telegram with a few retries for transient failures (best-effort).
+async function deliverWithRetry(chatId: string | null, text: string, attempts = 3): Promise<{ ok: boolean; error?: string }> {
   let last = { ok: false, error: 'not attempted' } as { ok: boolean; error?: string };
   for (let i = 0; i < attempts; i++) {
-    last = await sendTelegramMessage(text);
+    last = await sendTelegramMessage(chatId, text);
     if (last.ok) return last;
     if (i < attempts - 1) await sleep(1500);
   }
@@ -60,47 +63,41 @@ function messageText(headline: string, bodyMd: string): string {
 }
 
 async function markDelivered(id: string): Promise<void> {
-  await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('id', id);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('user_id', userId).eq('id', id);
 }
 
 async function existingEvening(forDate: string): Promise<{ id: string; headline: string; body_md: string; delivered_at: string | null } | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('coach_messages')
     .select('id, headline, body_md, delivered_at')
+    .eq('user_id', userId)
     .eq('for_date', forDate)
     .eq('kind', 'evening')
     .maybeSingle();
   return (data as { id: string; headline: string; body_md: string; delivered_at: string | null } | null) ?? null;
 }
 
-async function handle(request: Request): Promise<Response> {
-  if (!isCronRequest(request) && !(await getCurrentUser())) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const params = new URL(request.url).searchParams;
-  const forced = params.get('force') === '1';
-  const isFinal = params.get('final') === '1';
-  const { date: forDate, hour: londonHour } = londonParts();
+// Generate/deliver tonight's review for the user whose scope is currently open.
+async function runEveningForUser(forDate: string, londonHour: number, forced: boolean, isFinal: boolean): Promise<Record<string, unknown>> {
+  const userId = await currentUserId();
+  const chatId = await getTelegramChatId();
 
   // ── already have tonight's message? deliver it if a prior send failed. ──
   const existing = await existingEvening(forDate);
   if (existing) {
     if (existing.delivered_at) {
-      return Response.json({ ok: true, skipped: 'exists-delivered', for_date: forDate }, { status: 200 });
+      return { ok: true, skipped: 'exists-delivered', for_date: forDate };
     }
-    // Generated but never delivered — retry the Telegram send (delivery backup).
-    const retry = await deliverWithRetry(messageText(existing.headline, existing.body_md));
+    const retry = await deliverWithRetry(chatId, messageText(existing.headline, existing.body_md));
     if (retry.ok) await markDelivered(existing.id);
-    return Response.json(
-      { ok: true, for_date: forDate, redelivered: retry.ok, ...(retry.ok ? {} : { deliver_error: retry.error }) },
-      { status: 200 },
-    );
+    return { ok: true, for_date: forDate, redelivered: retry.ok, ...(retry.ok ? {} : { deliver_error: retry.error }) };
   }
 
   // ── no message yet — only generate at/after 9pm London (unless forced). ──
   if (!forced && londonHour < GENERATE_HOUR_LONDON) {
-    return Response.json({ ok: true, skipped: 'too-early', for_date: forDate, london_hour: londonHour }, { status: 200 });
+    return { ok: true, skipped: 'too-early', for_date: forDate, london_hour: londonHour };
   }
 
   try {
@@ -111,7 +108,7 @@ async function handle(request: Request): Promise<Response> {
 
     const { data, error } = await supabaseAdmin
       .from('coach_messages')
-      .insert({ for_date: forDate, headline: review.headline, body_md: review.bodyMd, kind: 'evening' })
+      .insert({ user_id: userId, for_date: forDate, headline: review.headline, body_md: review.bodyMd, kind: 'evening' })
       .select('id')
       .single();
 
@@ -120,33 +117,53 @@ async function handle(request: Request): Promise<Response> {
       if (error.code === '23505') {
         const other = await existingEvening(forDate);
         if (other && !other.delivered_at) {
-          const retry = await deliverWithRetry(messageText(other.headline, other.body_md));
+          const retry = await deliverWithRetry(chatId, messageText(other.headline, other.body_md));
           if (retry.ok) await markDelivered(other.id);
         }
-        return Response.json({ ok: true, skipped: 'race', for_date: forDate }, { status: 200 });
+        return { ok: true, skipped: 'race', for_date: forDate };
       }
       throw new Error(`coach_messages insert failed: ${error.message}`);
     }
 
-    // Send to Telegram immediately (with retries), then refresh rolling memory.
-    const telegram = await deliverWithRetry(messageText(review.headline, review.bodyMd));
+    const telegram = await deliverWithRetry(chatId, messageText(review.headline, review.bodyMd));
     if (telegram.ok) await markDelivered(data.id);
     await upsertCoachContext(review.updatedContext, forDate);
 
-    return Response.json(
-      { ok: true, id: data.id, for_date: forDate, delivered: telegram.ok, ...(telegram.ok ? {} : { deliver_error: telegram.error }) },
-      { status: 200 },
-    );
+    return { ok: true, id: data.id, for_date: forDate, delivered: telegram.ok, ...(telegram.ok ? {} : { deliver_error: telegram.error }) };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     // The night's last scheduled attempt failed — make the miss loud, not silent.
     if (isFinal) {
-      await sendTelegramMessage(
+      await sendTelegramMessage(chatId,
         `⚠️ <b>Evening coach didn't run</b>\nCouldn't generate tonight's review (${forDate}).\n${mdToTelegramHtml(msg).slice(0, 300)}`,
       ).catch(() => { /* alerting is best-effort */ });
     }
-    return Response.json({ ok: false, error: msg, for_date: forDate }, { status: 500 });
+    return { ok: false, error: msg, for_date: forDate };
   }
+}
+
+async function handle(request: Request): Promise<Response> {
+  const cron = isCronRequest(request);
+  const sessionUser = cron ? null : await getCurrentUser();
+  if (!cron && !sessionUser) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const params = new URL(request.url).searchParams;
+  const forced = params.get('force') === '1';
+  const isFinal = params.get('final') === '1';
+  const { date: forDate, hour: londonHour } = londonParts();
+
+  const userIds = cron ? await listUsersWithIntegrations() : [sessionUser!.id];
+  const results: Record<string, unknown> = {};
+  for (const userId of userIds) {
+    try {
+      results[userId] = await runWithUser(userId, () => runEveningForUser(forDate, londonHour, forced, isFinal));
+    } catch (err) {
+      results[userId] = { ok: false, error: String(err) };
+    }
+  }
+  return Response.json({ ok: true, for_date: forDate, users: userIds.length, results }, { status: 200 });
 }
 
 // Cron invokes with POST; GET supports a manual trigger from a logged-in browser.

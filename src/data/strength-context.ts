@@ -5,6 +5,7 @@
 // (the same tables getPlanContext reads), so no new data plumbing.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { getCurrentWeek } from '@/data/plans';
 import {
@@ -23,9 +24,11 @@ function addDays(iso: string, n: number): string {
 }
 
 async function getActivePlanRow(today: string) {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('name, kind, race_date, end_date')
+    .eq('user_id', userId)
     .lte('start_date', today).gte('end_date', today)
     .order('sort_order').limit(1).maybeSingle();
   return data;
@@ -45,15 +48,18 @@ export interface StrengthContext {
 export async function getStrengthContext(asOf?: string): Promise<StrengthContext> {
   const today = asOf ?? todayISO();
   const yesterday = addDays(today, -1);
+  const userId = await currentUserId();
 
   const [plan, week, { data: sessions }, { data: completed }] = await Promise.all([
     getActivePlanRow(today),
     getCurrentWeek(today),
     supabaseAdmin.from('plan_sessions')
       .select('id, scheduled_date, session_type, intensity')
+      .eq('user_id', userId)
       .gte('scheduled_date', yesterday).lte('scheduled_date', today),
     supabaseAdmin.from('completed_workouts')
       .select('plan_session_id, completed_date, perceived_effort')
+      .eq('user_id', userId)
       .gte('completed_date', yesterday).lte('completed_date', today),
   ]);
 

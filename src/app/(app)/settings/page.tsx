@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
+import { getUserIntegrations } from '@/data/user-integrations';
 import { listRacePlans } from '@/data/plans';
 import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
@@ -21,6 +22,7 @@ import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
 import TrainingLocationClient from './TrainingLocationClient';
+import IntegrationsClient from './IntegrationsClient';
 import ChangeLogClient from './ChangeLogClient';
 import SignOutClient from './SignOutClient';
 import {
@@ -33,7 +35,7 @@ export default async function SettingsPage() {
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
     constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
-    thrLatest, thrPending, thrHistory, thrRevertable,
+    thrLatest, thrPending, thrHistory, thrRevertable, integrations,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -55,6 +57,7 @@ export default async function SettingsPage() {
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
     getRevertableChange(),
+    getUserIntegrations(),
   ]);
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
@@ -207,6 +210,16 @@ export default async function SettingsPage() {
             connected={!!strava?.athlete_name}
             athleteName={strava?.athlete_name ?? null}
             lastSyncedAt={strava?.last_synced_at ?? null}
+          />
+        </SettingsCard>
+
+        <SettingsCard cat="Connections" color="var(--color-yoga)" title="intervals.icu & Telegram"
+          subtitle="Your intervals.icu athlete id + API key (wellness/fitness sync and optional Garmin workout push) and the Telegram chat that receives your coach messages.">
+          <IntegrationsClient
+            initialIntervalsAthleteId={integrations?.intervals_athlete_id ?? ''}
+            initialTelegramChatId={integrations?.telegram_chat_id ?? ''}
+            initialWorkoutSync={integrations?.intervals_workout_sync ?? false}
+            hasApiKey={!!integrations?.intervals_api_key}
           />
         </SettingsCard>
 

@@ -10,11 +10,18 @@ import { timingSafeEqual } from 'node:crypto';
 import { createClient, getCurrentUser as getSessionUser } from './supabase-server';
 import type { User } from '@supabase/supabase-js';
 
-// The app is single-owner. If OWNER_EMAIL is set, ONLY that account is treated as
-// the owner — any other authenticated Supabase account (e.g. if signups are open)
-// resolves to null everywhere auth is checked. Unset → any authed user (legacy
-// behaviour), so set OWNER_EMAIL in production to close the hole in code.
-const OWNER_EMAIL = process.env.OWNER_EMAIL?.trim().toLowerCase() || null;
+// The app is multi-tenant: each allowlisted account owns its own data. OWNER_EMAILS
+// is a comma-separated allowlist of accounts that may sign in and own data — any
+// other authenticated Supabase account resolves to null everywhere auth is checked.
+// Unset → any authed user is treated as an owner (legacy/dev fallback), so set
+// OWNER_EMAILS in production (alongside disabling Supabase signups) to close the hole
+// in code. (OWNER_EMAIL is still read as a single-value fallback for older deploys.)
+const OWNER_EMAILS = new Set(
+  (process.env.OWNER_EMAILS ?? process.env.OWNER_EMAIL ?? '')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 // Read-only guests. Comma-separated allowlist of emails that may VIEW everything
 // the owner sees but may not mutate anything. A viewer passes the page/read gate
@@ -36,8 +43,8 @@ export type Role = 'owner' | 'viewer';
 function roleFor(email: string | null | undefined): Role | null {
   const e = (email ?? '').trim().toLowerCase();
   if (!e) return null;
-  if (!OWNER_EMAIL) return 'owner';
-  if (e === OWNER_EMAIL) return 'owner';
+  if (OWNER_EMAILS.size === 0) return 'owner';
+  if (OWNER_EMAILS.has(e)) return 'owner';
   if (VIEWER_EMAILS.has(e)) return 'viewer';
   return null;
 }
@@ -69,6 +76,13 @@ export async function requireUser(): Promise<User> {
   return user;
 }
 
+// The current owner's id, throwing 'Unauthorized' if there is none. Convenience for
+// the cron/route callers that need to open a data scope with runWithUser(id, …); most
+// data-layer reads/writes resolve the user implicitly via currentUserId() (scope.ts).
+export async function requireUserId(): Promise<string> {
+  return (await requireUser()).id;
+}
+
 // Owner OR allowlisted viewer — the READ gate for pages/layouts. Returns the user
 // plus their role (so a caller can hide mutating controls for viewers) or null for
 // an unauthenticated / non-allowlisted account. Reuses the request-cached session
@@ -98,4 +112,19 @@ export async function isAuthorizedRequest(request: Request): Promise<boolean> {
   const token = process.env.PLAN_AGENT_TOKEN;
   if (token && safeEqual(request.headers.get('authorization') ?? '', `Bearer ${token}`)) return true;
   return !!(await getCurrentUser());
+}
+
+// Resolve the user id a plan-agent request operates on, or null if unauthorized.
+// A browser session → that owner's id. The headless agent (PLAN_AGENT_TOKEN) has no
+// session, so it operates on the user named by PLAN_AGENT_USER_ID (set it to the
+// owner whose data the coach agent manages). Callers wrap their work in
+// runWithUser(id, …) so the data layer scopes correctly.
+export async function resolveAuthorizedUserId(request: Request): Promise<string | null> {
+  const user = await getCurrentUser();
+  if (user) return user.id;
+  const token = process.env.PLAN_AGENT_TOKEN;
+  if (token && safeEqual(request.headers.get('authorization') ?? '', `Bearer ${token}`)) {
+    return process.env.PLAN_AGENT_USER_ID?.trim() || null;
+  }
+  return null;
 }

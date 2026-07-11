@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 import { saveRaceResult } from './actions';
-import { primaryFinishTime, type RaceResult, type RaceNeighbour, type TimeType } from '@/data/race-results';
+import { primaryFinishTime, type RaceResult, type RaceNeighbour, type TimeType } from '@/lib/race-result';
 
 const inputCls = 'w-full bg-input-surface border border-fog rounded px-2.5 py-2 text-ink font-mono text-[13px] focus:outline-none focus:border-stone transition-colors placeholder:text-stone/40';
 const NBR_SLOTS = ['2nd ahead', '1st ahead', '1st behind', '2nd behind'];

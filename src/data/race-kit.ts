@@ -3,6 +3,7 @@
 // kit is saved here and, when present, replaces the guide's lists for that race.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import type { KitItem } from '@/data/races/types';
 
 export interface RaceKit {
@@ -14,9 +15,11 @@ export interface RaceKit {
 
 // The athlete's edited kit for a race, or null if they haven't customised it.
 export async function getRaceKit(slug: string): Promise<RaceKit | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('race_kit')
     .select('wear, carry, drop_bag, night_before')
+    .eq('user_id', userId)
     .eq('slug', slug)
     .maybeSingle();
   if (!data) return null;
@@ -30,13 +33,15 @@ export async function getRaceKit(slug: string): Promise<RaceKit | null> {
 
 // Upsert the full kit for a race.
 export async function saveRaceKit(slug: string, kit: RaceKit): Promise<void> {
+  const userId = await currentUserId();
   const { error } = await supabaseAdmin.from('race_kit').upsert({
+    user_id: userId,
     slug,
     wear: kit.wear,
     carry: kit.carry,
     drop_bag: kit.dropBag,
     night_before: kit.nightBefore,
     updated_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'user_id,slug' });
   if (error) throw new Error(`race_kit save failed: ${error.message}`);
 }

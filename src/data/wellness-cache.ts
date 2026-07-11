@@ -5,8 +5,7 @@
 // itself stays in src/lib/intervals.ts.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-
-const CACHE_ID = 1;
+import { currentUserId } from '@/lib/scope';
 
 export interface WellnessCacheRow {
   fetched_date: string | null;
@@ -27,28 +26,31 @@ export interface WellnessCacheInput {
 
 // The cached wellness row, or null if nothing has been cached yet.
 export async function getWellnessCacheRow(): Promise<WellnessCacheRow | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('intervals_wellness_cache')
     .select('fetched_date, form, fitness, fatigue, history, stale')
-    .eq('id', CACHE_ID)
+    .eq('user_id', userId)
     .maybeSingle();
   return data ?? null;
 }
 
 // Store a freshly-fetched snapshot (clears the stale flag).
 export async function saveWellnessCacheRow(row: WellnessCacheInput): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('intervals_wellness_cache').upsert({
-    id: CACHE_ID,
+    user_id: userId,
     ...row,
     stale: false,
     updated_at: new Date().toISOString(),
-  });
+  }, { onConflict: 'user_id' });
 }
 
 // Flag the cache stale so the next dashboard load refetches from intervals.icu.
 export async function markWellnessCacheStale(): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin
     .from('intervals_wellness_cache')
     .update({ stale: true })
-    .eq('id', CACHE_ID);
+    .eq('user_id', userId);
 }

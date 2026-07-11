@@ -6,6 +6,7 @@
 // single place. Global single-set today.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 export type AvailabilityKind =
   | 'full_day'           // whole day unavailable
@@ -27,9 +28,11 @@ export interface AvailabilityRow {
 // Every restriction, oldest first. The table is single-user and small, so the
 // calendar loads the whole set once and pages by month on the client.
 export async function listAvailability(): Promise<AvailabilityRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('availability')
     .select('date, kind, minutes, items, note')
+    .eq('user_id', userId)
     .order('date');
   return (data ?? []).map(r => ({
     date:    r.date as string,
@@ -45,10 +48,12 @@ export async function listAvailability(): Promise<AvailabilityRow[]> {
 // Replace one day's restrictions wholesale (supports add/remove). An empty `rows`
 // clears the day.
 export async function replaceDayAvailability(date: string, rows: AvailabilityRow[]): Promise<void> {
-  await supabaseAdmin.from('availability').delete().eq('date', date);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('availability').delete().eq('user_id', userId).eq('date', date);
   if (rows.length) {
     await supabaseAdmin.from('availability').insert(
       rows.map(r => ({
+        user_id: userId,
         date:    date,
         kind:    r.kind,
         minutes: r.minutes,

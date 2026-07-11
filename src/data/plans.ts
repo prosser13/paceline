@@ -1,18 +1,22 @@
 // Reads for the `plans` and `plan_weeks` tables — the plan structure. One home
-// for plan/week access so per-user scoping (add `.eq('user_id', uid)`) later
-// lands here rather than across the dashboard, plan page, settings and shell.
+// for plan/week access, scoped per user.
+//
+// Multi-tenant: reads/writes are scoped to the current user via `currentUserId()`.
+// Cached reads pass the user id as the FIRST argument to the `unstable_cache`-wrapped
+// inner function (so it's part of the cache key); the public function keeps its
+// original signature and resolves the user before calling the cached inner.
 //
 // `select('*')` reads return Supabase's inferred row type; callers keep their own
-// casts (the client isn't yet generated against the DB schema — typing it is a
-// separate pass). Narrow reads return explicit shapes.
+// casts. Narrow reads return explicit shapes.
 
 import { unstable_cache, revalidateTag } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 // Plan structure (plans + plan_weeks) changes only when a plan is created/edited,
 // so the dashboard-critical reads are cached and the plan writes below invalidate
-// the tag. The revalidate window is a safety net for any write path that doesn't
-// (e.g. admin plan-week edits elsewhere). Per-user scoping later extends the key.
+// the tag. The user id is part of each cache key (passed as an argument), so one
+// user's plans never serve another's; a write invalidates the shared tag.
 const PLANS_TAG = 'plans';
 const PLANS_REVALIDATE = 3600;
 
@@ -41,52 +45,63 @@ export interface NextRace {
 // ── plans ────────────────────────────────────────────────────
 
 // Sidebar nav list — active + future plans, earliest first.
-export const listNavPlans = unstable_cache(
-  async (): Promise<NavPlan[]> => {
+const _listNavPlans = unstable_cache(
+  async (userId: string): Promise<NavPlan[]> => {
     const { data } = await supabaseAdmin
       .from('plans')
       .select('id, name, slug, start_date, end_date')
+      .eq('user_id', userId)
       .order('start_date');
     return (data ?? []) as NavPlan[];
   },
   ['plans:nav'],
   { tags: [PLANS_TAG], revalidate: PLANS_REVALIDATE },
 );
+export async function listNavPlans(): Promise<NavPlan[]> {
+  return _listNavPlans(await currentUserId());
+}
 
 // All plans, most-recently-ended first (archive view).
 export async function listPlansByEndDate() {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('*')
+    .eq('user_id', userId)
     .order('end_date', { ascending: false });
   return data ?? [];
 }
 
 // All plans in display order (plan page).
 export async function listPlansBySortOrder() {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('*')
+    .eq('user_id', userId)
     .order('sort_order');
   return data ?? [];
 }
 
 // Race plans with their goal time (settings → target times).
 export async function listRacePlans(): Promise<RacePlanRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, distance_km, target_time')
+    .eq('user_id', userId)
     .eq('kind', 'race')
     .order('sort_order');
   return (data ?? []) as RacePlanRow[];
 }
 
 // Next upcoming race on/after `fromDate`, or null.
-export const getNextRace = unstable_cache(
-  async (fromDate: string): Promise<NextRace | null> => {
+const _getNextRace = unstable_cache(
+  async (userId: string, fromDate: string): Promise<NextRace | null> => {
     const { data } = await supabaseAdmin
       .from('plans')
       .select('name, race_date, target_time, slug')
+      .eq('user_id', userId)
       .eq('kind', 'race')
       .gte('race_date', fromDate)
       .order('race_date', { ascending: true })
@@ -97,6 +112,9 @@ export const getNextRace = unstable_cache(
   ['plans:next-race'],
   { tags: [PLANS_TAG], revalidate: PLANS_REVALIDATE },
 );
+export async function getNextRace(fromDate: string): Promise<NextRace | null> {
+  return _getNextRace(await currentUserId(), fromDate);
+}
 
 export interface PlanBySlug {
   id: number;
@@ -110,9 +128,11 @@ export interface PlanBySlug {
 
 // Full plan row for a race-guide hero page, by slug, or null.
 export async function getPlanBySlug(slug: string): Promise<PlanBySlug | null> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, slug, race_date, distance_km, target_time, target_pace')
+    .eq('user_id', userId)
     .eq('slug', slug)
     .maybeSingle();
   return (data as PlanBySlug | null) ?? null;
@@ -122,9 +142,11 @@ export async function getPlanBySlug(slug: string): Promise<PlanBySlug | null> {
 export async function getPlanTargetInfo(planId: number): Promise<
   { id: number; distance_km: number | null; target_pace: string | null } | null
 > {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, distance_km, target_pace')
+    .eq('user_id', userId)
     .eq('id', planId)
     .single();
   return (data as { id: number; distance_km: number | null; target_pace: string | null } | null) ?? null;
@@ -135,16 +157,18 @@ export async function updatePlanTarget(
   planId: number,
   patch: { target_time: string | null; target_pace: string | null },
 ): Promise<void> {
-  await supabaseAdmin.from('plans').update(patch).eq('id', planId);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('plans').update(patch).eq('user_id', userId).eq('id', planId);
   revalidateTag(PLANS_TAG, 'max');
 }
 
 // Whether a plan orders strength ahead of running.
-export const getPlanStrengthPriority = unstable_cache(
-  async (planId: number): Promise<boolean> => {
+const _getPlanStrengthPriority = unstable_cache(
+  async (userId: string, planId: number): Promise<boolean> => {
     const { data } = await supabaseAdmin
       .from('plans')
       .select('strength_priority')
+      .eq('user_id', userId)
       .eq('id', planId)
       .maybeSingle();
     return !!(data as { strength_priority?: boolean } | null)?.strength_priority;
@@ -152,6 +176,9 @@ export const getPlanStrengthPriority = unstable_cache(
   ['plans:strength-priority'],
   { tags: [PLANS_TAG], revalidate: PLANS_REVALIDATE },
 );
+export async function getPlanStrengthPriority(planId: number): Promise<boolean> {
+  return _getPlanStrengthPriority(await currentUserId(), planId);
+}
 
 export interface PlanPrefRow {
   id: number;
@@ -162,16 +189,19 @@ export interface PlanPrefRow {
 
 // Plans with their strength-priority flag, in display order (settings).
 export async function listPlanPrefs(): Promise<PlanPrefRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plans')
     .select('id, name, kind, strength_priority')
+    .eq('user_id', userId)
     .order('sort_order');
   return (data ?? []) as PlanPrefRow[];
 }
 
 // Set whether a plan orders strength ahead of running.
 export async function updatePlanStrengthPriority(planId: number, value: boolean): Promise<void> {
-  await supabaseAdmin.from('plans').update({ strength_priority: value }).eq('id', planId);
+  const userId = await currentUserId();
+  await supabaseAdmin.from('plans').update({ strength_priority: value }).eq('user_id', userId).eq('id', planId);
   revalidateTag(PLANS_TAG, 'max');
 }
 
@@ -181,11 +211,12 @@ export async function updatePlanStrengthPriority(planId: number, value: boolean)
 // (e.g. a supplementary block), maybeSingle() would error and null out the whole
 // dashboard week + disable plan autonomy — so order + limit to deterministically
 // take the most-recently-started plan's week instead.
-export const getCurrentWeek = unstable_cache(
-  async (onDate: string) => {
+const _getCurrentWeek = unstable_cache(
+  async (userId: string, onDate: string) => {
     const { data } = await supabaseAdmin
       .from('plan_weeks')
       .select('*')
+      .eq('user_id', userId)
       .lte('date_from', onDate)
       .gte('date_to', onDate)
       .order('date_from', { ascending: false })
@@ -196,12 +227,17 @@ export const getCurrentWeek = unstable_cache(
   ['plans:current-week'],
   { tags: [PLANS_TAG], revalidate: PLANS_REVALIDATE },
 );
+export async function getCurrentWeek(onDate: string) {
+  return _getCurrentWeek(await currentUserId(), onDate);
+}
 
 // All weeks in week-number order (plan page).
 export async function listWeeksByNumber() {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_weeks')
     .select('*')
+    .eq('user_id', userId)
     .order('week_number');
   return data ?? [];
 }
@@ -213,9 +249,11 @@ export async function listWeeksByNumber() {
 export async function listPlanWeeks(planId: number): Promise<
   { week_number: number; phase: string; date_from: string; date_to: string; planned_volume_km: number | null }[]
 > {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_weeks')
     .select('week_number, phase, date_from, date_to, planned_volume_km')
+    .eq('user_id', userId)
     .eq('plan_id', planId)
     .order('week_number');
   return (data ?? []).map(w => ({
@@ -228,13 +266,14 @@ export async function listPlanWeeks(planId: number): Promise<
 }
 
 // Phase timeline for a plan — weeks in order with just the timeline fields.
-export const listPlanPhaseWeeks = unstable_cache(
-  async (planId: number): Promise<
+const _listPlanPhaseWeeks = unstable_cache(
+  async (userId: string, planId: number): Promise<
     { phase: string; date_from: string; date_to: string; week_number: number }[]
   > => {
     const { data } = await supabaseAdmin
       .from('plan_weeks')
       .select('phase, date_from, date_to, week_number')
+      .eq('user_id', userId)
       .eq('plan_id', planId)
       .order('week_number');
     return (data ?? []) as { phase: string; date_from: string; date_to: string; week_number: number }[];
@@ -242,3 +281,8 @@ export const listPlanPhaseWeeks = unstable_cache(
   ['plans:phase-weeks'],
   { tags: [PLANS_TAG], revalidate: PLANS_REVALIDATE },
 );
+export async function listPlanPhaseWeeks(planId: number): Promise<
+  { phase: string; date_from: string; date_to: string; week_number: number }[]
+> {
+  return _listPlanPhaseWeeks(await currentUserId(), planId);
+}

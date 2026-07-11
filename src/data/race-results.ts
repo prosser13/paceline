@@ -3,24 +3,13 @@
 // behind. Entered by hand — the one piece that can't come from Strava.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-
-export interface RaceNeighbour { position: number | null; name: string; time: string }
-export type TimeType = 'chip' | 'gun';
-
-export interface RaceResult {
-  finishTime: string | null;      // chip time
-  finishTimeGun: string | null;   // gun time
-  timeType: TimeType;             // which is the athlete's primary/relevant time
-  position: number | null;
-  fieldSize: number | null;
-  category: string | null;
-  categoryPos: number | null;
-  categorySize: number | null;
-  winnerTime: string | null;
-  neighbours: RaceNeighbour[];    // 2 ahead + 2 behind, in finishing order
-  neighbourTimeType: TimeType;    // whether the other finishers' times are chip or gun
-  resultsUrl: string | null;      // official results page
-}
+import { currentUserId } from '@/lib/scope';
+// Types + primaryFinishTime live in a client-safe module so client components can
+// import them without pulling in this server-only file. Re-exported here so existing
+// server-side consumers keep importing from '@/data/race-results'.
+import type { RaceNeighbour, TimeType, RaceResult } from '@/lib/race-result';
+export type { RaceNeighbour, TimeType, RaceResult } from '@/lib/race-result';
+export { primaryFinishTime } from '@/lib/race-result';
 
 interface RaceResultRow {
   finish_time: string | null; finish_time_gun: string | null; time_type: string | null;
@@ -33,8 +22,11 @@ interface RaceResultRow {
 const asType = (v: string | null | undefined, fallback: TimeType): TimeType =>
   v === 'chip' || v === 'gun' ? v : fallback;
 
+// (getRaceResult / upsertRaceResult below)
+
 export async function getRaceResult(slug: string): Promise<RaceResult | null> {
-  const { data } = await supabaseAdmin.from('race_results').select('*').eq('slug', slug).maybeSingle();
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('race_results').select('*').eq('user_id', userId).eq('slug', slug).maybeSingle();
   if (!data) return null;
   const r = data as RaceResultRow;
   return {
@@ -47,7 +39,9 @@ export async function getRaceResult(slug: string): Promise<RaceResult | null> {
 }
 
 export async function upsertRaceResult(slug: string, r: RaceResult): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin.from('race_results').upsert({
+    user_id: userId,
     slug,
     finish_time: r.finishTime, finish_time_gun: r.finishTimeGun, time_type: r.timeType,
     position: r.position, field_size: r.fieldSize,
@@ -55,10 +49,5 @@ export async function upsertRaceResult(slug: string, r: RaceResult): Promise<voi
     winner_time: r.winnerTime, neighbours: r.neighbours,
     neighbour_time_type: r.neighbourTimeType, results_url: r.resultsUrl,
     updated_at: new Date().toISOString(),
-  }, { onConflict: 'slug' });
-}
-
-// The athlete's headline finish time given their chip/gun preference.
-export function primaryFinishTime(r: RaceResult): string | null {
-  return r.timeType === 'gun' ? (r.finishTimeGun ?? r.finishTime) : (r.finishTime ?? r.finishTimeGun);
+  }, { onConflict: 'user_id,slug' });
 }

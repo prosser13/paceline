@@ -2,6 +2,7 @@
 // persistent failure pings Telegram once a day, not on every scheduled fire.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 
 // Record that we alerted about `kind` on `today` (London date). Returns true only
 // the FIRST call per day — the caller sends the Telegram alert only when true.
@@ -9,10 +10,12 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 // conditional UPDATE claims an existing row for the day, and the unique constraint
 // on `kind` makes the first-ever INSERT the sole winner (the loser 23505s → false).
 export async function claimDailyAlert(kind: string, today: string): Promise<boolean> {
+  const userId = await currentUserId();
   const nowIso = new Date().toISOString();
   const { data: claimed } = await supabaseAdmin
     .from('sync_alerts')
     .update({ alerted_date: today, updated_at: nowIso })
+    .eq('user_id', userId)
     .eq('kind', kind)
     .neq('alerted_date', today)
     .select('kind');
@@ -21,6 +24,6 @@ export async function claimDailyAlert(kind: string, today: string): Promise<bool
   // No row updated: either already claimed today, or the row doesn't exist yet.
   const { error } = await supabaseAdmin
     .from('sync_alerts')
-    .insert({ kind, alerted_date: today, updated_at: nowIso });
+    .insert({ user_id: userId, kind, alerted_date: today, updated_at: nowIso });
   return !error;   // inserted the first row → we claim; unique-violation → already claimed
 }
