@@ -13,7 +13,7 @@ import { resolveMcpToken } from '@/data/mcp-tokens';
 import { resolveAccessToken } from '@/data/oauth';
 import { runWithUser } from '@/lib/scope';
 import { originFromRequest } from '@/lib/base-url';
-import { TOOL_DEFS, callTool } from '@/lib/mcp/tools';
+import { TOOL_DEFS, WRITE_TOOL_DEFS, WRITE_TOOL_NAMES, callTool } from '@/lib/mcp/tools';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -39,9 +39,9 @@ function bearer(request: Request): string | null {
 export async function POST(request: Request): Promise<Response> {
   const token = bearer(request);
   // Accept either an OAuth access token (Claude connector flow) or a personal
-  // bearer token (Settings → Claude (MCP)); both map to a user.
-  const userId = (await resolveAccessToken(token, Date.now())) ?? (await resolveMcpToken(token));
-  if (!userId) {
+  // bearer token (Settings → Claude (MCP)); both map to a user + write scope.
+  const auth = (await resolveAccessToken(token, Date.now())) ?? (await resolveMcpToken(token));
+  if (!auth) {
     // Point the client at the protected-resource metadata so it can discover the
     // OAuth authorization server and start the connector flow (RFC 9728).
     const resourceMeta = `${originFromRequest(request)}/.well-known/oauth-protected-resource`;
@@ -50,6 +50,7 @@ export async function POST(request: Request): Promise<Response> {
       { status: 401, headers: { 'WWW-Authenticate': `Bearer resource_metadata="${resourceMeta}"` } },
     );
   }
+  const { userId, canWrite } = auth;
 
   let msg: JsonRpcRequest;
   try {
@@ -78,12 +79,19 @@ export async function POST(request: Request): Promise<Response> {
       return rpcResult(id, {});
 
     case 'tools/list':
-      return rpcResult(id, { tools: TOOL_DEFS });
+      // Write tools are only advertised to a connection granted write scope.
+      return rpcResult(id, { tools: canWrite ? [...TOOL_DEFS, ...WRITE_TOOL_DEFS] : TOOL_DEFS });
 
     case 'tools/call': {
       const name = params?.name as string | undefined;
       const args = (params?.arguments as Record<string, unknown> | undefined) ?? {};
       if (!name) return rpcError(id, -32602, 'Missing tool name');
+      if (WRITE_TOOL_NAMES.has(name) && !canWrite) {
+        return rpcResult(id, {
+          content: [{ type: 'text', text: 'Error: this connection is read-only. Reconnect granting write access to use this tool.' }],
+          isError: true,
+        });
+      }
       try {
         const data = await runWithUser(userId, () => callTool(name, args));
         return rpcResult(id, { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });

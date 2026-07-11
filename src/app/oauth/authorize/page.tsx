@@ -89,6 +89,10 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
         <input type="hidden" name="state" value={state} />
         <input type="hidden" name="scope" value={scope} />
         <input type="hidden" name="resource" value={resource} />
+        <label className="flex items-center gap-[8px] text-left text-[13px] text-stone px-[2px] py-[2px] cursor-pointer">
+          <input type="checkbox" name="grant_write" value="1" className="h-[15px] w-[15px] accent-ink" />
+          Also allow making changes (write access)
+        </label>
         <button type="submit" name="decision" value="approve"
           className="w-full rounded-[10px] bg-ink text-bone font-semibold px-4 py-3 hover:opacity-90 transition-opacity">
           Allow access
