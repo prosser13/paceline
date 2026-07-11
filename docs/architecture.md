@@ -181,6 +181,7 @@ and Next fetch-cache on Open-Meteo (1 h forecast / 6 h race window).
 | `src/lib/fuel-progression.ts` | gut-training g/h ladder 50+8n capped 90, anchored to fuelled-session *sequence*, not weeks. |
 | `src/lib/activity-merge.ts` | merged-activity HR/power (moving-time-weighted); NGP is lost on merge. |
 | `src/lib/dates.ts` | date helpers — parses `'YYYY-MM-DD'` at server-local midnight (see §2 timezone note). |
+| `src/lib/availability-conflicts.ts` | `detectAvailabilityConflicts(availability, sessions)` — pure detector of availability↔plan clashes (time caps, barred activity/equipment, full-day/below-par). Reuses `resolveSport`; feeds the coach briefing. |
 | `src/components/session-ui.tsx` | presentation-only blocks (`fmtClock`, `ZoneChip`, `CompareTable`, …) — no per-sport branching. |
 | `src/components/glyphs.tsx`, `src/lib/colors.ts` | sport glyphs + brand colours. (`profile.ts` exports a *different* `ZONE_COLOR` — drift trap.) |
 
@@ -215,6 +216,7 @@ are the exception to preserve (`fuel.ts` writing `completed_workouts` fuel colum
 | `threshold_checks` | `threshold-suggestion.ts` | — |
 | `coach_messages`, `coach_context` | `coach.ts` | — |
 | `coaching_prefs`, `plan_constraints` | `coaching.ts` | strength-progression (mode columns) |
+| `availability`, `availability_review` | `availability.ts` | plan-context (14-day window + conflict detection) |
 | `strength_sessions`, `strength_session_exercises` | `strength-sessions.ts` | strength-progression |
 | `strength_exercise_state` / `_progression_events` / `_tuning` | `strength-progression.ts` | — |
 | `strength_niggles` | `strength-niggles.ts` | — |

@@ -25,6 +25,7 @@ import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integr
 import { getPlanContext, type PlanContext } from '@/data/plan-context';
 import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered } from '@/data/coach';
 import { getCoachingPrefs } from '@/data/coaching';
+import { markAvailabilityReviewed } from '@/data/availability';
 import { getLatestWellnessDay, listRecentWellnessDays, type WellnessDay } from '@/data/wellness-days';
 import { syncWellnessDays } from '@/lib/intervals';
 import { syncUpcomingRunWorkouts } from '@/lib/intervals-sync';
@@ -159,6 +160,11 @@ async function runMorningForUser(forDate: string, londonHHMM: string, forced: bo
     const memory = await getCoachContext();
     const readiness = buildReadiness(hasOvernight ? latest : null, recent);
     const briefing = await generateMorningBriefing(ctx, memory.summary, readiness);
+
+    // The briefing has now reviewed the next 14 days of availability — advance the
+    // gate so it won't re-lead with the same conflicts until availability changes
+    // again. Best-effort; never fail the briefing over it.
+    await markAvailabilityReviewed().catch(() => { /* best-effort */ });
 
     const { id, error } = await insertCoachMessage(forDate, 'morning', briefing.headline, briefing.bodyMd);
     if (error) {

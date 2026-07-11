@@ -2,8 +2,7 @@
 // user records ahead of time (the `availability` table). The richer, per-date
 // sibling of plan_constraints: one row per restriction, several allowed per day.
 // Edited a whole day at a time (replace-on-save), same shape as replacePlanConstraints
-// in coaching.ts. One home for this cluster so per-user scoping later lands in a
-// single place. Global single-set today.
+// in coaching.ts. All reads/writes are scoped to the current user via currentUserId().
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
@@ -25,6 +24,17 @@ export interface AvailabilityRow {
 
 // ── reads ────────────────────────────────────────────────────
 
+// Shape a raw row into an AvailabilityRow.
+function toRow(r: { date: unknown; kind: unknown; minutes: unknown; items: unknown; note: unknown }): AvailabilityRow {
+  return {
+    date:    r.date as string,
+    kind:    r.kind as AvailabilityKind,
+    minutes: r.minutes as number | null,
+    items:   (r.items as string[] | null) ?? [],
+    note:    (r.note as string | null) ?? null,
+  };
+}
+
 // Every restriction, oldest first. The table is single-user and small, so the
 // calendar loads the whole set once and pages by month on the client.
 export async function listAvailability(): Promise<AvailabilityRow[]> {
@@ -34,13 +44,48 @@ export async function listAvailability(): Promise<AvailabilityRow[]> {
     .select('date, kind, minutes, items, note')
     .eq('user_id', userId)
     .order('date');
-  return (data ?? []).map(r => ({
-    date:    r.date as string,
-    kind:    r.kind as AvailabilityKind,
-    minutes: r.minutes as number | null,
-    items:   (r.items as string[] | null) ?? [],
-    note:    (r.note as string | null) ?? null,
-  }));
+  return (data ?? []).map(toRow);
+}
+
+// Restrictions within [from, to] (inclusive) — the window the coach reviews.
+export async function listAvailabilityBetween(from: string, to: string): Promise<AvailabilityRow[]> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('availability')
+    .select('date, kind, minutes, items, note')
+    .eq('user_id', userId)
+    .gte('date', from)
+    .lte('date', to)
+    .order('date');
+  return (data ?? []).map(toRow);
+}
+
+// ── review gate (has availability changed since the coach last looked?) ──
+
+export interface AvailabilityReviewState {
+  content_updated_at: string;        // bumped on any availability change (DB trigger)
+  last_reviewed_at: string | null;   // when the coach last reviewed
+}
+
+export async function getAvailabilityReviewState(): Promise<AvailabilityReviewState> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('availability_review')
+    .select('content_updated_at, last_reviewed_at')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return {
+    content_updated_at: (data?.content_updated_at as string | undefined) ?? new Date(0).toISOString(),
+    last_reviewed_at:   (data?.last_reviewed_at as string | null | undefined) ?? null,
+  };
+}
+
+// Stamp "reviewed now" so changed_since_review flips false until the next edit.
+export async function markAvailabilityReviewed(): Promise<void> {
+  const userId = await currentUserId();
+  await supabaseAdmin
+    .from('availability_review')
+    .upsert({ user_id: userId, last_reviewed_at: new Date().toISOString() }, { onConflict: 'user_id' });
 }
 
 // ── writes ───────────────────────────────────────────────────
