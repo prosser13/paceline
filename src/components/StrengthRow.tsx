@@ -52,7 +52,7 @@ export function StrengthDetailTable({ exercises, weightCol = false }: { exercise
             </div>
             <div className="shrink-0 text-right leading-snug pt-[1px]">
               <div className="font-display font-semibold text-[14px] text-ink tabular-nums whitespace-nowrap">{ex.sets} × {repsStr(ex)}</div>
-              {weighted && <div className="font-mono text-[11px] text-stone mt-[1px]">{ex.weight} kg</div>}
+              <div className="font-mono text-[11px] text-stone mt-[1px]">{weighted ? `${ex.weight} kg` : 'bw'}</div>
             </div>
           </div>
         );
