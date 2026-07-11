@@ -2,7 +2,7 @@
 // segments and metrics. Pure components (no hooks) so they can be used by both
 // the plan page (client) and the dashboard (server) — keeping styling in sync.
 
-import { segmentPerformance, PERF_COLOR } from '@/lib/plan-structure';
+import { segmentPerformance, PERF_COLOR, paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 import type { NormSegment, NormStep, SegmentPerf } from '@/lib/plan-structure';
 import { fmtPower, type CyclingSegment } from '@/lib/cycling';
 import RepeatBlock from './RepeatBlock';
@@ -144,6 +144,64 @@ export function syntheticStructure(
     pace_max: session.target_pace_end ?? pace,
     zone: INTENSITY[intensity]?.zone ?? 'Z2',
   }];
+}
+
+// A merged run stitches two separate Strava activities (e.g. a morning parkrun and
+// a later long run) into one planned session. Splits can't be mapped onto the
+// planned segments across that join, so the merge stores an EMPTY segment_actuals
+// array — distinct from null, which means "not computed yet / single unstructured
+// run". Detect the empty array so such a run renders collapsed to one whole-run
+// "done" line (overall actual + delta) instead of per-segment rows that read as
+// un-run. (Only merged runs ever carry `[]`; structured runs get a full array or
+// null, unstructured runs get null.)
+export function isMergedRun(segmentActuals: (number | null)[] | null | undefined): boolean {
+  return Array.isArray(segmentActuals) && segmentActuals.length === 0;
+}
+
+// Flatten steps (expanding repeats) into their constituent segments.
+function flattenSegments(steps: NormStep[]): NormSegment[] {
+  const out: NormSegment[] = [];
+  for (const s of steps) {
+    if (s.kind === 'repeat') for (let r = 0; r < s.count; r++) out.push(...s.steps);
+    else out.push(s);
+  }
+  return out;
+}
+
+// Collapse a structured run into ONE whole-run segment: the union of its planned
+// pace/HR windows and total distance, carrying the whole-run average as the actual.
+// Used for merged runs — real per-segment splits are unknown, but the overall totals
+// are valid, so the run still reads as "done" with an honest overall verdict against
+// the planned envelope (never a fabricated per-segment delta against a wrong target).
+export function collapseToWholeRun(
+  steps: NormStep[],
+  actualPaceSec: number | null,
+  actualHr: number | null,
+): NormSegment {
+  const segs = flattenSegments(steps);
+  const paceSecs = segs
+    .flatMap(s => [paceToSeconds(s.paceMin), paceToSeconds(s.paceMax)])
+    .filter((n): n is number => n != null);
+  const hrMins = segs.map(s => s.hrMin).filter((n): n is number => n != null);
+  const hrMaxs = segs.map(s => s.hrMax).filter((n): n is number => n != null);
+  const totalKm = segs.reduce((n, s) => n + s.distanceKm, 0);
+  const fast = paceSecs.length ? Math.min(...paceSecs) : null;
+  const slow = paceSecs.length ? Math.max(...paceSecs) : null;
+  // Distance-weighted planned mid pace so the planned duration is preserved.
+  const midNum = segs.reduce((n, s) => n + (s.midSeconds ?? 0) * s.distanceKm, 0);
+  return {
+    kind: 'segment',
+    label: 'Whole run',
+    zoneKey: null,
+    paceMin: fast != null ? secondsToPace(fast) : '',
+    paceMax: slow != null ? secondsToPace(slow) : '',
+    midSeconds: totalKm > 0 ? midNum / totalKm : null,
+    distanceKm: totalKm,
+    actualPaceSec,
+    hrMin: hrMins.length ? Math.min(...hrMins) : null,
+    hrMax: hrMaxs.length ? Math.max(...hrMaxs) : null,
+    actualHr,
+  };
 }
 
 // A run with no planned `structure` renders as a single synthetic segment, so the
