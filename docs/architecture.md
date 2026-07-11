@@ -314,5 +314,6 @@ When multi-user ships, one coordinated milestone:
 - Session rows take `compact`, `emphasis`, `today`, `next`, `done`, `completed` props and are **shared**
   between the dashboard and the plan page — a change to a row updates both surfaces.
 - Docs hygiene: living docs are this file, `improvement-backlog.md`, `rtss.md` (TSS reference),
-  `plan-agent.md` (agent contract), `threshold-auto-suggestion.md` (feature rules). Completed one-off
+  `plan-agent.md` (agent contract), `threshold-auto-suggestion.md` (feature rules),
+  `coach-briefing-roadmap.md` (planned coach-briefing signals). Completed one-off
   plans live in `docs/archive/`.
