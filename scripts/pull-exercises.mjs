@@ -1,11 +1,12 @@
-// One-off: pull the active exercise library out of the racehouse.ai Supabase and
-// write it as a hardcoded TS constant for paceline. Run: node scripts/pull-exercises.mjs
+// Regenerate src/data/strength-exercises.ts from the in-house exercise catalog —
+// paceline's own `public.exercises` (brought in-house from racehouse.ai; paceline
+// now owns it). Run: node scripts/pull-exercises.mjs
+// Reads .env.local from the project root (NEXT_PUBLIC_SUPABASE_URL + service-role key).
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, writeFileSync } from 'node:fs';
 
-const RACEHOUSE_ENV = 'C:/Users/pross/Documents/GitHub/racehouseAI/.env.local';
 const env = Object.fromEntries(
-  readFileSync(RACEHOUSE_ENV, 'utf8').split('\n')
+  readFileSync(new URL('../.env.local', import.meta.url), 'utf8').split('\n')
     .filter(l => l.includes('=') && !l.trim().startsWith('#'))
     .map(l => { const i = l.indexOf('='); return [l.slice(0, i).trim(), l.slice(i + 1).trim().replace(/^["']|["']$/g, '')]; }),
 );
@@ -15,6 +16,7 @@ const { data, error } = await supabase
   .from('exercises')
   .select('id, name, muscle_group, additional_muscle_groups, movement_pattern, supported_intents, reps_type, sets, reps_value, duration_seconds, weight_kg, strength_reps_min, strength_reps_max, strength_weight_kg, weight_type, secs_per_rep, rest_per_set, cue, frequency, is_single_leg, youtube_url')
   .eq('is_active', true)
+  .neq('name', 'Dead bug')   // omitted deliberately — aggravates hip click
   .order('muscle_group', { ascending: true })
   .order('name', { ascending: true });
 if (error) { console.error(error); process.exit(1); }
@@ -44,6 +46,6 @@ const mapped = data.map(r => ({
 }));
 
 const body = mapped.map(e => '  ' + JSON.stringify(e)).join(',\n');
-const out = `// AUTO-GENERATED from the racehouse.ai exercise library (scripts/pull-exercises.mjs).\n// ${mapped.length} exercises. Edit the source data there, or hand-edit here, then re-run.\nimport type { Exercise } from './strength';\n\nexport const STRENGTH_EXERCISES: Exercise[] = [\n${body},\n];\n`;
+const out = `// AUTO-GENERATED from the in-house exercise catalog — paceline \`public.exercises\`\n// (scripts/pull-exercises.mjs). paceline owns the catalog (brought in-house from\n// racehouse.ai). ${mapped.length} exercises. Edit the catalog table (or hand-edit here), then re-run.\nimport type { Exercise } from './strength';\n\nexport const STRENGTH_EXERCISES: Exercise[] = [\n${body},\n];\n`;
 writeFileSync(new URL('../src/data/strength-exercises.ts', import.meta.url), out, 'utf8');
 console.log(`Wrote ${mapped.length} exercises to src/data/strength-exercises.ts`);
