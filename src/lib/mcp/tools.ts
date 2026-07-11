@@ -4,13 +4,28 @@
 //
 // To add a tool: add a TOOL_DEFS entry (JSON Schema) + a case in callTool.
 
+import { randomBytes } from 'node:crypto';
 import { getPlanContext } from '@/data/plan-context';
-import { listSessionsBetween, listCompletedBetween } from '@/data/plan-sessions';
-import { listRacePlans } from '@/data/plans';
-import { getThresholdPace, listPaceZones, listHrZones, listPowerZones } from '@/data/zones';
+import { listSessionsBetween, listCompletedBetween, setSessionEffort } from '@/data/plan-sessions';
+import { listRacePlans, updatePlanTarget, getPlanTargetInfo } from '@/data/plans';
+import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, setThresholdPace } from '@/data/zones';
+import { applyPlanChange } from '@/data/plan-mutations';
+import { upsertDailyNote } from '@/data/daily-notes';
+import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
+import { secondsToPace } from '@/lib/plan-structure';
 import { todayISO } from '@/lib/dates';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// "H:MM:SS" / "M:SS" / seconds → total seconds, or null.
+function clockToSeconds(v: string): number | null {
+  const parts = v.split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 1) return parts[0];
+  return null;
+}
 
 export interface ToolDef {
   name: string;
@@ -64,6 +79,96 @@ export const TOOL_DEFS: ToolDef[] = [
   },
 ];
 
+// Write tools — only exposed/callable on a connection granted write scope.
+export const WRITE_TOOL_DEFS: ToolDef[] = [
+  {
+    name: 'apply_plan_change',
+    description:
+      'Change one planned session through the logged, revertable path. Use for rescheduling, changing distance/description/structure, intensity, priority, or status (e.g. "skipped"). Cannot change a completed or past session. Editable fields: scheduled_date, name, description, distance_km, structure, target_pace, intensity, priority, status, session_type, activity_type, notes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        session_id: { type: 'string', description: 'The plan_session id to change.' },
+        patch: { type: 'object', description: 'Object of editable field → new value.' },
+        reason: { type: 'string', description: 'Short human-readable reason (stored in the change log).' },
+      },
+      required: ['session_id', 'patch', 'reason'],
+    },
+  },
+  {
+    name: 'set_session_effort',
+    description: 'Set the perceived effort (RPE 1–10) on a session.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        session_id: { type: 'string' },
+        rpe: { type: 'number', description: 'Rating of perceived exertion, 1–10.' },
+      },
+      required: ['session_id', 'rpe'],
+    },
+  },
+  {
+    name: 'set_daily_note',
+    description: "Set (replace) the athlete's free-text daily note for a date — context the coach reviews.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD.' },
+        note: { type: 'string', description: 'The note text (empty string clears it).' },
+      },
+      required: ['date', 'note'],
+    },
+  },
+  {
+    name: 'set_availability',
+    description: "Replace a day's availability restrictions (what the coach must work around). Pass an empty entries array to clear the day.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD.' },
+        entries: {
+          type: 'array',
+          description: 'Restrictions for the day.',
+          items: {
+            type: 'object',
+            properties: {
+              kind: { type: 'string', enum: ['full_day', 'reduced_intensity', 'time_limited', 'activity_limited', 'equipment_limited'] },
+              minutes: { type: 'number', description: 'time_limited only: minutes available.' },
+              items: { type: 'array', items: { type: 'string' }, description: 'activity_limited / equipment_limited: what is barred.' },
+              note: { type: 'string' },
+            },
+            required: ['kind'],
+          },
+        },
+      },
+      required: ['date', 'entries'],
+    },
+  },
+  {
+    name: 'set_race_target',
+    description: "Set a race plan's goal finish time; the goal pace is derived from the race distance. Pass an empty target_time to clear the target.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plan_id: { type: 'number', description: 'The race plan id (from get_races).' },
+        target_time: { type: 'string', description: 'Goal finish time H:MM:SS or M:SS (empty to clear).' },
+      },
+      required: ['plan_id', 'target_time'],
+    },
+  },
+  {
+    name: 'set_threshold_pace',
+    description: 'Set the running threshold pace (M:SS per km) that anchors the pace zones.',
+    inputSchema: {
+      type: 'object',
+      properties: { threshold: { type: 'string', description: 'Threshold pace, "M:SS" per km.' } },
+      required: ['threshold'],
+    },
+  },
+];
+
+export const WRITE_TOOL_NAMES = new Set(WRITE_TOOL_DEFS.map(t => t.name));
+
 function bad(msg: string): never {
   throw new Error(msg);
 }
@@ -102,6 +207,81 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
     }
     case 'get_races':
       return listRacePlans();
+
+    // ── writes ──
+    case 'apply_plan_change': {
+      const sessionId = args.session_id as string | undefined;
+      const patch = args.patch as Record<string, unknown> | undefined;
+      const reason = args.reason as string | undefined;
+      if (!sessionId) bad('session_id is required');
+      if (!patch || typeof patch !== 'object') bad('patch object is required');
+      if (!reason) bad('reason is required');
+      return applyPlanChange({
+        idempotency_key: `mcp_${randomBytes(9).toString('base64url')}`,
+        actor: 'user',
+        reason,
+        session_id: sessionId,
+        patch,
+      });
+    }
+    case 'set_session_effort': {
+      const sessionId = args.session_id as string | undefined;
+      const rpe = args.rpe;
+      if (!sessionId) bad('session_id is required');
+      if (typeof rpe !== 'number' || rpe < 1 || rpe > 10) bad('rpe must be a number 1–10');
+      await setSessionEffort(sessionId, Math.round(rpe));
+      return { ok: true };
+    }
+    case 'set_daily_note': {
+      const date = args.date as string | undefined;
+      const note = args.note;
+      if (!date || !ISO_DATE.test(date)) bad('date must be YYYY-MM-DD');
+      if (typeof note !== 'string') bad('note must be a string');
+      await upsertDailyNote(date, note);
+      return { ok: true };
+    }
+    case 'set_availability': {
+      const date = args.date as string | undefined;
+      const entries = args.entries;
+      if (!date || !ISO_DATE.test(date)) bad('date must be YYYY-MM-DD');
+      if (!Array.isArray(entries)) bad('entries must be an array');
+      const rows: AvailabilityRow[] = entries.map((e) => {
+        const o = e as Record<string, unknown>;
+        return {
+          date,
+          kind: o.kind as AvailabilityKind,
+          minutes: typeof o.minutes === 'number' ? o.minutes : null,
+          items: Array.isArray(o.items) ? (o.items as string[]) : [],
+          note: typeof o.note === 'string' ? o.note : null,
+        };
+      });
+      await replaceDayAvailability(date, rows);
+      return { ok: true };
+    }
+    case 'set_race_target': {
+      const planId = args.plan_id as number | undefined;
+      const targetTime = (args.target_time as string | undefined) ?? '';
+      if (typeof planId !== 'number') bad('plan_id must be a number');
+      if (!targetTime.trim()) {
+        await updatePlanTarget(planId, { target_time: null, target_pace: null });
+        return { ok: true, cleared: true };
+      }
+      const info = await getPlanTargetInfo(planId);
+      if (!info) bad(`No plan with id ${planId}`);
+      const secs = clockToSeconds(targetTime);
+      if (secs == null) bad('target_time must be H:MM:SS or M:SS');
+      const km = Number(info.distance_km) || 0;
+      const pace = km > 0 ? secondsToPace(secs / km) : null;
+      await updatePlanTarget(planId, { target_time: targetTime, target_pace: pace });
+      return { ok: true, target_time: targetTime, target_pace: pace };
+    }
+    case 'set_threshold_pace': {
+      const threshold = args.threshold as string | undefined;
+      if (!threshold || clockToSeconds(threshold) == null) bad('threshold must be "M:SS" per km');
+      await setThresholdPace(threshold);
+      return { ok: true };
+    }
+
     default:
       bad(`Unknown tool: ${name}`);
   }

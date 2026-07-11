@@ -16,7 +16,8 @@ export async function decideAuthorization(formData: FormData): Promise<void> {
   const codeChallenge = get('code_challenge');
   const codeChallengeMethod = get('code_challenge_method') || 'S256';
   const state = get('state');
-  const scope = get('scope') || 'mcp';
+  // The consent checkbox is the source of truth for write access.
+  const scope = get('grant_write') === '1' ? 'mcp mcp:write' : 'mcp';
   const resource = get('resource');
 
   // The redirect target must be one this client registered — validate before we ever

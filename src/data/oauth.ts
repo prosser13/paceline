@@ -101,17 +101,21 @@ export async function issueTokens(clientId: string, userId: string, scope: strin
   return { access_token, refresh_token, expires_in: ACCESS_TTL_SECS };
 }
 
-// Resolve an access token → user id, honouring expiry. Null on miss/expired.
-export async function resolveAccessToken(token: string | null | undefined, nowMs: number): Promise<string | null> {
+// Resolve an access token → user + whether it may write (scope includes 'mcp:write'),
+// honouring expiry. Null on miss/expired.
+export async function resolveAccessToken(token: string | null | undefined, nowMs: number): Promise<{ userId: string; canWrite: boolean } | null> {
   if (!token) return null;
   const { data } = await supabaseAdmin
     .from('oauth_tokens')
-    .select('user_id, expires_at')
+    .select('user_id, scope, expires_at')
     .eq('access_token_hash', sha256(token))
     .maybeSingle();
   if (!data) return null;
   if (new Date(data.expires_at as string).getTime() < nowMs) return null;
-  return data.user_id as string;
+  return {
+    userId: data.user_id as string,
+    canWrite: ((data.scope as string | null) ?? '').split(' ').includes('mcp:write'),
+  };
 }
 
 // Rotate a refresh token: consume the old row, issue a fresh pair. Null if invalid.

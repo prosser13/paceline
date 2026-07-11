@@ -7,13 +7,16 @@ import { issueMcpTokenAction, revokeMcpTokenAction } from './mcp-actions';
 // right after generating; afterwards only its metadata (created / last used) is
 // known. The endpoint URL is derived from the current origin.
 export default function McpClient({
-  initialExists, createdAt, lastUsedAt,
+  initialExists, initialCanWrite, createdAt, lastUsedAt,
 }: {
   initialExists: boolean;
+  initialCanWrite: boolean;
   createdAt: string | null;
   lastUsedAt: string | null;
 }) {
   const [exists, setExists] = useState(initialExists);
+  const [canWrite, setCanWrite] = useState(initialCanWrite);
+  const [write, setWrite] = useState(initialCanWrite); // desired scope for the next token
   const [token, setToken] = useState<string | null>(null); // freshly-issued, shown once
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState<'url' | 'token' | null>(null);
@@ -31,9 +34,10 @@ export default function McpClient({
   async function generate() {
     setBusy(true);
     try {
-      const { token } = await issueMcpTokenAction();
+      const { token } = await issueMcpTokenAction(write);
       setToken(token);
       setExists(true);
+      setCanWrite(write);
     } finally {
       setBusy(false);
     }
@@ -45,6 +49,7 @@ export default function McpClient({
       await revokeMcpTokenAction();
       setToken(null);
       setExists(false);
+      setCanWrite(false);
     } finally {
       setBusy(false);
     }
@@ -81,11 +86,15 @@ export default function McpClient({
         </div>
       )}
 
-      {/* Status + actions */}
+      {/* Scope + status + actions */}
+      <label className="flex items-center gap-[8px] text-[13px] text-ink cursor-pointer">
+        <input type="checkbox" checked={write} onChange={e => setWrite(e.target.checked)} className="h-[15px] w-[15px] accent-ink" />
+        Grant write access (let Claude make changes, not just read)
+      </label>
       <div className="flex items-center justify-between gap-3">
         <div className="text-[13px] text-stone">
           {exists
-            ? <>Token active{createdAt && !token ? ` · created ${fmtDate(createdAt)}` : ''}{lastUsedAt && !token ? ` · last used ${fmtDate(lastUsedAt)}` : ''}</>
+            ? <>Token active · {canWrite ? 'read + write' : 'read-only'}{createdAt && !token ? ` · created ${fmtDate(createdAt)}` : ''}{lastUsedAt && !token ? ` · last used ${fmtDate(lastUsedAt)}` : ''}</>
             : 'No token yet.'}
         </div>
         <div className="flex items-center gap-[8px] shrink-0">
@@ -112,7 +121,7 @@ export default function McpClient({
           <span className="font-mono"> Authorization: Bearer </span> header. Regenerating replaces the old token;
           revoking disconnects it.
         </p>
-        <p>Either way it exposes read-only tools for your plan, sessions, zones, races and recent workouts.</p>
+        <p>It exposes tools for your plan, sessions, zones, races and workouts — read-only unless you grant write access, which also lets Claude log sessions, edit the plan (revertable), set availability, notes and targets.</p>
       </div>
     </div>
   );

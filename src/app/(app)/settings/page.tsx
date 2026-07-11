@@ -248,6 +248,7 @@ export default async function SettingsPage() {
           subtitle="Connect Claude to your paceline data with a read-only MCP connector — query your plan, sessions, zones, races and recent workouts. Each token is yours alone.">
           <McpClient
             initialExists={mcpToken.exists}
+            initialCanWrite={mcpToken.canWrite}
             createdAt={mcpToken.createdAt}
             lastUsedAt={mcpToken.lastUsedAt}
           />
