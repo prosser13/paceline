@@ -14,9 +14,10 @@ export function intraDayOrder(s: { session_type?: string | null; description?: s
   const t = s.session_type;
   if (t === 'YOGA') {
     const d = (s.description ?? '').toLowerCase();
-    if (d.includes('warm')) return 10;     // dynamic warm-up — before the run
-    if (d.includes('mobility')) return 20;  // rest-day mobility flow
-    return 40;                              // static stretches — after the run
+    if (d.includes('warm')) return 10;      // dynamic warm-up — before the run
+    if (d.includes('mobility')) return 20;   // rest-day mobility flow
+    if (d.includes('static')) return 40;     // post-run static stretches — after the run
+    return 15;                               // standalone daily flow — before the run
   }
   if (t === 'CORE') return 50;
   if (t === 'STRENGTH') return 60;
@@ -31,9 +32,10 @@ export function strengthFirstOrder(s: { session_type?: string | null; descriptio
   if (t === 'STRENGTH' || t === 'CORE') return 0;
   if (t === 'YOGA') {
     const d = (s.description ?? '').toLowerCase();
-    if (d.includes('warm')) return 1;      // dynamic warm-up — before the run
-    if (d.includes('mobility')) return 4;   // rest-day flow — last
-    return 3;                               // static stretches — after the run
+    if (d.includes('warm')) return 1;       // dynamic warm-up — before the run
+    if (d.includes('mobility')) return 4;    // rest-day flow — last
+    if (d.includes('static')) return 3;      // post-run static stretches — after the run
+    return 1.5;                              // standalone daily flow — before the run
   }
   if (t === 'RACE') return 2.5;            // race after a warm-up run
   return 2;                                // run / ride

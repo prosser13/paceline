@@ -28,11 +28,19 @@ const ZONE_STYLE: Record<string, { background: string; color: string }> = {
   'Z1-2': { background: 'rgba(47,111,158,.10)',  color: '#2f6f9e' },
 };
 
-export function ZoneChip({ zone }: { zone: string }) {
+// The HR band for a zone, e.g. "141–152" — derived from the athlete's HR zones so
+// it tracks any change to their settings. Null when the segment has no HR window.
+export function hrBandStr(hrMin?: number | null, hrMax?: number | null): string | null {
+  if (hrMin == null || hrMax == null) return null;
+  return hrMin === hrMax ? `${hrMin}` : `${hrMin}–${hrMax}`;
+}
+
+export function ZoneChip({ zone, hrMin, hrMax }: { zone: string; hrMin?: number | null; hrMax?: number | null }) {
   const s = ZONE_STYLE[zone] ?? ZONE_STYLE.Z2;
+  const band = hrBandStr(hrMin, hrMax);
   return (
-    <span className="font-mono text-[12px] px-[5px] py-[1px] rounded-[3px] shrink-0 text-center" style={s}>
-      {zone}
+    <span className="font-mono text-[12px] px-[5px] py-[1px] rounded-[3px] shrink-0 text-center whitespace-nowrap" style={s}>
+      {zone}{band ? ` ${band}` : ''}
     </span>
   );
 }
@@ -75,6 +83,16 @@ export function fmtClock(totalSeconds: number): string {
   const s = t % 60;
   const p = (n: number) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${p(m)}:${p(s)}` : `${m}:${p(s)}`;
+}
+
+// Total planned duration of a yoga flow = Σ the poses' hold times. Only timed holds
+// (reps_type 'secs') contribute; movement-count poses (×N) carry no clock time.
+// Returns 0 when nothing is timed (caller falls back to any stored duration).
+export function yogaFlowSeconds(
+  poses: { reps?: number; reps_type?: string; sets?: number }[] | null | undefined,
+): number {
+  if (!poses?.length) return 0;
+  return poses.reduce((sum, p) => sum + (p.reps_type === 'secs' && p.reps ? p.reps * (p.sets || 1) : 0), 0);
 }
 
 // "H:MM:SS" intermediate (always 3-part, seconds preserved) — what run/race rows
@@ -160,7 +178,7 @@ function plannedPaceStr(seg: NormSegment): string | null {
 
 function ZoneTag({ seg }: { seg: NormSegment }) {
   if (seg.zoneKeys && seg.zoneKeys.length > 1) return <MultiZoneChip zones={seg.zoneKeys} />;
-  return seg.zoneKey ? <ZoneChip zone={seg.zoneKey} /> : null;
+  return seg.zoneKey ? <ZoneChip zone={seg.zoneKey} hrMin={seg.hrMin} hrMax={seg.hrMax} /> : null;
 }
 
 // Per-segment colour. For a planned workout being faster (ahead) is just as
@@ -417,6 +435,14 @@ export function DetailRow({ label, sub, value, valueSub, valueColor, valueSubCol
   );
 }
 
+// Zone label with its HR band appended — "Z2 141–152" — for the segment's zone
+// sub-line. Falls back to the bare zone when no HR window is resolved.
+function zoneLabelWithHr(seg: { zoneKey?: string | null; hrMin?: number | null; hrMax?: number | null }): string | null {
+  if (!seg.zoneKey) return null;
+  const band = hrBandStr(seg.hrMin, seg.hrMax);
+  return band ? `${seg.zoneKey} ${band}` : seg.zoneKey;
+}
+
 // Full pace window for a segment — "4:15–5:00/km" (or a single pace).
 function paceRange(s: { paceMin?: string; paceMax?: string }): string | null {
   if (!s.paceMin) return null;
@@ -436,11 +462,11 @@ export function PlannedDetail({ steps }: { steps: NormStep[] }) {
           const totalKm = step.steps.reduce((s, x) => s + (x.distanceKm || 0), 0) * step.count;
           const subLabel = step.steps.map(s => s.label).join(' + ');
           return <DetailRow key={i} label={`${step.count} × ${subLabel}`} sub={sub ? paceRange(sub) : null}
-            value={totalKm ? `${totalKm.toFixed(1)} km` : null} valueSub={sub?.zoneKey ?? null} />;
+            value={totalKm ? `${totalKm.toFixed(1)} km` : null} valueSub={sub ? zoneLabelWithHr(sub) : null} />;
         }
         const seg = step;
         const value = seg.distanceKm ? `${seg.distanceKm} km` : (seg.midSeconds ? fmtMMSS(seg.midSeconds) : null);
-        return <DetailRow key={i} label={seg.label} sub={paceRange(seg)} value={value} valueSub={seg.zoneKey ?? null} />;
+        return <DetailRow key={i} label={seg.label} sub={paceRange(seg)} value={value} valueSub={zoneLabelWithHr(seg)} />;
       })}
     </div>
   );

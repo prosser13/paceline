@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { humanHMM } from './session-ui';
+import { humanHMM, fmtClock, yogaFlowSeconds } from './session-ui';
 import { YogaGlyph } from './glyphs';
 import { COFFEE } from '@/lib/colors';
 
@@ -46,6 +46,10 @@ export default function YogaRow({
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = poses.length > 0;
+  // Total time = Σ pose holds (default for every yoga flow); fall back to any stored
+  // duration when the poses carry no timed holds.
+  const flowSec = yogaFlowSeconds(poses);
+  const durStr = flowSec > 0 ? fmtClock(flowSec) : humanHMM(duration);
 
   return (
     <div>
@@ -79,10 +83,10 @@ export default function YogaRow({
               </span>
             )}
           </div>
-          {focus && <div className="text-[14.5px] leading-tight mt-[3px] truncate text-stone">{focus}</div>}
+          {focus && <div className="text-[14.5px] leading-snug mt-[3px] text-stone">{focus}</div>}
         </div>
         <div className="shrink-0 text-right w-[78px]">
-          <div className="font-display font-semibold text-[19px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
+          <div className="font-display font-semibold text-[19px] leading-none text-ink">{durStr ?? '—'}</div>
           {hasDetail && <div className="font-mono text-[12px] text-stone mt-[3px]">{poses.length} poses</div>}
         </div>
       </div>
