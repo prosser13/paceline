@@ -88,6 +88,10 @@ export const LONDON_MARATHON: RaceGuide = {
     'pace if it’s warm.',
 
   coachNotes: [
+    { heading: 'Pace to your prediction, patiently',
+      body: 'No fixed goal time is set, so the header shows a predicted finish from your current fitness. The ' +
+            'marathon punishes running faster than that early more than any other distance — hold the predicted ' +
+            'pace (or a touch slower) through halfway and you’ll have something left for the second half.' },
     { heading: 'Respect the distance — start easy',
       body: 'The first few miles off Blackheath drop downhill through huge crowds and feel effortless. That’s ' +
             'the trap: start comfortable and well within yourself. Running the early miles too hard is the one ' +
@@ -104,6 +108,10 @@ export const LONDON_MARATHON: RaceGuide = {
       body: 'London’s support is enormous — Tower Bridge at halfway and the Embankment run-in are special. ' +
             'Let the noise lift you, especially when it gets tough, but keep your effort steady rather than ' +
             'getting carried away.' },
+    { heading: 'Protect the knee over the long build',
+      body: 'This is a comeback marathon after knee surgery — the months of consistent, healthy training ' +
+            'matter more than any single session. If the knee flares, back off and reassess rather than push ' +
+            'through; getting to the start line fit is the whole point.' },
     { heading: 'Enjoy it',
       body: 'It’s one of the great marathons and a huge achievement to run. Soak up the finish up Birdcage ' +
             'Walk and onto The Mall — take it all in.' },

@@ -2,13 +2,14 @@
 // plan-progress bar, and a "Week N of M · Phase" footer noting any tune-up race
 // en route. Matches the dashboard mockup; values from the loader.
 export default function SeasonGoalCard({
-  name, daysTo, dateStr, distanceKm, targetTime, progressPct, weekNumber, weeksTotal, weekPhase, tuneUpName,
+  name, daysTo, dateStr, distanceKm, targetTime, isPredicted = false, progressPct, weekNumber, weeksTotal, weekPhase, tuneUpName,
 }: {
   name: string;
   daysTo: number | null;
   dateStr: string | null;
   distanceKm: number | null;
   targetTime: string | null;
+  isPredicted?: boolean;   // targetTime is a predicted fallback, not a set goal
   progressPct: number | null;
   weekNumber: number | null;
   weeksTotal: number | null;
@@ -17,7 +18,7 @@ export default function SeasonGoalCard({
 }) {
   const pct = Math.max(0, Math.min(100, Math.round(progressPct ?? 0)));
   const target = targetTime ? targetTime.replace(/:00$/, '') : null;   // "7:20:00" → "7:20"
-  const sub = [dateStr, distanceKm ? `${Math.round(distanceKm)} km` : null, target ? `target ${target}` : null]
+  const sub = [dateStr, distanceKm ? `${Math.round(distanceKm)} km` : null, target ? `${isPredicted ? 'predicted' : 'target'} ${target}` : null]
     .filter(Boolean).join(' · ');
   const footer = [
     weekNumber != null && weeksTotal != null ? `Week ${weekNumber} of ${weeksTotal}` : null,

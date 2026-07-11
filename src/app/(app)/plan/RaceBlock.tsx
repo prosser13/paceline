@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { getRaceGuide } from '@/data/races';
 
 export default function RaceBlock({
-  name, kind = 'race', raceDate, startDate, endDate, distanceKm, targetTime, targetPace, slug,
+  name, kind = 'race', raceDate, startDate, endDate, distanceKm, targetTime, targetPace, predictedTime, predictedPace, slug,
 }: {
   name: string;
   kind?: string;
@@ -28,8 +28,14 @@ export default function RaceBlock({
   distanceKm?: number | null;
   targetTime?: string | null;
   targetPace?: string | null;
+  predictedTime?: string | null;   // used when no target is set
+  predictedPace?: string | null;
   slug?: string | null;
 }) {
+  // No explicit target → show the athlete's predicted time/pace, labelled "Predicted".
+  const effTime = targetTime ?? predictedTime ?? null;
+  const effPace = targetPace ?? predictedPace ?? null;
+  const isPredicted = !targetTime && !!predictedTime;
   // Only link to a guide that actually exists for this slug.
   const hasGuide = !!slug && !!getRaceGuide(slug);
   // ── Recovery block ──────────────────────────────────────────
@@ -97,8 +103,8 @@ export default function RaceBlock({
       <div className="bg-paper grid grid-cols-3 divide-x divide-fog">
         {[
           { label: 'Distance',    value: distanceKm != null ? `${distanceKm} km` : '—' },
-          { label: 'Target time', value: targetTime ?? '—' },
-          { label: 'Target pace', value: targetPace ? `${targetPace}/km` : '—' },
+          { label: isPredicted ? 'Predicted time' : 'Target time', value: effTime ?? '—' },
+          { label: isPredicted ? 'Predicted pace' : 'Target pace', value: effPace ? `${effPace}/km` : '—' },
         ].map(({ label, value }) => (
           <div key={label} className="px-[14px] py-[14px]">
             <div className="font-mono text-[11px] tracking-[.08em] uppercase text-stone">{label}</div>

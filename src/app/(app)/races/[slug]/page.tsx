@@ -9,6 +9,7 @@ import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-gr
 import { getRaceGuide } from '@/data/races';
 import { getViewedUser } from '@/lib/impersonation';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
+import { getPredictedRaceTime } from '@/data/benchmarks';
 import { getRaceKit } from '@/data/race-kit';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
 import { listPlannedTssBetween, listRunningDoneForPlan, listSessionDistancesForPlan } from '@/data/plan-sessions';
@@ -90,18 +91,25 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // stay. Kit stays editable and saves to the viewer (race_kit is per-user).
   const viewerEmail = viewer?.email?.toLowerCase() ?? null;
   const owned = !!viewerEmail && (guide.ownerEmails ?? []).some(e => e.toLowerCase() === viewerEmail);
-  // `hideTargets` blanks targets/goals/pacing for EVERYONE (a race on the calendar
-  // with no time goal yet); a non-owner also gets them blanked. Coach notes stay.
-  const blankTargets = !owned || !!guide.hideTargets;
 
-  // Live plan row wins; otherwise fall back to the guide's own values (for races
-  // without a dedicated plan, e.g. a B-race tune-up). Null when targets are hidden.
   const raceDate = plan?.race_date ?? guide.date ?? null;
-  const targetTime = guide.hideTargets ? null : (plan?.target_time ?? guide.targetTime ?? guide.goalTiers[0]?.time ?? null);
-  const targetPace = guide.hideTargets ? null : (plan?.target_pace ?? guide.targetPace ?? null);
   const distanceKm = plan?.distance_km ?? guide.distanceKm;
-
   const todayStr = todayISO();
+
+  // Explicit goal: a target set on the plan/guide (a goal-tier fallback only when
+  // targets aren't hidden). When there's none, fall back to the athlete's PREDICTED
+  // time for this distance from current fitness, and label it "Predicted".
+  const explicitTime = plan?.target_time ?? guide.targetTime ?? (guide.hideTargets ? null : guide.goalTiers[0]?.time ?? null);
+  const explicitPace = plan?.target_pace ?? guide.targetPace ?? null;
+  const predicted = owned && !explicitTime ? await getPredictedRaceTime(distanceKm, todayStr) : null;
+  const isPredicted = !explicitTime && !!predicted;
+  const targetTime = explicitTime ?? predicted?.timeStr ?? null;
+  const targetPace = explicitPace ?? predicted?.pacePerKm ?? null;
+
+  // Goal tiers stay blank for a non-owner or a hideTargets race (per the plan's
+  // "no goals for now"); the predicted time still drives the header + pacing.
+  const blankGoalTiers = !owned || !!guide.hideTargets;
+  const blankPacing = !owned || !targetTime;
 
   const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions, kitOverride] = await Promise.all([
     loadGpx(guide.gpxPath),
@@ -347,8 +355,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               : [
                   { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
                   { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
-                  { label: 'Target', value: owned && targetTime ? targetTimeDisplay : '—' },
-                  { label: 'Pace', value: owned && targetPace ? `${targetPace}/km` : '—' },
+                  { label: isPredicted ? 'Predicted' : 'Target', value: owned && targetTime ? targetTimeDisplay : '—' },
+                  { label: isPredicted ? 'Predicted pace' : 'Pace', value: owned && targetPace ? `${targetPace}/km` : '—' },
                 ]
             ).map(({ label, value }) => (
               <div key={label} className="px-[16px] py-[13px]">
@@ -459,8 +467,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               {guide.goalTiers.map(t => (
                 <div key={t.label} className="flex flex-1 items-center gap-[14px] px-[18px] py-[14px]">
                   <span className="font-display font-bold text-[20px] text-oxblood w-[20px]">{t.label}</span>
-                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{blankTargets ? '—' : formatTargetTime(t.time)}</span>
-                  <span className="text-[13px] text-stone leading-snug">{blankTargets ? '' : t.note}</span>
+                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{blankGoalTiers ? '—' : formatTargetTime(t.time)}</span>
+                  <span className="text-[13px] text-stone leading-snug">{blankGoalTiers ? '' : t.note}</span>
                 </div>
               ))}
             </div>
@@ -495,8 +503,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         </div>
         <div className="mt-[24px]">
           <PacingTable
-            rows={blankTargets ? pacing.map(r => ({ ...r, legPace: null, cumElapsed: '—', arrival: '—' })) : pacing}
-            targetTime={blankTargets ? '—' : targetTimeDisplay}
+            rows={blankPacing ? pacing.map(r => ({ ...r, legPace: null, cumElapsed: '—', arrival: '—' })) : pacing}
+            targetTime={blankPacing ? '—' : targetTimeDisplay}
             note={owned ? guide.pacingNote : null}
           />
         </div>

@@ -3,6 +3,7 @@
 // a thin server component and stream the heavy thread behind a <Suspense>.
 
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
+import { getPredictedRaceTime } from '@/data/benchmarks';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { listSessionsForPlan, listCompletedForPlan } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, getActivityNamesByStravaIds, type OffPlanActivity } from '@/data/activities';
@@ -76,6 +77,7 @@ export interface PlanData {
   archiveCount: number;
   selectedPlan: PlanRow | null;
   viewPlan: PlanRow | null;
+  racePredicted: { time: string; pace: string } | null;   // predicted fallback when a race plan has no target
   viewWeeks: PlanWeek[];
   phaseSegments: { phase: string; pct: number }[];
   todayPct: number | null;
@@ -331,12 +333,19 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
     })),
   ];
 
+  // When the viewed race plan has no target set, fall back to the athlete's
+  // predicted time/pace for its distance (labelled "Predicted" in the header).
+  const racePredicted = viewPlan && viewPlan.kind === 'race' && !viewPlan.target_time
+    ? await getPredictedRaceTime(viewPlan.distance_km, todayStr)
+    : null;
+
   return {
     todayStr,
     planOptions,
     archiveCount,
     selectedPlan,
     viewPlan,
+    racePredicted: racePredicted ? { time: racePredicted.timeStr, pace: racePredicted.pacePerKm } : null,
     viewWeeks,
     phaseSegments,
     todayPct,

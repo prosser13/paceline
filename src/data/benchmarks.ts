@@ -14,8 +14,8 @@ import { currentUserId } from '@/lib/scope';
 import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
 import {
-  predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
-  predictedTimeAt, PREDICTABLE_DISTANCES_M, enduranceScore, enduranceMultiplier,
+  predictMarathon, parseHmsToSeconds, fmtHms, fmtPace, danielsVdot, vdotToTimeMin,
+  predictedTimeAt, predictableDistanceM, PREDICTABLE_DISTANCES_M, enduranceScore, enduranceMultiplier,
   type MarathonPrediction, type PredictionInputs, type EnduranceReadiness,
 } from '@/lib/prediction';
 import {
@@ -383,6 +383,23 @@ function distanceLabel(m: number): string {
 // (from the nearest snapshot on/before each look-back date). Past times get the
 // CURRENT endurance multiplier so the deltas isolate fitness change, not readiness
 // drift. Deltas are null until a snapshot that old exists.
+// Predicted finish + pace for ONE race distance from the current fitness VDOT,
+// endurance-adjusted (HM/marathon). Used as the target-time fallback when a race has
+// no goal set. Null when the distance isn't VDOT-predictable (e.g. an ultra) or there
+// isn't enough data to predict. Scoped to the current user via the reads it composes.
+export async function getPredictedRaceTime(
+  distanceKm: number | null, asOf: string,
+): Promise<{ seconds: number; timeStr: string; pacePerKm: string } | null> {
+  const distanceM = predictableDistanceM(distanceKm);
+  if (distanceM == null) return null;
+  const [prediction, readiness] = await Promise.all([getCurrentPrediction(asOf), getEnduranceReadiness(asOf)]);
+  const raw = predictedTimeAt(prediction.vdot, distanceM);
+  if (raw == null) return null;
+  const seconds = Math.round(raw * enduranceMultiplier(distanceM, readiness.score));
+  const paceMinKm = seconds / (distanceM / 1000) / 60;
+  return { seconds, timeStr: fmtHms(seconds), pacePerKm: fmtPace(paceMinKm) };
+}
+
 export async function getPredictedRaces(asOf: string): Promise<PredictedRace[]> {
   const [prediction, snapshots, readiness] = await Promise.all([
     getCurrentPrediction(asOf),

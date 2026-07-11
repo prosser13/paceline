@@ -35,6 +35,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           dateStr={d.raceDateStr}
           distanceKm={d.raceDistanceKm}
           targetTime={d.raceTargetTime}
+          isPredicted={d.raceTimeIsPredicted}
           progressPct={d.todayPct}
           weekNumber={d.weekNumber}
           weeksTotal={d.weeksTotal}

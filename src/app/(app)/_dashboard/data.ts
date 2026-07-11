@@ -15,6 +15,7 @@ import {
 } from '@/data/plan-sessions';
 import { standouts, type Standout, type StandoutRace } from '@/lib/wellness-stats';
 import { getRaceGuide } from '@/data/races';
+import { getPredictedRaceTime } from '@/data/benchmarks';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
 import { getLatestCoachMessages, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
@@ -113,6 +114,7 @@ export interface DashboardData {
   raceName: string | null;
   raceDateStr: string | null;
   raceTargetTime: string | null;
+  raceTimeIsPredicted: boolean;    // raceTargetTime is a predicted fallback, not a set goal
   raceDistanceKm: number | null;   // goal race distance, from its /races/<slug> guide
 
   // Next-race card: nearest upcoming RACE session (incl. tune-ups), with its A/B/C priority.
@@ -411,6 +413,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const raceDateStr = raceRow?.race_date ? fmtWeekdayDate(raceRow.race_date) : null;
   // Goal race distance comes from its curated /races/<slug> guide (not the plan row).
   const raceDistanceKm = raceRow?.slug ? (getRaceGuide(raceRow.slug)?.distanceKm ?? null) : null;
+  // No target set → fall back to the athlete's predicted time for the season-goal pill.
+  const racePredicted = raceRow && !raceRow.target_time ? await getPredictedRaceTime(raceDistanceKm, todayStr) : null;
+  const raceTimeIsPredicted = !raceRow?.target_time && !!racePredicted;
 
   // Next-race card — the nearest upcoming RACE session in the window (e.g. a
   // tune-up), with its A/B/C priority; falls back to the goal race if none.
@@ -567,7 +572,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
     weeksTotal: (planWeeks?.length as number | undefined) ?? null,
     weekPhase: (weekRow?.phase as string | null) ?? null,
     phaseSegments, todayPct, ringPct,
-    daysToRace, raceName, raceDateStr, raceTargetTime: (raceRow?.target_time as string | null) ?? null, raceDistanceKm, nextRace,
+    daysToRace, raceName, raceDateStr,
+    raceTargetTime: (raceRow?.target_time as string | null) ?? racePredicted?.timeStr ?? null,
+    raceTimeIsPredicted,
+    raceDistanceKm, nextRace,
     weekPlannedKm, weekDoneKm, weekToGoKm, weekDays,
     last7: { totalKm, sessions, h, m, totalTss, loadSplit },
     offPlanToday, offPlanRecent,

@@ -19,7 +19,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 }
 
 async function PlanBody({ planParam }: { planParam?: string }) {
-  const { planOptions, archiveCount, selectedPlan, viewPlan, viewWeeks, phaseSegments, todayPct, thread } =
+  const { planOptions, archiveCount, selectedPlan, viewPlan, racePredicted, viewWeeks, phaseSegments, todayPct, thread } =
     await loadPlanData(planParam);
 
   const planBlock = (p: PlanRow) => (
@@ -32,6 +32,8 @@ async function PlanBody({ planParam }: { planParam?: string }) {
       distanceKm={p.distance_km}
       targetTime={p.target_time}
       targetPace={p.target_pace}
+      predictedTime={p.target_time ? null : racePredicted?.time ?? null}
+      predictedPace={p.target_pace ? null : racePredicted?.pace ?? null}
       slug={p.slug}
     />
   );

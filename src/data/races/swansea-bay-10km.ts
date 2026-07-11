@@ -70,19 +70,22 @@ export const SWANSEA_BAY_10K: RaceGuide = {
     'factor is the breeze on the exposed seafront, which on an out-and-back you take in both directions.',
 
   coachNotes: [
-    { heading: 'Settle in early',
-      body: 'After the start, find a comfortable, sustainable rhythm and relax — don’t let the early ' +
-            'excitement or faster runners around you pull you along. Let the effort come to you.' },
+    { heading: 'Run to your predicted pace, not the crowd',
+      body: 'There’s no fixed goal time set, so the header shows a predicted finish from your current ' +
+            'fitness. Treat that pace as the ceiling for the first half: go out a touch easier, relax, and ' +
+            'let the effort come to you. Nearly everyone who fades went out faster than their prediction.' },
     { heading: 'Read the wind at the turn',
-      body: 'It’s an out-and-back, so whatever the wind does on the way out, it reverses on the way back. ' +
-            'Run by feel and effort rather than fighting it — a tough leg into the breeze is repaid on the ' +
-            'way home.' },
-    { heading: 'Break it into the turn and the way home',
-      body: 'On a flat, straight seafront course it helps to run to the 5 km turn, then treat the return as ' +
-            'its own effort. Keep the cadence ticking and pick people off one at a time.' },
-    { heading: 'Enjoy the finish',
-      body: 'Save a little for the last stretch back along the promenade, lift the effort into the line, and ' +
-            'enjoy the run in along the bay.' },
+      body: 'It’s an out-and-back, so whatever the wind does on the way out reverses on the way back. Run by ' +
+            'feel rather than fighting it — a tough leg into the breeze is repaid on the way home.' },
+    { heading: 'Water at the 5 km turn',
+      body: 'There’s water at the halfway turn. If it’s warm, take a mouthful, then settle straight back into ' +
+            'rhythm — don’t let the stop break your cadence.' },
+    { heading: 'Build the way home',
+      body: 'Treat the return leg as its own effort. Keep the cadence ticking, pick people off one at a time, ' +
+            'and lift into the line along the promenade — a slightly faster second half is the goal.' },
+    { heading: 'It’s a comeback, not a test',
+      body: 'This is your first 10K back from knee surgery. If the knee complains sharply, ease right off — ' +
+            'finishing smooth, in control and pain-free is the result that matters here.' },
   ],
 
   pacingNote:
