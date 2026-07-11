@@ -10,7 +10,7 @@ import { normalizeStructure } from '@/lib/plan-structure';
 import { computeExecutionScore, scoreColor } from '@/lib/execution-score';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
-  INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare,
+  INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, isMergedRun, collapseToWholeRun,
 } from '@/components/session-ui';
 import { RunGlyph } from '@/components/glyphs';
 import LongRunQuality from '@/components/LongRunQuality';
@@ -38,18 +38,25 @@ export default function SessionHero({
   fuelProducts?: FuelProduct[];   // for the inline long-run fuel log
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
+  // A merged run (two separate activities stitched into one session) has no valid
+  // per-segment splits — collapse its detail to one whole-run line so it reads as done
+  // (overall actual vs the planned envelope) rather than per-segment planned rows.
+  const merged = !!completed && isMergedRun(completed.segmentActuals);
+  const wholeSecs = completed?.mins != null ? completed.mins * 60 : null;
   const { segActuals, segHr } = wholeRunActuals(
     !!session.structure?.length,
     completed
-      ? { totalSeconds: completed.mins != null ? completed.mins * 60 : null, distanceKm: completed.distanceKm, avgHr: completed.avgHr }
+      ? { totalSeconds: wholeSecs, distanceKm: completed.distanceKm, avgHr: completed.avgHr }
       : null,
     completed?.segmentActuals ?? null,
     completed?.segmentHr ?? null,
   );
-  const steps = normalizeStructure(
+  const baseSteps = normalizeStructure(
     session.structure?.length ? session.structure : syntheticStructure(session, intensity),
     zones, segActuals, hrZones, segHr,
   );
+  const wholeAvgPace = wholeSecs != null && completed?.distanceKm ? Math.round(wholeSecs / completed.distanceKm) : null;
+  const steps = merged ? [collapseToWholeRun(baseSteps, wholeAvgPace, completed?.avgHr ?? null)] : baseSteps;
   const plannedSec = sumSegmentSeconds(steps);
   const plannedDur = plannedSec > 0 ? fmtHMMSS(plannedSec) : session.estimated_duration ?? null;
   const profileSession = { ...session, structure: session.structure?.length ? session.structure : syntheticStructure(session, intensity) };
@@ -61,8 +68,9 @@ export default function SessionHero({
   const distActual  = completed?.distanceKm ?? null;
   const tssActual   = completed?.tss ?? null;
   const isRace      = session.session_type === 'RACE';
-  // Execution score — pacing vs plan. Runs only (not races), when scorable.
-  const exec = isDone && !isRace ? computeExecutionScore(steps) : null;
+  // Execution score — pacing vs plan. Runs only (not races), when scorable. Skipped
+  // for a merged run: a whole-run average can't be graded against the planned segments.
+  const exec = isDone && !isRace && !merged ? computeExecutionScore(steps) : null;
 
   // Long-run quality block — qualifying long runs (planned long run 'LR' OR ≥25 km)
   // with durability metrics computed at sync.
