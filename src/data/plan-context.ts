@@ -17,7 +17,7 @@ import {
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
-import { listAvailabilityBetween, getAvailabilityReviewState, type AvailabilityRow } from '@/data/availability';
+import { listAvailabilityBetween, getAvailabilityReviewState, describeAvailabilityRow, type AvailabilityRow } from '@/data/availability';
 import { detectAvailabilityConflicts, type AvailabilityConflict, type ConflictSession } from '@/lib/availability-conflicts';
 import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
@@ -100,7 +100,7 @@ export interface PlanContext {
     power_zones: { name: string; power_min: number; power_max: number }[];
   };
   constraints: Record<string, unknown>[];
-  availability: AvailabilityRow[];               // next 14 days of training restrictions the user recorded
+  availability: (AvailabilityRow & { summary: string })[]; // next 14 days of restrictions the user recorded; `summary` states the direction (items are BARRED, not allowed)
   availability_conflicts: AvailabilityConflict[]; // precomputed clashes between availability and the plan
   availability_review: {                         // the "changed since I last looked?" gate
     content_updated_at: string; last_reviewed_at: string | null; changed_since_review: boolean;
@@ -290,7 +290,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
       power_zones: powerZones.map(z => ({ name: z.name, power_min: z.power_min, power_max: z.power_max })),
     },
     constraints: constraints as Record<string, unknown>[],
-    availability,
+    availability: availability.map(r => ({ ...r, summary: describeAvailabilityRow(r) })),
     availability_conflicts: availabilityConflicts,
     availability_review: {
       content_updated_at: availabilityReview.content_updated_at,

@@ -22,6 +22,42 @@ export interface AvailabilityRow {
   note: string | null;
 }
 
+// Known sports the plan schedules, in display order — used to turn a barred-list
+// into an "X only" phrasing. Yoga is intentionally omitted: it needs no equipment
+// or venue, so it's never something you can't do (and never the sole thing left).
+const KNOWN_ACTIVITIES = ['running', 'cycling', 'swimming', 'strength'] as const;
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+// A plain, unambiguous one-liner for a restriction — the crucial thing being that
+// `items` on an activity_limited/equipment_limited row are the *barred* things, not
+// the allowed ones. Consumers that only see the raw enum + items (the MCP coach)
+// have inverted "no cycling/strength/swimming" into "cycling/strength/swimming only";
+// this states the direction explicitly so that can't happen.
+export function describeAvailabilityRow(r: AvailabilityRow): string {
+  switch (r.kind) {
+    case 'full_day':
+      return 'Whole day unavailable — no training possible';
+    case 'reduced_intensity':
+      return 'Below par — keep it easy; no hard or marathon-pace work';
+    case 'time_limited':
+      return r.minutes != null ? `Only ${r.minutes} min available` : 'Limited time available';
+    case 'activity_limited': {
+      if (!r.items.length) return 'Some activities unavailable';
+      const barred = r.items.join(', ');
+      // If barring these leaves exactly one known sport, "X only" is clearer.
+      const allowed = KNOWN_ACTIVITIES.filter(a => !r.items.includes(a));
+      return allowed.length === 1
+        ? `${cap(allowed[0])} only — cannot do ${barred}`
+        : `Cannot do ${barred} (these activities are barred)`;
+    }
+    case 'equipment_limited':
+      return r.items.length
+        ? `No ${r.items.join(', ')} available — adapt strength work (bodyweight is fine)`
+        : 'Some equipment unavailable';
+  }
+}
+
 // ── reads ────────────────────────────────────────────────────
 
 // Shape a raw row into an AvailabilityRow.
