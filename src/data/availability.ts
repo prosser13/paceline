@@ -2,8 +2,7 @@
 // user records ahead of time (the `availability` table). The richer, per-date
 // sibling of plan_constraints: one row per restriction, several allowed per day.
 // Edited a whole day at a time (replace-on-save), same shape as replacePlanConstraints
-// in coaching.ts. One home for this cluster so per-user scoping later lands in a
-// single place. Global single-set today.
+// in coaching.ts. All reads/writes are scoped to the current user via currentUserId().
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
@@ -50,9 +49,11 @@ export async function listAvailability(): Promise<AvailabilityRow[]> {
 
 // Restrictions within [from, to] (inclusive) — the window the coach reviews.
 export async function listAvailabilityBetween(from: string, to: string): Promise<AvailabilityRow[]> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('availability')
     .select('date, kind, minutes, items, note')
+    .eq('user_id', userId)
     .gte('date', from)
     .lte('date', to)
     .order('date');
@@ -67,10 +68,11 @@ export interface AvailabilityReviewState {
 }
 
 export async function getAvailabilityReviewState(): Promise<AvailabilityReviewState> {
+  const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('availability_review')
     .select('content_updated_at, last_reviewed_at')
-    .eq('id', 1)
+    .eq('user_id', userId)
     .maybeSingle();
   return {
     content_updated_at: (data?.content_updated_at as string | undefined) ?? new Date(0).toISOString(),
@@ -80,9 +82,10 @@ export async function getAvailabilityReviewState(): Promise<AvailabilityReviewSt
 
 // Stamp "reviewed now" so changed_since_review flips false until the next edit.
 export async function markAvailabilityReviewed(): Promise<void> {
+  const userId = await currentUserId();
   await supabaseAdmin
     .from('availability_review')
-    .upsert({ id: 1, last_reviewed_at: new Date().toISOString() });
+    .upsert({ user_id: userId, last_reviewed_at: new Date().toISOString() }, { onConflict: 'user_id' });
 }
 
 // ── writes ───────────────────────────────────────────────────
