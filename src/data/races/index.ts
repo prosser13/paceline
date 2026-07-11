@@ -6,6 +6,7 @@ import { MALAGA_MARATHON } from './malaga-marathon';
 import { PORTHCAWL_10K } from './porthcawl-10km';
 import { THH_5K_ON_THE_BAY } from './thh-5k-on-the-bay';
 import { SWANSEA_BAY_10K } from './swansea-bay-10km';
+import { LONDON_MARATHON } from './london-marathon';
 
 const GUIDES: Record<string, RaceGuide> = {
   [DRAGON_50.slug]: DRAGON_50,
@@ -13,6 +14,7 @@ const GUIDES: Record<string, RaceGuide> = {
   [PORTHCAWL_10K.slug]: PORTHCAWL_10K,
   [THH_5K_ON_THE_BAY.slug]: THH_5K_ON_THE_BAY,
   [SWANSEA_BAY_10K.slug]: SWANSEA_BAY_10K,
+  [LONDON_MARATHON.slug]: LONDON_MARATHON,
 };
 
 export function getRaceGuide(slug: string): RaceGuide | null {
