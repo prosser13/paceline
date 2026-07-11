@@ -96,6 +96,21 @@ export async function listAvailabilityBetween(from: string, to: string): Promise
   return (data ?? []).map(toRow);
 }
 
+// Every restriction from `from` onward (no upper bound). The coach needs to see
+// restrictions the user recorded ahead of time even when they fall beyond the
+// 14-day editable-session horizon — otherwise it reports "nothing set" for a day
+// that is, in fact, restricted.
+export async function listAvailabilityFrom(from: string): Promise<AvailabilityRow[]> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('availability')
+    .select('date, kind, minutes, items, note')
+    .eq('user_id', userId)
+    .gte('date', from)
+    .order('date');
+  return (data ?? []).map(toRow);
+}
+
 // ── review gate (has availability changed since the coach last looked?) ──
 
 export interface AvailabilityReviewState {
