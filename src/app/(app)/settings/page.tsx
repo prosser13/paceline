@@ -26,8 +26,10 @@ import IntegrationsClient from './IntegrationsClient';
 import ChangeLogClient from './ChangeLogClient';
 import SignOutClient from './SignOutClient';
 import ViewAsCard from './ViewAsCard';
+import McpClient from './McpClient';
 import { getViewer } from '@/lib/auth';
 import { getImpersonatedUserId, listImpersonatableUsers } from '@/lib/impersonation';
+import { getMcpTokenInfo } from '@/data/mcp-tokens';
 import {
   saveBikeHrZones,
   type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
@@ -69,6 +71,8 @@ export default async function SettingsPage() {
   const [viewAsUsers, viewingAsId] = viewer?.role === 'owner'
     ? await Promise.all([listImpersonatableUsers(viewer.user.id), getImpersonatedUserId()])
     : [[], null];
+
+  const mcpToken = await getMcpTokenInfo();
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
     id: p.id,
@@ -239,6 +243,15 @@ export default async function SettingsPage() {
             <ViewAsCard users={viewAsUsers} activeId={viewingAsId} />
           </SettingsCard>
         )}
+
+        <SettingsCard cat="Account" color="var(--color-stone)" title="Claude (MCP)"
+          subtitle="Connect Claude to your paceline data with a read-only MCP connector — query your plan, sessions, zones, races and recent workouts. Each token is yours alone.">
+          <McpClient
+            initialExists={mcpToken.exists}
+            createdAt={mcpToken.createdAt}
+            lastUsedAt={mcpToken.lastUsedAt}
+          />
+        </SettingsCard>
 
         <SettingsCard cat="Account" color="var(--color-stone)" title="Session"
           subtitle="Sign out of this device." last>
