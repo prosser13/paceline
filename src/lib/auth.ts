@@ -8,46 +8,11 @@
 
 import { timingSafeEqual } from 'node:crypto';
 import { createClient, getCurrentUser as getSessionUser } from './supabase-server';
+import { roleFor, type Role } from './roles';
+import { isImpersonating } from './impersonation';
 import type { User } from '@supabase/supabase-js';
 
-// The app is multi-tenant: each allowlisted account owns its own data. OWNER_EMAILS
-// is a comma-separated allowlist of accounts that may sign in and own data — any
-// other authenticated Supabase account resolves to null everywhere auth is checked.
-// Unset → any authed user is treated as an owner (legacy/dev fallback), so set
-// OWNER_EMAILS in production (alongside disabling Supabase signups) to close the hole
-// in code. (OWNER_EMAIL is still read as a single-value fallback for older deploys.)
-const OWNER_EMAILS = new Set(
-  (process.env.OWNER_EMAILS ?? process.env.OWNER_EMAIL ?? '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean),
-);
-
-// Read-only guests. Comma-separated allowlist of emails that may VIEW everything
-// the owner sees but may not mutate anything. A viewer passes the page/read gate
-// (`getViewer`) yet fails every write gate — `requireUser`, the owner-only API
-// routes, and `isAuthorizedRequest` all resolve through the OWNER tier below — so
-// access is view-only without having to touch each of the ~50 server actions.
-const VIEWER_EMAILS = new Set(
-  (process.env.VIEWER_EMAILS ?? '')
-    .split(',')
-    .map(e => e.trim().toLowerCase())
-    .filter(Boolean),
-);
-
-export type Role = 'owner' | 'viewer';
-
-// The single source of truth mapping an email → access tier (or null for neither).
-// When OWNER_EMAIL is unset we keep the legacy "any authed account is the owner"
-// behaviour so a misconfigured env never silently locks the owner out.
-function roleFor(email: string | null | undefined): Role | null {
-  const e = (email ?? '').trim().toLowerCase();
-  if (!e) return null;
-  if (OWNER_EMAILS.size === 0) return 'owner';
-  if (OWNER_EMAILS.has(e)) return 'owner';
-  if (VIEWER_EMAILS.has(e)) return 'viewer';
-  return null;
-}
+export type { Role };
 
 // Constant-time comparison that also guards the length mismatch timingSafeEqual
 // would otherwise throw on. Use for every bearer-secret check so token comparison
@@ -61,11 +26,18 @@ function safeEqual(a: string, b: string): boolean {
 
 // Current authenticated OWNER, or null. Use in route handlers to return a 401.
 // Viewers (read-only guests) resolve to null here — this is the WRITE gate.
+// While an owner is "viewing as" another user (impersonation.ts), this also returns
+// null: the owner is read-only for the duration, so every write gate that resolves
+// through here (requireUser, owner-only API routes) fails closed and no mutation can
+// land on the impersonated user's data. Reads are unaffected — the data layer scopes
+// through currentUserId() (scope.ts), which returns the impersonated id.
 export async function getCurrentUser(): Promise<User | null> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
-  return roleFor(user.email) === 'owner' ? user : null;
+  if (roleFor(user.email) !== 'owner') return null;
+  if (await isImpersonating()) return null;
+  return user;
 }
 
 // Current authenticated owner, throwing 'Unauthorized' if there is none. Use at

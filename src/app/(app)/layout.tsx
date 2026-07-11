@@ -1,9 +1,11 @@
 import { getViewer } from '@/lib/auth';
+import { getImpersonatedEmail } from '@/lib/impersonation';
 import { redirect } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import MobileNav from '@/components/MobileNav';
 import MobileMenu from '@/components/MobileMenu';
 import PacelineMark from '@/components/PacelineMark';
+import ViewAsBanner from '@/components/ViewAsBanner';
 import { listNavPlans } from '@/data/plans';
 import { todayISO } from '@/lib/dates';
 
@@ -21,6 +23,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const viewer = await getViewer();
   if (!viewer) redirect('/auth/login');
 
+  // When an owner is viewing as another athlete, show a persistent read-only banner
+  // with an exit. Null (no banner) for a normal session — resolver is owner-gated.
+  const viewAsEmail = await getImpersonatedEmail();
+
   const todayStr = todayISO();
   const plans = await listNavPlans();
 
@@ -37,6 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <div className="flex h-full overflow-hidden bg-bone">
       <Sidebar plans={navPlans} hasArchive={hasArchive} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {viewAsEmail && <ViewAsBanner email={viewAsEmail} />}
         {/* Mobile top bar — the sidebar is hidden below md, so branding lives here */}
         <header className="md:hidden flex items-center justify-between h-[54px] pl-4 pr-2 bg-paper border-b border-fog shrink-0">
           <span className="flex items-center gap-2 font-display font-semibold text-[18px] text-ink">

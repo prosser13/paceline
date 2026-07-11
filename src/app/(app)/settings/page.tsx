@@ -25,6 +25,9 @@ import TrainingLocationClient from './TrainingLocationClient';
 import IntegrationsClient from './IntegrationsClient';
 import ChangeLogClient from './ChangeLogClient';
 import SignOutClient from './SignOutClient';
+import ViewAsCard from './ViewAsCard';
+import { getViewer } from '@/lib/auth';
+import { getImpersonatedUserId, listImpersonatableUsers } from '@/lib/impersonation';
 import {
   saveBikeHrZones,
   type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
@@ -59,6 +62,13 @@ export default async function SettingsPage() {
     getRevertableChange(),
     getUserIntegrations(),
   ]);
+
+  // "View as" is owner-only. getViewer reflects the REAL session identity (not the
+  // impersonated one), so an owner still sees the picker while viewing as someone.
+  const viewer = await getViewer();
+  const [viewAsUsers, viewingAsId] = viewer?.role === 'owner'
+    ? await Promise.all([listImpersonatableUsers(viewer.user.id), getImpersonatedUserId()])
+    : [[], null];
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
     id: p.id,
@@ -222,6 +232,13 @@ export default async function SettingsPage() {
             hasApiKey={!!integrations?.intervals_api_key}
           />
         </SettingsCard>
+
+        {viewAsUsers.length > 0 && (
+          <SettingsCard cat="Account" color="var(--color-stone)" title="View as"
+            subtitle="See the app as another athlete sees it — their dashboard, plan and coach messages — without their login. Read-only: you can look but not change their data. A banner and exit stay on screen while you're viewing.">
+            <ViewAsCard users={viewAsUsers} activeId={viewingAsId} />
+          </SettingsCard>
+        )}
 
         <SettingsCard cat="Account" color="var(--color-stone)" title="Session"
           subtitle="Sign out of this device." last>
