@@ -27,8 +27,9 @@ export const LONDON_MARATHON: RaceGuide = {
   ascentM: 50, // net downhill, essentially flat (~50 m smoothed)
   startTime: '10:00', // PLACEHOLDER — confirm Beth's wave time
   date: '2027-04-24',
-  targetTime: '5:00:00',
-  targetPace: '7:07', // ~7:07/km for a sub-5:00 finish
+  targetTime: null,      // no time goal set yet
+  targetPace: null,
+  hideTargets: true,     // blank target/goal/pacing figures for now
   gpxPath: '/races/london-marathon.gpx',
 
   summary:
@@ -87,29 +88,29 @@ export const LONDON_MARATHON: RaceGuide = {
     'pace if it’s warm.',
 
   coachNotes: [
-    { heading: 'Bank effort, not pace, on the downhill start',
-      body: 'The first few miles off Blackheath drop downhill through big crowds, and 6:40s will feel ' +
-            'effortless. Clamp it to 7:07/km. Every second banked early is repaid with interest after 20 miles — ' +
-            'start controlled and you’ll pass hundreds of people in the last 10 km.' },
-    { heading: 'Fuel early and to a schedule',
-      body: 'Don’t wait for the wall. Start carbs by ~45 min and keep a steady drip — aim for 30–60 g of carbs ' +
-            'an hour. The on-course Lucozade helps but is light and front-loaded, so carry your own gels and take ' +
-            'them on a clock (e.g. every 30–40 min), not by feel.' },
-    { heading: 'Respect the Isle of Dogs',
-      body: 'Miles 15–22 around Canary Wharf are the quiet, twisting, mentally hard stretch where the crowds ' +
-            'thin. This is where the race is won or lost — hold form, keep the cadence up, and break it into ' +
-            'small chunks between fuel points.' },
-    { heading: 'Take the Tower Bridge lift, then let it go',
-      body: 'Crossing Tower Bridge at halfway is the loudest moment of the day — enjoy it, but don’t let the ' +
-            'adrenaline pull a fast half-marathon split out of you. Check your watch, reset to 7:07, carry on.' },
-    { heading: 'Save something for The Mall',
-      body: 'From the Embankment it’s flat and lined the whole way. From mile 23 it should hurt — commit to the ' +
-            'effort, use the crowd, and drive past Big Ben and up Birdcage Walk to the finish on The Mall.' },
+    { heading: 'Respect the distance — start easy',
+      body: 'The first few miles off Blackheath drop downhill through huge crowds and feel effortless. That’s ' +
+            'the trap: start comfortable and well within yourself. Running the early miles too hard is the one ' +
+            'mistake that costs you late in a marathon.' },
+    { heading: 'Fuel and drink regularly from early on',
+      body: 'Don’t wait until you’re empty. Take on fuel and fluid steadily from the start — there’s water ' +
+            'every 2 miles, on-course Lucozade Sport and gels at set points, and carry your own too. See the ' +
+            'nutrition plan for the details; the key is little and often, not all at once.' },
+    { heading: 'Break it into chunks',
+      body: 'Don’t think about the whole distance. Run aid station to aid station, or landmark to landmark — ' +
+            'Cutty Sark, Tower Bridge, Canary Wharf, the Embankment. The quiet middle miles around the Isle of ' +
+            'Dogs are where staying patient and relaxed pays off.' },
+    { heading: 'Use the crowds',
+      body: 'London’s support is enormous — Tower Bridge at halfway and the Embankment run-in are special. ' +
+            'Let the noise lift you, especially when it gets tough, but keep your effort steady rather than ' +
+            'getting carried away.' },
+    { heading: 'Enjoy it',
+      body: 'It’s one of the great marathons and a huge achievement to run. Soak up the finish up Birdcage ' +
+            'Walk and onto The Mall — take it all in.' },
   ],
 
   pacingNote:
-    'Even splits for 5:00:00 (7:07/km) on a flat, net-downhill course. The discipline is holding back on the ' +
-    'fast opening miles — negative-split it if anything, and let the crowds carry the finish.',
+    'Checkpoint distances, climb and descent for reference — a pacing target will be added closer to the day.',
 
   fuel: {
     carbsPerHourG: [30, 60],

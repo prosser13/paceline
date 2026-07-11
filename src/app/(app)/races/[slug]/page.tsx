@@ -88,12 +88,15 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // stay. Kit stays editable and saves to the viewer (race_kit is per-user).
   const viewerEmail = viewer?.user.email?.toLowerCase() ?? null;
   const owned = !!viewerEmail && (guide.ownerEmails ?? []).some(e => e.toLowerCase() === viewerEmail);
+  // `hideTargets` blanks targets/goals/pacing for EVERYONE (a race on the calendar
+  // with no time goal yet); a non-owner also gets them blanked. Coach notes stay.
+  const blankTargets = !owned || !!guide.hideTargets;
 
   // Live plan row wins; otherwise fall back to the guide's own values (for races
-  // without a dedicated plan, e.g. a B-race tune-up).
+  // without a dedicated plan, e.g. a B-race tune-up). Null when targets are hidden.
   const raceDate = plan?.race_date ?? guide.date ?? null;
-  const targetTime = plan?.target_time ?? guide.targetTime ?? guide.goalTiers[0].time;
-  const targetPace = plan?.target_pace ?? guide.targetPace ?? null;
+  const targetTime = guide.hideTargets ? null : (plan?.target_time ?? guide.targetTime ?? guide.goalTiers[0]?.time ?? null);
+  const targetPace = guide.hideTargets ? null : (plan?.target_pace ?? guide.targetPace ?? null);
   const distanceKm = plan?.distance_km ?? guide.distanceKm;
 
   const todayStr = todayISO();
@@ -228,8 +231,10 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   }
   const readiness = projection ? readinessFromProjection(projection) : null;
 
-  const pacing = buildPacing(guide, targetTime);
-  const targetTimeDisplay = formatTargetTime(targetTime);
+  // Pacing rows need a target to distribute time; when there's none, build with a
+  // placeholder purely to get the checkpoint rows, then blank the paces at render.
+  const pacing = buildPacing(guide, targetTime ?? '1:00:00');
+  const targetTimeDisplay = targetTime ? formatTargetTime(targetTime) : '—';
 
   // Fuel rehearsal readiness — for endurance races (≥30 km), compare logged
   // long-run fuelling (last 16 weeks) against the plan's carb target, plus
@@ -340,7 +345,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               : [
                   { label: 'Distance', value: `${distanceKm ?? guide.distanceKm} km` },
                   { label: 'Ascent', value: guide.ascentM ? `${guide.ascentM} m` : 'Flat' },
-                  { label: 'Target', value: owned ? targetTimeDisplay : '—' },
+                  { label: 'Target', value: owned && targetTime ? targetTimeDisplay : '—' },
                   { label: 'Pace', value: owned && targetPace ? `${targetPace}/km` : '—' },
                 ]
             ).map(({ label, value }) => (
@@ -452,8 +457,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
               {guide.goalTiers.map(t => (
                 <div key={t.label} className="flex flex-1 items-center gap-[14px] px-[18px] py-[14px]">
                   <span className="font-display font-bold text-[20px] text-oxblood w-[20px]">{t.label}</span>
-                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{owned ? formatTargetTime(t.time) : '—'}</span>
-                  <span className="text-[13px] text-stone leading-snug">{owned ? t.note : ''}</span>
+                  <span className="font-display font-bold text-[20px] text-ink w-[68px] tabular-nums">{blankTargets ? '—' : formatTargetTime(t.time)}</span>
+                  <span className="text-[13px] text-stone leading-snug">{blankTargets ? '' : t.note}</span>
                 </div>
               ))}
             </div>
@@ -488,8 +493,8 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         </div>
         <div className="mt-[24px]">
           <PacingTable
-            rows={owned ? pacing : pacing.map(r => ({ ...r, legPace: null, cumElapsed: '—', arrival: '—' }))}
-            targetTime={owned ? targetTimeDisplay : '—'}
+            rows={blankTargets ? pacing.map(r => ({ ...r, legPace: null, cumElapsed: '—', arrival: '—' })) : pacing}
+            targetTime={blankTargets ? '—' : targetTimeDisplay}
             note={owned ? guide.pacingNote : null}
           />
         </div>

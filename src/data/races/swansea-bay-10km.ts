@@ -23,8 +23,9 @@ export const SWANSEA_BAY_10K: RaceGuide = {
   ascentM: 35, // essentially flat seafront; ~35 m smoothed (GPS noise aside)
   startTime: '11:00',
   date: '2026-09-20',
-  targetTime: '0:55:00', // H:MM:SS so the sub-hour time parses unambiguously
-  targetPace: '5:30',
+  targetTime: null,      // no time goal set yet
+  targetPace: null,
+  hideTargets: true,     // blank target/goal/pacing figures for now
   gpxPath: '/races/swansea-bay-10km.gpx',
 
   summary:
@@ -69,24 +70,23 @@ export const SWANSEA_BAY_10K: RaceGuide = {
     'factor is the breeze on the exposed seafront, which on an out-and-back you take in both directions.',
 
   coachNotes: [
-    { heading: 'Start controlled',
-      body: 'A flat start line and race-day adrenaline make 5:00s feel easy — clamp it to 5:30/km from the ' +
-            'gun. Going out a few seconds slow costs nothing; going out fast on a 10K always costs more later.' },
+    { heading: 'Settle in early',
+      body: 'After the start, find a comfortable, sustainable rhythm and relax — don’t let the early ' +
+            'excitement or faster runners around you pull you along. Let the effort come to you.' },
     { heading: 'Read the wind at the turn',
-      body: 'It’s an out-and-back, so whatever the wind does on the way out, it reverses on the way back. If ' +
-            'the first half is into a headwind, don’t panic at slightly slow splits — you’ll get it back after ' +
-            'the 5 km turn. If it’s helping early, bank effort, not pace, for the return.' },
-    { heading: 'Own the way home',
-      body: '5–8 km is where a 10K is decided. Relax the shoulders, keep the cadence high, and pick off ' +
-            'runners one at a time. Hold 5:30 by effort here and the finish takes care of itself.' },
-    { heading: 'Empty it on the flat run-in',
-      body: 'The last 2 km are flat and fast back to the promenade. From 8 km commit to the effort, fix on ' +
-            'someone ahead, and drive the finish.' },
+      body: 'It’s an out-and-back, so whatever the wind does on the way out, it reverses on the way back. ' +
+            'Run by feel and effort rather than fighting it — a tough leg into the breeze is repaid on the ' +
+            'way home.' },
+    { heading: 'Break it into the turn and the way home',
+      body: 'On a flat, straight seafront course it helps to run to the 5 km turn, then treat the return as ' +
+            'its own effort. Keep the cadence ticking and pick people off one at a time.' },
+    { heading: 'Enjoy the finish',
+      body: 'Save a little for the last stretch back along the promenade, lift the effort into the line, and ' +
+            'enjoy the run in along the bay.' },
   ],
 
   pacingNote:
-    'Even splits for 55:00 (5:30/km) on a flat course. The only wildcard is the wind — hold effort into it ' +
-    'on one leg of the out-and-back and let the pace come back on the other.',
+    'Checkpoint distances and climb for reference — a pacing target will be added closer to the day.',
 
   fuel: {
     carbsPerHourG: [30, 40],

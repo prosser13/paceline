@@ -72,6 +72,10 @@ export interface RaceGuide {
   date?: string | null;        // yyyy-mm-dd
   targetTime?: string | null;
   targetPace?: string | null;
+  /** Hide all target/goal/pacing figures for everyone (even the owner) — the race
+   *  is on the calendar but no time goal is set yet. Header target/pace, goal-tier
+   *  values, and the pacing splits show dashes; coach notes stay (kept generic). */
+  hideTargets?: boolean;
   /** Static GPX path under /public, or null if not yet supplied. */
   gpxPath: string | null;
 
