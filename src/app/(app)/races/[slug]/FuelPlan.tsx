@@ -32,31 +32,37 @@ export default function FuelPlan({
   fluidRange,
   fluidNote,
   readiness = null,
+  locked = false,
 }: {
   fuel: FuelPlanData;
   schedule: FuelStop[];
   fluidRange: [number, number];
   fluidNote: string | null;
   readiness?: FuelReadiness | null;
+  // When true, this race isn't the viewer's — show the table structure but blank
+  // the athlete-specific values (targets, pre-start, per-checkpoint fuelling).
+  locked?: boolean;
 }) {
+  const DASH = '—';
   return (
     <div className={cardClass}>
       <div className="px-[18px] py-[15px]">
         <CardTitle>Nutrition &amp; hydration</CardTitle>
         <div className="grid grid-cols-3 gap-[10px]">
-          <Target label="Carbs" value={`${fuel.carbsPerHourG[0]}–${fuel.carbsPerHourG[1]}`} unit="g/hr" />
-          <Target label="Fluid" value={`${fluidRange[0]}–${fluidRange[1]}`} unit="ml/hr" />
-          <Target label="Sodium" value={fuel.sodiumPerHourMg ? `~${fuel.sodiumPerHourMg}` : '—'} unit="mg/hr" />
+          <Target label="Carbs" value={locked ? DASH : `${fuel.carbsPerHourG[0]}–${fuel.carbsPerHourG[1]}`} unit="g/hr" />
+          <Target label="Fluid" value={locked ? DASH : `${fluidRange[0]}–${fluidRange[1]}`} unit="ml/hr" />
+          <Target label="Sodium" value={locked ? DASH : (fuel.sodiumPerHourMg ? `~${fuel.sodiumPerHourMg}` : '—')} unit="mg/hr" />
         </div>
         <p className="font-mono text-[10px] text-stone mt-[8px] mb-[16px]">
-          {fluidNote ?? 'Fluid is a starting point — it rises automatically once the race-day forecast lands.'}
+          {locked ? 'Nutrition plan is set per athlete — this race isn’t assigned to you.'
+                  : (fluidNote ?? 'Fluid is a starting point — it rises automatically once the race-day forecast lands.')}
         </p>
 
-        {readiness && <FuelReadinessStrip r={readiness} />}
+        {!locked && readiness && <FuelReadinessStrip r={readiness} />}
 
         <div className="rounded-[10px] bg-fern-soft/60 border border-fern/20 px-[14px] py-[11px] mb-[16px]">
           <p className="font-mono text-[10px] uppercase tracking-[.08em] text-fern mb-[4px]">Before the start</p>
-          <p className="text-[13px] text-ink leading-snug">{fuel.preStart}</p>
+          <p className="text-[13px] text-ink leading-snug">{locked ? DASH : fuel.preStart}</p>
         </div>
 
         {/* checkpoint-by-checkpoint plan — scrolls sideways on mobile */}
@@ -74,17 +80,17 @@ export default function FuelPlan({
                 <tr key={i} className="border-t border-fog/70 align-top">
                   <td className="px-[14px] py-[9px]">
                     <CheckpointLabel name={s.name} dropBag={s.dropBag} />
-                    <div className="font-mono text-[10px] text-stone mt-[3px]">{s.distanceKm} km · {s.time}</div>
+                    <div className="font-mono text-[10px] text-stone mt-[3px]">{s.distanceKm} km · {locked ? DASH : s.time}</div>
                   </td>
-                  <td className="px-[12px] py-[9px] text-stone leading-snug">{s.between}</td>
-                  <td className="px-[14px] py-[9px] text-ink leading-snug">{s.atStop}</td>
+                  <td className="px-[12px] py-[9px] text-stone leading-snug">{locked ? DASH : s.between}</td>
+                  <td className="px-[14px] py-[9px] text-ink leading-snug">{locked ? DASH : s.atStop}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {fuel.note && (
+        {!locked && fuel.note && (
           <p className="text-[12px] text-stone leading-relaxed mt-[14px]">
             <span className="font-mono text-[10px] uppercase tracking-[.08em] text-fern mr-[6px]">The plan</span>
             {fuel.note}
