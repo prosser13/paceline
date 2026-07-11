@@ -17,7 +17,7 @@ import {
 import { getCurrentWeek } from '@/data/plans';
 import { getWellnessCacheRow } from '@/data/wellness-cache';
 import { listPlanConstraints, getCoachingPrefs } from '@/data/coaching';
-import { listAvailabilityBetween, getAvailabilityReviewState, describeAvailabilityRow, type AvailabilityRow } from '@/data/availability';
+import { listAvailabilityFrom, getAvailabilityReviewState, describeAvailabilityRow, type AvailabilityRow } from '@/data/availability';
 import { detectAvailabilityConflicts, type AvailabilityConflict, type ConflictSession } from '@/lib/availability-conflicts';
 import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
@@ -100,7 +100,7 @@ export interface PlanContext {
     power_zones: { name: string; power_min: number; power_max: number }[];
   };
   constraints: Record<string, unknown>[];
-  availability: (AvailabilityRow & { summary: string })[]; // next 14 days of restrictions the user recorded; `summary` states the direction (items are BARRED, not allowed)
+  availability: (AvailabilityRow & { summary: string })[]; // all upcoming restrictions the user recorded (not clipped to the 14-day session window); `summary` states the direction (items are BARRED, not allowed)
   availability_conflicts: AvailabilityConflict[]; // precomputed clashes between availability and the plan
   availability_review: {                         // the "changed since I last looked?" gate
     content_updated_at: string; last_reviewed_at: string | null; changed_since_review: boolean;
@@ -212,7 +212,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getPowerConfig(),
     listPowerZones(),
     listPlanConstraints(),
-    listAvailabilityBetween(upcomingFrom, upcomingTo),
+    listAvailabilityFrom(upcomingFrom),
     getAvailabilityReviewState(),
     getCoachingPrefs(),
     getRecentChanges(),
@@ -222,10 +222,15 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     getFuelPlanForGoalBlock(today),
   ]);
 
-  // Deterministic availability↔plan conflicts over the same window as `upcoming`
-  // (already loaded — no extra query). The coach authors the resolution; this is the
-  // reliable "what clashes" half of the hybrid.
-  const conflictSessions: ConflictSession[] = upcoming.map(s => ({
+  // Deterministic availability↔plan conflicts. `upcoming` covers the 14-day edit
+  // window; availability can reach further out, so when it does, fetch the plan
+  // sessions spanning to the latest restriction (only then) so a clash on a far day
+  // is still detected. Within 14 days we reuse `upcoming` — no extra query.
+  const latestAvailability = availability.reduce((m, r) => (r.date > m ? r.date : m), upcomingTo);
+  const conflictSource = latestAvailability > upcomingTo
+    ? await getUpcomingSessions(upcomingFrom, latestAvailability)
+    : upcoming;
+  const conflictSessions: ConflictSession[] = conflictSource.map(s => ({
     scheduled_date:     s.scheduled_date as string,
     name:               s.name as string,
     session_type:       s.session_type as string,
