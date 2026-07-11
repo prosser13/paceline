@@ -158,10 +158,12 @@ export function wholeRunActuals(
   let segActuals = existingPace;
   let segHr      = existingHr;
   if (completed && !hasStructure) {
-    if (!segActuals && completed.totalSeconds != null && completed.distanceKm) {
+    // An empty array (merged run's "no per-segment splits" sentinel) counts as
+    // absent here, so an unstructured merged run still gets its whole-run average.
+    if (!segActuals?.length && completed.totalSeconds != null && completed.distanceKm) {
       segActuals = [Math.round(completed.totalSeconds / completed.distanceKm)];
     }
-    if (!segHr && completed.avgHr != null) {
+    if (!segHr?.length && completed.avgHr != null) {
       segHr = [completed.avgHr];
     }
   }

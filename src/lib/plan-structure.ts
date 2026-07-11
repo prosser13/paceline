@@ -226,8 +226,14 @@ export function normalizeStructure(
   if (!structure?.length) return [];
   const out: NormStep[] = [];
   let ai = 0, hi = 0;
-  const next   = (): number | null => (actuals ? (actuals[ai++] ?? null) : null);
-  const nextHr = (): number | null => (hrActuals ? (hrActuals[hi++] ?? null) : null);
+  // An empty array is the "completed, but no per-segment splits" sentinel — a
+  // merged run stores `[]` because pacing can't be stitched across two separate
+  // activities' streams. Treat it as absent so segments read as un-broken-down
+  // (planned targets), not "missed" (which is what a null-per-segment would mean).
+  const hasA = Array.isArray(actuals) && actuals.length > 0;
+  const hasH = Array.isArray(hrActuals) && hrActuals.length > 0;
+  const next   = (): number | null => (hasA ? (actuals![ai++] ?? null) : null);
+  const nextHr = (): number | null => (hasH ? (hrActuals![hi++] ?? null) : null);
   const applyHr = (seg: NormSegment) => {
     const z = hrZones && seg.zoneKey ? hrZones[seg.zoneKey] : undefined;
     if (z) { seg.hrMin = z.min; seg.hrMax = z.max; }
@@ -240,7 +246,7 @@ export function normalizeStructure(
         const steps: NormSegment[] = raw.steps.map((st: any) => segmentNew(st, zones));
         steps.forEach(applyHr); // target HR windows before cloning per-rep
         const count = raw.count || 1;
-        const completed = Boolean(actuals || hrActuals);
+        const completed = hasA || hasH;
         const perRep: NormSegment[][] = steps.map(() => []);
         const pSum = steps.map(() => 0), pHit = steps.map(() => 0);
         const hSum = steps.map(() => 0), hHit = steps.map(() => 0);
@@ -252,29 +258,29 @@ export function normalizeStructure(
               perRep[j].push({
                 ...steps[j],
                 label: `${steps[j].label} ${r + 1}`,
-                actualPaceSec: actuals ? v : undefined,
-                actualHr:      hrActuals ? h : undefined,
+                actualPaceSec: hasA ? v : undefined,
+                actualHr:      hasH ? h : undefined,
               });
             }
           }
         }
         steps.forEach((s, j) => {
-          if (actuals)   s.actualPaceSec = pHit[j] ? Math.round(pSum[j] / pHit[j]) : null;
-          if (hrActuals) s.actualHr      = hHit[j] ? Math.round(hSum[j] / hHit[j]) : null;
+          if (hasA) s.actualPaceSec = pHit[j] ? Math.round(pSum[j] / pHit[j]) : null;
+          if (hasH) s.actualHr      = hHit[j] ? Math.round(hSum[j] / hHit[j]) : null;
         });
         out.push({ kind: 'repeat', count, steps, perRep: completed ? perRep : undefined });
       } else if (raw.type === 'phase') {
         const seg = segmentNew(raw, zones);
         applyHr(seg);
-        if (actuals)   seg.actualPaceSec = next();
-        if (hrActuals) seg.actualHr      = nextHr();
+        if (hasA) seg.actualPaceSec = next();
+        if (hasH) seg.actualHr      = nextHr();
         out.push(seg);
       }
     } else {
       const seg = segmentLegacy(raw, zones);
       applyHr(seg);
-      if (actuals)   seg.actualPaceSec = next();
-      if (hrActuals) seg.actualHr      = nextHr();
+      if (hasA) seg.actualPaceSec = next();
+      if (hasH) seg.actualHr      = nextHr();
       out.push(seg);
     }
   }
