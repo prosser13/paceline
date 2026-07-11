@@ -134,7 +134,7 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
             properties: {
               kind: { type: 'string', enum: ['full_day', 'reduced_intensity', 'time_limited', 'activity_limited', 'equipment_limited'] },
               minutes: { type: 'number', description: 'time_limited only: minutes available.' },
-              items: { type: 'array', items: { type: 'string' }, description: 'activity_limited / equipment_limited: what is barred.' },
+              items: { type: 'array', items: { type: 'string' }, description: "activity_limited / equipment_limited: the things that are BARRED, not the ones allowed. Sports are lowercase 'running' | 'cycling' | 'swimming' | 'strength'. To express \"running only\", bar the others: [\"cycling\",\"swimming\",\"strength\"]." },
               note: { type: 'string' },
             },
             required: ['kind'],
