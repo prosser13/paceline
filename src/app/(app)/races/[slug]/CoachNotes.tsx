@@ -7,6 +7,9 @@ export default function CoachNotes({ notes }: { notes: { heading: string; body: 
     <div className={cardClass}>
       <div className="px-[18px] py-[15px]">
         <CardTitle>Coach&apos;s notes</CardTitle>
+        {notes.length === 0 && (
+          <p className="text-[13px] text-stone/70 leading-snug">—</p>
+        )}
         <div className="flex flex-col gap-[16px]">
         {notes.map((n, i) => (
           <div key={i} className="flex gap-[12px]">
