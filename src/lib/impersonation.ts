@@ -18,6 +18,7 @@ import { cache } from 'react';
 import { getCurrentUser as getSessionUser } from './supabase-server';
 import { supabaseAdmin } from './supabase-admin';
 import { roleFor } from './roles';
+import type { User } from '@supabase/supabase-js';
 
 export const VIEW_AS_COOKIE = 'paceline_view_as';
 
@@ -66,6 +67,20 @@ export async function getImpersonatedEmail(): Promise<string | null> {
   const id = await getImpersonatedUserId();
   return id ? emailForUserId(id) : null;
 }
+
+// The EFFECTIVE viewer — the user whose data is on screen. While impersonating that's
+// the target (so name/greeting and email-based "is this mine?" ownership checks follow
+// the view); otherwise the real session user. Use this for content/identity, NOT for
+// auth gates or the "view as" controls — those must use the real session identity
+// (getViewer in auth.ts), which impersonation never changes.
+export const getViewedUser = cache(async (): Promise<User | null> => {
+  const id = await getImpersonatedUserId();
+  if (id) {
+    const { data } = await supabaseAdmin.auth.admin.getUserById(id);
+    return data?.user ?? null;
+  }
+  return getSessionUser();
+});
 
 // Whether `targetUserId` is a valid impersonation target for the owner `ownerId`:
 // a known allowlisted account that isn't the owner themselves. Used by the start

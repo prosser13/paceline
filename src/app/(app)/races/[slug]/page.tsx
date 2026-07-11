@@ -7,7 +7,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { FitnessChart, CardTitle, type WeekDay } from '@/components/dashboard-graphics';
 import { getRaceGuide } from '@/data/races';
-import { getViewer } from '@/lib/auth';
+import { getViewedUser } from '@/lib/impersonation';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { getRaceKit } from '@/data/race-kit';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
@@ -79,14 +79,16 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   const guide = getRaceGuide(slug);
   if (!guide) notFound();
 
-  const [plan, viewer] = await Promise.all([getPlanBySlug(slug), getViewer()]);
+  const [plan, viewer] = await Promise.all([getPlanBySlug(slug), getViewedUser()]);
 
-  // Whether this race is the logged-in user's (same ownerEmails tag as the races
-  // list). When it isn't ("Other races"), the athlete-specific plan is blanked —
+  // Whether this race is the viewed user's (same ownerEmails tag as the races list).
+  // Uses the EFFECTIVE viewer so an owner viewing as another athlete sees THAT
+  // athlete's ownership — their own race renders in full, others are blanked. When it
+  // isn't the viewer's ("Other races"), the athlete-specific plan is blanked —
   // target/pace, goal-tier times, coach notes, pacing splits, and the fuel table
   // show placeholder dashes; course info, weather, and the viewer's own readiness
   // stay. Kit stays editable and saves to the viewer (race_kit is per-user).
-  const viewerEmail = viewer?.user.email?.toLowerCase() ?? null;
+  const viewerEmail = viewer?.email?.toLowerCase() ?? null;
   const owned = !!viewerEmail && (guide.ownerEmails ?? []).some(e => e.toLowerCase() === viewerEmail);
   // `hideTargets` blanks targets/goals/pacing for EVERYONE (a race on the calendar
   // with no time goal yet); a non-owner also gets them blanked. Coach notes stay.
