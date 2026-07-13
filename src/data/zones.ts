@@ -54,6 +54,19 @@ export interface PowerZoneRow {
   sort_order: number;
 }
 
+export interface SwimPaceZoneRow {
+  zone_key: string;
+  name: string;
+  pace_min_sec: number;   // sec/100m, fast end
+  pace_max_sec: number;   // sec/100m, slow end
+  sort_order: number;
+}
+
+export interface SwimConfigInput {
+  css_sec_per_100: number | null;   // Critical Swim Speed, sec/100m
+  pool_size_m: number;              // default 25
+}
+
 // ── reads ────────────────────────────────────────────────────
 
 // Threshold pace ("m:ss" per km), or null if unset.
@@ -127,6 +140,28 @@ export async function listPowerZones() {
   return _listPowerZones(await currentUserId());
 }
 
+// Swim pace zones (sec/100m) in display order.
+const _listSwimPaceZones = unstable_cache(
+  async (userId: string) => {
+    const { data } = await supabaseAdmin
+      .from('swim_pace_zones').select('*').eq('user_id', userId).order('sort_order');
+    return data ?? [];
+  },
+  ['zones:swim-pace-zones'],
+  { tags: [ZONES_TAG], revalidate: ZONES_REVALIDATE },
+);
+export async function listSwimPaceZones() {
+  return _listSwimPaceZones(await currentUserId());
+}
+
+// Swim config (CSS sec/100m + pool size m), or null.
+export async function getSwimConfig() {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('swim_config').select('*').eq('user_id', userId).maybeSingle();
+  return data as { css_sec_per_100: number | null; pool_size_m: number } | null;
+}
+
 // Power (FTP) config row, or null.
 export async function getPowerConfig() {
   const userId = await currentUserId();
@@ -184,7 +219,7 @@ export async function setThresholdPace(threshold: string): Promise<void> {
 // any error so callers never report a false save.
 async function replaceKeyedZones(
   userId: string,
-  table: 'pace_zones' | 'hr_zones' | 'power_zones' | 'bike_hr_zones',
+  table: 'pace_zones' | 'hr_zones' | 'power_zones' | 'bike_hr_zones' | 'swim_pace_zones',
   rows: Array<{ zone_key: string }>,
 ): Promise<void> {
   if (rows.length) {
@@ -247,4 +282,19 @@ export async function saveBikeHrConfig(cfg: HrConfigInput): Promise<void> {
 export async function replaceBikeHrZones(rows: HrZoneRow[]): Promise<void> {
   await replaceKeyedZones(await currentUserId(), 'bike_hr_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
+}
+
+// Upsert the single swim config row (CSS + pool size).
+export async function saveSwimConfig(cfg: SwimConfigInput): Promise<void> {
+  const userId = await currentUserId();
+  await supabaseAdmin.from('swim_config').upsert({ user_id: userId, ...cfg }, { onConflict: 'user_id' });
+  revalidateTag(ZONES_TAG, 'max');
+}
+
+// Replace the full swim-pace-zone set (supports add/remove).
+export async function replaceSwimPaceZones(rows: SwimPaceZoneRow[]): Promise<void> {
+  await replaceKeyedZones(await currentUserId(), 'swim_pace_zones', rows);
+  revalidateTag(ZONES_TAG, 'max');
+  // The Z4 window (CSS proxy) drives swim TSS — refresh stored rows.
+  await recomputeAllCompletedTss();
 }

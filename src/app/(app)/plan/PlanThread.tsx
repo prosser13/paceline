@@ -10,6 +10,7 @@ import type { OffPlanActivity } from '@/data/activities';
 import { activityKind } from '@/lib/activity-types';
 import { unlinkSession, removePromotedSession, unmergeActivity } from './match-actions';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 import type { SessionStatus } from '@/components/StatusMark';
 import { fmtRange } from '@/lib/dates';
 import { resolveSport } from '@/lib/sports/registry';
@@ -197,12 +198,13 @@ interface Props {
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  swimZones: SwimPaceZoneMap;
   fuelProducts?: import('@/data/fuel').FuelProduct[];
 }
 
 export default function PlanThread({
   weeks, byWeek, offPlanByDate = {}, manualMatches = [], mergedBySession = {}, todayStr, completedMap, nextSessionId,
-  thresholdPace, zones, hrZones, powerZones, bikeHrZones, fuelProducts = [],
+  thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts = [],
 }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -286,7 +288,7 @@ export default function PlanThread({
       <SessionRow
         session={session}
         ctx={{
-          thresholdPace, zones, hrZones, powerZones, bikeHrZones, fuelProducts,
+          thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts,
           completed: completed ?? null,
           today: isFocus,
           next: isNext && !isToday,
