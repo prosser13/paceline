@@ -90,6 +90,9 @@ export interface RaceGuide {
   seasonalWeather: string;
 
   coachNotes: { heading: string; body: string }[];
+  /** Pace the splits at this even "M:SS"/km instead of climb-weighting the target
+   *  time across the legs. Use for a flat-pacing race plan. */
+  pacingFlatPace?: string | null;
   /** Footer note under the pacing table (e.g. how splits are derived). */
   pacingNote?: string | null;
   fuel: FuelPlan;

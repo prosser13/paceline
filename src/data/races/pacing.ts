@@ -29,6 +29,12 @@ function toSeconds(hhmm: string): number {
   return h * 3600 + m * 60 + (s || 0);
 }
 
+// "M:SS" pace per km → seconds. Null on a malformed value.
+function paceToSeconds(pace: string): number | null {
+  const [m, s] = pace.split(':').map(Number);
+  return Number.isFinite(m) && Number.isFinite(s) ? m * 60 + s : null;
+}
+
 // Display a target time, dropping a leading zero-hours part so a sub-hour race
 // stored as "0:33:59" reads as "33:59" (while "2:39:40" / "7:30" pass through).
 export function formatTargetTime(t: string): string {
@@ -70,6 +76,11 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
   const startSec = toSeconds(guide.startTime);
   const targetSec = toSeconds(targetTime);
 
+  // Flat pacing: when the guide sets `pacingFlatPace`, every leg runs at that even
+  // pace (the elapsed clock ignores the target and just accrues at the flat pace).
+  // Otherwise time is distributed by climb-weighted effort across the target.
+  const flatSecPerKm = guide.pacingFlatPace ? paceToSeconds(guide.pacingFlatPace) : null;
+
   // Effort distance per leg, and the total, for proportional time allocation.
   const legEffort: number[] = [0];
   let totalEffort = 0;
@@ -89,9 +100,11 @@ export function buildPacing(guide: RaceGuide, targetTime: string): PacingRow[] {
     let legClimbM = 0;
     let legDescentM = 0;
     if (i > 0) {
-      const legSec = (legEffort[i] / totalEffort) * targetSec;
-      cumSec += legSec;
       const legKm = cp.distanceKm - cps[i - 1].distanceKm;
+      const legSec = flatSecPerKm != null
+        ? legKm * flatSecPerKm
+        : (legEffort[i] / totalEffort) * targetSec;
+      cumSec += legSec;
       legPace = paceMinKm(legSec, legKm);
       legClimbM = Math.max(0, (cp.ascentM ?? 0) - (cps[i - 1].ascentM ?? 0));
       legDescentM = Math.max(0, (cp.descentM ?? 0) - (cps[i - 1].descentM ?? 0));

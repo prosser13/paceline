@@ -109,8 +109,9 @@ export const DRAGON_50: RaceGuide = {
             'days are when fuelling quietly slips.' },
   ],
 
+  pacingFlatPace: '5:30',
   pacingNote:
-    'Times distributed by climb-weighted effort, not flat pace — the back half is slower for a reason.',
+    'Even 5:30/km target pacing across every leg — hold the effort steady and let HR drift up on the back-half climbs rather than chasing the clock.',
   fuel: {
     carbsPerHourG: [60, 70],
     fluidPerHourMl: [400, 600],
