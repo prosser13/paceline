@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { humanHMM } from './session-ui';
+import { humanHMM, StatusTick, missedText } from './session-ui';
 import { Dumbbell } from './glyphs';
 import { GOLD } from '@/lib/colors';
 
@@ -64,10 +64,10 @@ export function StrengthDetailTable({ exercises, weightCol = false }: { exercise
 // A strength session row — compact (duration + focus), expandable to the
 // prescribed exercises + an optional note.
 export default function StrengthRow({
-  short, date, focus, duration, today, done, note, exercises = [], compact = false, title = 'Strength', next = false, emphasis = false,
+  short, date, focus, duration, today, done, missed = false, note, exercises = [], compact = false, title = 'Strength', next = false, emphasis = false,
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
-  today?: boolean; done?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string; next?: boolean; emphasis?: boolean;
+  today?: boolean; done?: boolean; missed?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string; next?: boolean; emphasis?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = exercises.length > 0;
@@ -94,9 +94,9 @@ export default function StrengthRow({
             {next && (
               <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0">Next up</span>
             )}
-            {done && <span className="text-fern text-[15px] leading-none shrink-0">✓</span>}
+            <StatusTick done={done} missed={missed} />
             <Dumbbell size={emphasis ? 18 : 15} className="text-stone shrink-0" />
-            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink`}>{title}</span>
+            <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink${missedText(missed)}`}>{title}</span>
             {hasDetail && (
               <span className="font-mono text-[14px] text-stone leading-none"
                 style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>
@@ -104,7 +104,7 @@ export default function StrengthRow({
               </span>
             )}
           </div>
-          {focus && <div className="text-[14.5px] leading-snug mt-[3px] text-stone">{focus}</div>}
+          {focus && <div className={`text-[14.5px] leading-snug mt-[3px] text-stone${missedText(missed)}`}>{focus}</div>}
         </div>
         <div className="shrink-0 text-right w-[78px]">
           <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[19px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>

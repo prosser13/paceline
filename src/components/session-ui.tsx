@@ -17,6 +17,18 @@ export const INTENSITY: Record<string, { label: string; hex: string; zone: strin
   race:     { label: 'Race',     hex: '#b3271e', zone: 'Z5' },
 };
 
+// The status glyph beside a session title: a green ✓ when done, a red ✗ when a
+// past day went unlogged (missed). Nothing for planned/today/future. `className`
+// carries each row's vertical nudge (the run/ride rows offset it, strength/yoga don't).
+export function StatusTick({ done, missed, className = '' }: { done?: boolean; missed?: boolean; className?: string }) {
+  if (done)   return <span className={`text-fern text-[15px] leading-none shrink-0 ${className}`} aria-label="completed">✓</span>;
+  if (missed) return <span className={`text-oxblood text-[15px] leading-none shrink-0 ${className}`} aria-label="missed">✗</span>;
+  return null;
+}
+
+// Strikethrough for a missed session's title/description text.
+export const missedText = (missed?: boolean) => (missed ? ' line-through decoration-oxblood/50' : '');
+
 // Inline styles for zone chips — avoids dynamic Tailwind class purging
 const ZONE_STYLE: Record<string, { background: string; color: string }> = {
   Z1:     { background: 'rgba(154,184,201,.20)', color: '#566f7d' },

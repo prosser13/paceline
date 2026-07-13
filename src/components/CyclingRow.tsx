@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, buildRideCompare, rangeColor, type CompareRow, type CompareTone } from './session-ui';
+import { fmtClock, humanHMM, DetailRow, DETAIL_WRAP, CompareTable, buildRideCompare, rangeColor, StatusTick, missedText, type CompareRow, type CompareTone } from './session-ui';
 import { BikeGlyph } from './glyphs';
 import {
   normalizeCyclingStructure, sumCyclingMinutes, fmtRideClock, fmtPower,
@@ -88,11 +88,12 @@ export function CyclingSegmentDetail({ segments, actual = null, variant = 'row' 
 // Used on the plan page (with a day column) and, via the compact variant, on the
 // dashboard.
 export default function CyclingRow({
-  session, powerZones, bikeHrZones, today, done, completed = null, emphasis = false, next = false,
+  session, powerZones, bikeHrZones, today, done, missed = false, completed = null, emphasis = false, next = false,
 }: {
   short?: string;          // accepted for back-compat; the row no longer uses a day column
   date?: string;
   next?: boolean;
+  missed?: boolean;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   session: { name: string; description?: string | null; estimated_duration?: string | null; estimated_tss?: number | null; structure?: any[] | null };
   powerZones: PowerZoneMap;
@@ -160,9 +161,9 @@ export default function CyclingRow({
               {next && (
                 <span className="font-mono text-[11px] tracking-[.12em] uppercase text-oxblood border border-oxblood/40 rounded-[4px] px-[5px] py-[1px] shrink-0 mt-[1px]">Next up</span>
               )}
-              {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
+              <StatusTick done={done} missed={missed} className="mt-[2px]" />
               <span className="text-marine shrink-0 mt-[3px]"><BikeGlyph size={emphasis ? 18 : 15} /></span>
-              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>
+              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0${missedText(missed)}`}>
                 {session.name}
                 {hasDetail && (
                   <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
@@ -174,7 +175,7 @@ export default function CyclingRow({
             <div className="flex flex-col sm:flex-row sm:items-start sm:gap-[14px] mt-[7px]">
               <div className="min-w-0">
                 {(kmLabel || session.description) && (
-                  <div className="text-[14px] leading-snug text-stone">
+                  <div className={`text-[14px] leading-snug text-stone${missedText(missed)}`}>
                     {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
                     {kmLabel && session.description && ' · '}
                     {session.description}

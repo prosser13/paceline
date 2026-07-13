@@ -21,7 +21,7 @@ import { computeExecutionScore, scoreColor } from '@/lib/execution-score';
 import {
   INTENSITY, MetricBlock, WorkoutDetail, CompareTable, PlannedDetail, RaceBadge, DETAIL_WRAP,
   syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, parseDurationMins,
-  isMergedRun, collapseToWholeRun, type CompareRow, type WindowCmp,
+  isMergedRun, collapseToWholeRun, StatusTick, missedText, type CompareRow, type WindowCmp,
 } from './session-ui';
 import LongRunQuality from './LongRunQuality';
 import { fuelTargetLabel, type FuelTarget } from '@/lib/fuel-progression';
@@ -83,7 +83,7 @@ function DeltaBlock({ tss, dur }: { tss: WindowCmp | null; dur: WindowCmp | null
 export default function RunRow({
   session, zones, hrZones, thresholdPace,
   completed = null,
-  today = false, next = false, done = false,
+  today = false, next = false, done = false, missed = false,
   emphasis = false,
   isExpanded, onToggle,
   fuelProducts = [],
@@ -96,6 +96,7 @@ export default function RunRow({
   today?: boolean;
   next?: boolean;
   done?: boolean;
+  missed?: boolean;
   emphasis?: boolean;
   isExpanded?: boolean;
   onToggle?: () => void;
@@ -210,9 +211,9 @@ export default function RunRow({
               {isRace && (
                 <span className="font-mono text-[11px] tracking-[.1em] uppercase bg-oxblood text-bone rounded-[4px] px-[5px] py-[2px] shrink-0 mt-[1px]">Race</span>
               )}
-              {done && <span className="text-fern text-[15px] leading-none shrink-0 mt-[2px]">✓</span>}
+              <StatusTick done={done} missed={missed} className="mt-[2px]" />
               <RunGlyph size={emphasis ? 18 : 15} className="text-stone shrink-0 mt-[3px]" />
-              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0`}>
+              <span className={`${emphasis ? 'text-[18px]' : 'text-[16.5px]'} font-semibold text-ink flex-1 min-w-0${missedText(missed)}`}>
                 {session.name}
                 {session.priority && <> <RaceBadge priority={session.priority} /></>}
                 <span className="font-mono text-[13px] text-stone leading-none inline-block align-middle ml-[5px]"
@@ -222,7 +223,7 @@ export default function RunRow({
 
             <div className="mt-[7px]">
               {(kmLabel || session.description) && (
-                <div className="text-[14px] leading-snug text-stone">
+                <div className={`text-[14px] leading-snug text-stone${missedText(missed)}`}>
                   {kmLabel && <span className="font-semibold text-ink">{kmLabel}</span>}
                   {kmLabel && session.description && ' · '}
                   {session.description}
