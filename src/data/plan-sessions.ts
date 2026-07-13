@@ -246,6 +246,24 @@ export async function listUpcomingRunsForSync(from: string, to: string) {
   return data ?? [];
 }
 
+// Upcoming pool swims to push to intervals.icu → Garmin. Open-water swims can't run
+// structured workouts on the watch, so they're excluded (a session whose name or
+// description marks it open-water); everything else is treated as a pool swim.
+export async function listUpcomingSwimsForSync(from: string, to: string) {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('plan_sessions')
+    .select('id, scheduled_date, name, description, structure, distance_km, session_type, intervals_event_id, intervals_synced_at, intervals_workout_hash, intervals_workout_override')
+    .eq('user_id', userId)
+    .gte('scheduled_date', from)
+    .lte('scheduled_date', to)
+    .eq('activity_type', 'swimming')
+    .order('scheduled_date', { ascending: true })
+    .order('am_pm', { ascending: true });
+  // Exclude open-water swims (watch can't run structured OW workouts).
+  return (data ?? []).filter(s => !/open[\s-]?water|\bow\b|sea swim|lake|lido|river/i.test(`${s.name ?? ''} ${s.description ?? ''}`));
+}
+
 // Sessions in [from, to] that carry an intervals.icu event id — for reconcile
 // cleanup: any of these NOT in the current run set (e.g. edited to a rest/race, or
 // their structure removed) has a stale event that should be deleted.

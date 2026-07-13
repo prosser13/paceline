@@ -3,7 +3,7 @@
 // a thin server component and stream the heavy thread behind a <Suspense>.
 
 import { listWeeksByNumber, listPlansBySortOrder } from '@/data/plans';
-import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
+import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones, listSwimPaceZones } from '@/data/zones';
 import { listSessionsForPlan, listCompletedForPlan } from '@/data/plan-sessions';
 import { listOffPlanActivitiesBetween, getActivityNamesByStravaIds, type OffPlanActivity } from '@/data/activities';
 import { listUserMatches } from '@/data/session-matches';
@@ -17,6 +17,7 @@ import { getFuelPlanForGoalBlock, type FuelTarget } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 import type { MergedActivity } from './PlanThread';
 import type { PlanOption } from './PlanSwitcher';
 
@@ -93,6 +94,7 @@ export interface PlanData {
     hrZones: HrZoneMap;
     powerZones: PowerZoneMap;
     bikeHrZones: BikeHrZoneMap;
+    swimZones: SwimPaceZoneMap;
     fuelProducts: FuelProduct[];
   };
 }
@@ -142,13 +144,14 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
 
   // Wave 1: everything not scoped to a single plan (plans list resolves which plan
   // the page views). Weeks are tiny (~1 row/week) so we keep the full read.
-  const [weeks, thresholdPaceRaw, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
+  const [weeks, thresholdPaceRaw, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, swimZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
     listWeeksByNumber(),
     getThresholdPace(),
     listPaceZones(),
     listHrZones(),
     listPowerZones(),
     listBikeHrZones(),
+    listSwimPaceZones(),
     listPlansBySortOrder(),
     listUserMatches(),
     getFuelPlanForGoalBlock(todayStr),
@@ -173,8 +176,8 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
   }
   const allWeeks      = (weeks   ?? []) as PlanWeek[];
 
-  const { zones, hrZones, powerZones, bikeHrZones, ftp } = buildZoneMaps({
-    paceZones, hrZones: hrZonesRows, powerZones: powerZoneRows, bikeHrZones: bikeHrZoneRows,
+  const { zones, hrZones, powerZones, bikeHrZones, swimZones, ftp } = buildZoneMaps({
+    paceZones, hrZones: hrZonesRows, powerZones: powerZoneRows, bikeHrZones: bikeHrZoneRows, swimZones: swimZoneRows,
   });
 
   // plan_session_id → actual display values for done sessions (run NGP/pace or
@@ -354,6 +357,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
       hrZones,
       powerZones,
       bikeHrZones,
+      swimZones,
       fuelProducts,
     },
   };

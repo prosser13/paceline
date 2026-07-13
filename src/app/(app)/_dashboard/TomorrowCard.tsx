@@ -7,16 +7,19 @@
 import { resolveSport } from '@/lib/sports/registry';
 import { normalizeStructure, type ZoneMap, type HrZoneMap } from '@/lib/plan-structure';
 import { normalizeCyclingStructure, type PowerZoneMap, type BikeHrZoneMap } from '@/lib/cycling';
+import { normalizeSwimStructure, sumSwimMetres, estimateSwimSeconds, fmtSwimDistance, type SwimPaceZoneMap } from '@/lib/swim';
 import { WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM, fmtClock, yogaFlowSeconds } from '@/components/session-ui';
 import { CyclingSegmentDetail } from '@/components/CyclingRow';
+import { SwimSegmentDetail } from '@/components/SwimRow';
 import { StrengthDetailTable, type StrengthEx } from '@/components/StrengthRow';
-import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
-import { RUN, RIDE, STRENGTH, YOGA } from '@/lib/colors';
+import { RunGlyph, BikeGlyph, SwimGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
+import { RUN, RIDE, SWIM, STRENGTH, YOGA } from '@/lib/colors';
 import type { PlanSession } from './data';
 
 const SPORT = {
   run:      { color: RUN,      label: 'Run',      Glyph: RunGlyph },
   cycling:  { color: RIDE,     label: 'Ride',     Glyph: BikeGlyph },
+  swimming: { color: SWIM,     label: 'Swim',     Glyph: SwimGlyph },
   strength: { color: STRENGTH, label: 'Strength', Glyph: Dumbbell },
   yoga:     { color: YOGA,     label: 'Yoga',     Glyph: YogaGlyph },
 } as const;
@@ -24,13 +27,14 @@ const SPORT = {
 const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
 
 export default function TomorrowCard({
-  session, zones, hrZones, powerZones, bikeHrZones,
+  session, zones, hrZones, powerZones, bikeHrZones, swimZones,
 }: {
   session: PlanSession;
   zones: ZoneMap;
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  swimZones: SwimPaceZoneMap;
 }) {
   const sport = resolveSport(session);
   const spec = SPORT[sport as keyof typeof SPORT] ?? SPORT.run;
@@ -61,6 +65,14 @@ export default function TomorrowCard({
     big = dur ?? (distKm != null ? kmStr(distKm) : '—');
     sub = [session.description, distKm != null ? kmStr(distKm) : null, tss != null ? `${tss} TSS` : null].filter(Boolean).join(' · ') || null;
     if (segments.length > 0) detail = <CyclingSegmentDetail segments={segments} actual={null} variant="card" />;
+  } else if (sport === 'swimming') {
+    const segs = normalizeSwimStructure(session.structure, swimZones);
+    const totalM = sumSwimMetres(segs);
+    const estSec = segs.length ? estimateSwimSeconds(segs) : 0;
+    const dur = estSec > 0 ? fmtClock(estSec) : humanHMM(session.estimated_duration);
+    big = totalM > 0 ? fmtSwimDistance(totalM) : (dur ?? '—');
+    sub = [session.description, dur, tss != null ? `${tss} TSS` : null].filter(Boolean).join(' · ') || null;
+    if (segs.length > 0) detail = <SwimSegmentDetail segments={segs} variant="card" />;
   } else if (sport === 'strength') {
     const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
     const focus = session.description ? session.description.split(/\s*[—–·]\s*/)[0].trim() : null;

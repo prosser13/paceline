@@ -8,9 +8,9 @@
 import { useState, useTransition, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { RunGlyph, BikeGlyph, Dumbbell, YogaGlyph } from './glyphs';
+import { RunGlyph, BikeGlyph, SwimGlyph, Dumbbell, YogaGlyph } from './glyphs';
 import { activityKind, type ActivityKind } from '@/lib/activity-types';
-import { FERN, MARINE, GOLD, EMBER } from '@/lib/colors';
+import { FERN, MARINE, GOLD, EMBER, SWIM } from '@/lib/colors';
 import { linkActivityToSession, promoteActivityToSession, mergeActivityIntoSession } from '@/app/(app)/plan/match-actions';
 import type { OffPlanActivity } from '@/data/activities';
 
@@ -21,11 +21,12 @@ export interface LinkTarget { id: string; name: string; }
 // and its server action are kept intact; flip this to re-enable the UI.
 const SHOW_ADD_TO_PLAN = false;
 
-const KIND_COLOR: Record<ActivityKind, string> = { run: FERN, ride: MARINE, strength: GOLD, yoga: EMBER };
-const KIND_LABEL: Record<ActivityKind, string> = { run: 'Run', ride: 'Ride', strength: 'Strength', yoga: 'Yoga' };
+const KIND_COLOR: Record<ActivityKind, string> = { run: FERN, ride: MARINE, swim: SWIM, strength: GOLD, yoga: EMBER };
+const KIND_LABEL: Record<ActivityKind, string> = { run: 'Run', ride: 'Ride', swim: 'Swim', strength: 'Strength', yoga: 'Yoga' };
 
 function KindGlyph({ kind }: { kind: ActivityKind }) {
   if (kind === 'ride')     return <BikeGlyph size={15} className="text-stone shrink-0" />;
+  if (kind === 'swim')     return <SwimGlyph size={15} className="text-stone shrink-0" />;
   if (kind === 'strength') return <Dumbbell size={15} className="text-stone shrink-0" />;
   if (kind === 'yoga')     return <YogaGlyph size={15} className="text-stone shrink-0" />;
   return <RunGlyph size={15} className="text-stone shrink-0" />;

@@ -338,6 +338,19 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
         const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
         if (err < bestErr) { bestErr = err; match = s; }
       }
+    } else if (kind === 'swim') {
+      // Swims match the same-day swimming session (both pool and open-water arrive
+      // as Strava 'Swim'). Pool distance is reliable, so disambiguate a multi-swim
+      // day by closest distance; otherwise take the first open same-day swim.
+      let bestErr = Infinity;
+      for (const s of planSessions) {
+        if (s.activity_type !== 'swimming') continue;
+        if (s.scheduled_date !== activity.activity_date) continue;
+        if (!isOpen(s)) continue;
+        const planKm = Number(s.distance_km);
+        const err = planKm > 0 ? Math.abs(actKm - planKm) / planKm : 0;
+        if (err < bestErr) { bestErr = err; match = s; }
+      }
     } else if (kind === 'strength') {
       // Strength has no distance, and recorded duration runs long (elapsed time can
       // push a 1h session to 1h30), so don't gate on duration — match purely on the
@@ -384,7 +397,7 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
       // Rides carry average power; runs/strength/yoga don't.
       actual_avg_power:       kind === 'ride' ? (powerByStravaId.get(activity.strava_activity_id) ?? null) : null,
       // Elevation gain (metres) — the terrain signal; only meaningful for runs/rides.
-      actual_elevation_gain_m: kind === 'strength' || kind === 'yoga' ? null : (elevByStravaId.get(activity.strava_activity_id) ?? null),
+      actual_elevation_gain_m: kind === 'strength' || kind === 'yoga' || kind === 'swim' ? null : (elevByStravaId.get(activity.strava_activity_id) ?? null),
       strava_activity_id:     activity.strava_activity_id,
       source:                 'strava',
       // Rides carry no distance-segment pacing; store empty arrays (not null) so

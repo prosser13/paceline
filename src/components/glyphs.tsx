@@ -42,6 +42,19 @@ export function Dumbbell({ size = 16, strokeWidth = 2, className = 'shrink-0' }:
   );
 }
 
+// Front-crawl swimmer over a waterline — swimming.
+export function SwimGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <circle cx="17" cy="7" r="1.4" />
+      <path d="M5 12l3.5 -2.5l3.5 2l3 -1.5l3 2" />
+      <path d="M3 17.5q2 -1.5 3.5 0t3.5 0t3.5 0t3.5 0t3.5 0" />
+      <path d="M3 20.5q2 -1.5 3.5 0t3.5 0t3.5 0t3.5 0t3.5 0" />
+    </svg>
+  );
+}
+
 // Seated meditation figure — yoga / mobility / stretching.
 export function YogaGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
   return (

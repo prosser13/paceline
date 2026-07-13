@@ -8,17 +8,21 @@
 
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 
 interface PaceZoneRow { zone_key: string; name: string; pace_min: string; pace_max: string; sort_order: number }
 interface HrZoneRow   { zone_key: string; hr_min: number; hr_max: number }
 interface PowerZoneRow { zone_key: string; name: string; power_min: number; power_max: number; sort_order: number }
+interface SwimPaceZoneRow { zone_key: string; name: string; pace_min_sec: number; pace_max_sec: number; sort_order: number }
 
 export interface ZoneMaps {
   zones: ZoneMap;
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  swimZones: SwimPaceZoneMap;
   ftp: number | null;
+  swimCssSec: number | null;   // CSS proxy = top (slow end) of the swim Z4 window
 }
 
 export function buildZoneMaps(rows: {
@@ -26,6 +30,7 @@ export function buildZoneMaps(rows: {
   hrZones: HrZoneRow[];
   powerZones: PowerZoneRow[];
   bikeHrZones: HrZoneRow[];
+  swimZones?: SwimPaceZoneRow[];
 }): ZoneMaps {
   const zones: ZoneMap = {};
   for (const z of rows.paceZones) {
@@ -47,5 +52,15 @@ export function buildZoneMaps(rows: {
     bikeHrZones[z.zone_key] = { min: z.hr_min, max: z.hr_max };
   }
 
-  return { zones, hrZones, powerZones, bikeHrZones, ftp: powerZones['Z4']?.powerMax ?? null };
+  const swimZones: SwimPaceZoneMap = {};
+  for (const z of rows.swimZones ?? []) {
+    swimZones[z.zone_key] = { key: z.zone_key, name: z.name, paceMinSec: z.pace_min_sec, paceMaxSec: z.pace_max_sec, sortOrder: z.sort_order };
+  }
+
+  return {
+    zones, hrZones, powerZones, bikeHrZones, swimZones,
+    ftp: powerZones['Z4']?.powerMax ?? null,
+    // CSS proxy = the slow end of the swim Threshold (Z4) window — mirrors how FTP = top of Z4 power.
+    swimCssSec: swimZones['Z4']?.paceMaxSec ?? null,
+  };
 }

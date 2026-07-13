@@ -35,6 +35,7 @@
   /* ── Sport (semantic) ───────────────────────── */
   --color-run:      #c4452c;
   --color-ride:     #2f6f9e;
+  --color-swim:     #0e8fb0;
   --color-strength: #b07d12;
   --color-yoga:     #2f8f7a;
   --color-hard:     #d2691e;   /* quality / VO2 */
@@ -43,6 +44,7 @@
 
   --color-run-soft:      #f3ddd6;
   --color-ride-soft:     #dde8f0;
+  --color-swim-soft:     #d4ecf3;
   --color-strength-soft: #efe3c9;
   --color-yoga-soft:     #d9ece6;
   --color-race-soft:     #f4d9d6;

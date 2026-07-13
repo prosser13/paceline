@@ -16,6 +16,7 @@ export const ONHERO  = '#f3f1ea';
 // ── Sport (semantic) ───────────────────────────
 export const RUN      = '#c4452c';
 export const RIDE     = '#2f6f9e';
+export const SWIM     = '#0e8fb0';   // cyan — distinct from ride blue / yoga teal
 export const STRENGTH = '#b07d12';
 export const YOGA     = '#2f8f7a';
 export const HARD     = '#d2691e';   // quality / VO2
@@ -26,6 +27,7 @@ export const READY    = '#2e9e6b';
 // cell, where the base sport colour is too dark to read.
 export const RUN_B      = '#e7634a';
 export const RIDE_B     = '#6aa3e0';
+export const SWIM_B     = '#3fb8d4';
 export const STRENGTH_B = '#ecb73c';
 export const YOGA_B     = '#43bd9e';
 export const WARN       = '#c1881a';   // ACWR "slightly high"

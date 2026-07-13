@@ -9,12 +9,14 @@ import { resolveSport } from '@/lib/sports/registry';
 import StrengthRow, { type StrengthEx } from './StrengthRow';
 import YogaRow, { type YogaPose } from './YogaRow';
 import CyclingRow from './CyclingRow';
+import SwimRow from './SwimRow';
 import RunRow, { type RunRowCompleted, type RunRowSession } from './RunRow';
 import EffortScale from './EffortScale';
 import { DETAIL_WRAP } from './session-ui';
 import type { ReactNode } from 'react';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 
 export interface SessionRowSession {
   id: string;
@@ -40,6 +42,7 @@ export interface SessionRowContext {
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  swimZones: SwimPaceZoneMap;
   fuelProducts?: import('@/data/fuel').FuelProduct[];
   completed?: RunRowCompleted | null;
   today?: boolean;
@@ -94,6 +97,16 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           session={session}
           powerZones={ctx.powerZones}
           bikeHrZones={ctx.bikeHrZones}
+          today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
+          completed={ctx.done ? (ctx.completed ?? null) : null}
+        />
+      );
+    case 'swimming':
+      return withEffort(
+        <SwimRow
+          compact emphasis={ctx.emphasis}
+          session={session}
+          swimZones={ctx.swimZones}
           today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           completed={ctx.done ? (ctx.completed ?? null) : null}
         />

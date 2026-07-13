@@ -15,6 +15,7 @@
 // as the target, so those never appear as a step name (the range + name convey it).
 
 import { normalizeStructure, paceToSeconds, type ZoneMap, type NormStep, type NormSegment } from '@/lib/plan-structure';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 
 // ± seconds around a single authored pace (marathon pace, an interval rep).
 const SINGLE_PACE_TOLERANCE_SEC = 5;
@@ -126,6 +127,61 @@ export function structureToWorkoutText(structure: unknown, zones: ZoneMap): stri
       if (line) lines.push(line);
     }
   });
+  return lines.length ? lines.join('\n') : null;
+}
+
+// ── Swim workouts ────────────────────────────────────────────
+//
+// intervals.icu swim workouts push to Garmin as distance-based reps. Confirmed
+// syntax (forum + docs): distances in km (0.1km = 100 m — the same "bare m =
+// minutes" caveat applies), pace targets as "%Pace" ranges (percent of swim
+// threshold / CSS — a faster-than-CSS zone reads > 100%), step labels shown on the
+// watch, and rest as a labelled recovery step. The pool length is set on the event
+// (not in this text) so the watch counts laps correctly.
+
+// A swim zone's pace window → "88-94% Pace" (percent of CSS; faster pace → higher %).
+function swimPctToken(paceMinSec: number | null, paceMaxSec: number | null, cssSec: number | null): string | null {
+  if (!cssSec || cssSec <= 0 || paceMinSec == null || paceMaxSec == null) return null;
+  const lo = Math.round((cssSec / paceMaxSec) * 100);   // slow end → lower %
+  const hi = Math.round((cssSec / paceMinSec) * 100);   // fast end → higher %
+  return lo === hi ? `${lo}% Pace` : `${lo}-${hi}% Pace`;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function swimSegLine(s: any, zones: SwimPaceZoneMap, cssSec: number | null, indent = ''): string | null {
+  const distM = Number(s.distance_m) || 0;
+  if (distM <= 0) return null;
+  const m = s.zone ? String(s.zone).match(/Z\s*([1-9])/i) : null;
+  const z = m ? zones[`Z${m[1]}`] : undefined;
+  const label = s.label ?? z?.name ?? 'Swim';
+  const target = swimPctToken(z?.paceMinSec ?? null, z?.paceMaxSec ?? null, cssSec);
+  return `${indent}- ${label} ${distLabel(distM / 1000)}${target ? ` ${target}` : ''}`;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function swimRestLine(s: any, indent = ''): string | null {
+  const rest = Number(s.rest_sec) || 0;
+  return rest > 0 ? `${indent}- Rest ${rest}s` : null;
+}
+
+// Build the intervals.icu swim workout description from a swim's raw structure +
+// swim zones + CSS. Walks the raw structure so repeats stay collapsed as `Nx`.
+export function structureToSwimWorkoutText(structure: unknown, zones: SwimPaceZoneMap, cssSec: number | null): string | null {
+  if (!Array.isArray(structure) || !structure.length) return null;
+  const lines: string[] = [];
+  for (const raw of structure as RawPhase[] & Array<{ distance_m?: number; rest_sec?: number; count?: number; steps?: unknown[] }>) {
+    if (raw?.type === 'repeat' && Array.isArray(raw.steps)) {
+      const subs: string[] = [];
+      for (const st of raw.steps) {
+        const l = swimSegLine(st, zones, cssSec, '  '); if (l) subs.push(l);
+        const r = swimRestLine(st, '  '); if (r) subs.push(r);
+      }
+      if (subs.length) lines.push(`${raw.count || 1}x`, ...subs);
+    } else {
+      const l = swimSegLine(raw, zones, cssSec); if (l) lines.push(l);
+      const r = swimRestLine(raw); if (r) lines.push(r);
+    }
+  }
   return lines.length ? lines.join('\n') : null;
 }
 

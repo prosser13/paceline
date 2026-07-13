@@ -7,7 +7,7 @@ import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks, getUpcomingPlan,
 } from '@/data/plans';
-import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
+import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones, listSwimPaceZones } from '@/data/zones';
 import {
   listSessionsBetween, listSessionDistancesBetween, listCompletedBetween, listSportLoadBetween,
   listCompletedForSessions, listCompletedDistancesBetween, getMostRecentCompletedSession,
@@ -31,6 +31,7 @@ import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
+import type { SwimPaceZoneMap } from '@/lib/swim';
 import type { PhaseSeg, WeekDay } from '@/components/dashboard-graphics';
 
 export interface PlanSession {
@@ -67,6 +68,7 @@ export interface WindowDay {
   volumeKm: number;
   hasRun: boolean;
   hasRide: boolean;
+  hasSwim: boolean;
   hasStrength: boolean;
   hasYoga: boolean;
 }
@@ -93,6 +95,7 @@ export interface DashboardData {
   hrZones: HrZoneMap;
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
+  swimZones: SwimPaceZoneMap;
   thresholdPace: string;
 
   hasPlanWeek: boolean;
@@ -206,6 +209,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     hrZoneRows,
     powerZoneRows,
     bikeHrZoneRows,
+    swimZoneRows,
     weekRow,
     raceRow,
     offPlanRaw,
@@ -224,6 +228,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     listHrZones(),
     listPowerZones(),
     listBikeHrZones(),
+    listSwimPaceZones(),
     getCurrentWeek(todayStr),
     getNextRace(todayStr),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
@@ -306,8 +311,8 @@ export async function loadDashboardData(): Promise<DashboardData> {
   const thresholdPace = thresholdPaceRaw ?? '3:40';
   const threshMinKm   = parseThresholdPace(thresholdPace);
 
-  const { zones, hrZones, powerZones, bikeHrZones, ftp } = buildZoneMaps({
-    paceZones, hrZones: hrZoneRows, powerZones: powerZoneRows, bikeHrZones: bikeHrZoneRows,
+  const { zones, hrZones, powerZones, bikeHrZones, swimZones, ftp } = buildZoneMaps({
+    paceZones, hrZones: hrZoneRows, powerZones: powerZoneRows, bikeHrZones: bikeHrZoneRows, swimZones: swimZoneRows,
   });
 
   // Off-plan extras: run TSS from pace, then split today vs recent (newest-first
@@ -345,6 +350,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
       volumeKm,
       hasRun: sessions.some(s => resolveSport(s) === 'run'),
       hasRide: sessions.some(s => resolveSport(s) === 'cycling'),
+      hasSwim: sessions.some(s => resolveSport(s) === 'swimming'),
       hasStrength: sessions.some(s => resolveSport(s) === 'strength'),
       hasYoga: sessions.some(s => resolveSport(s) === 'yoga'),
     });
@@ -559,7 +565,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted, todayCompletedById,
     strengthFirst,
     upcomingWithRest, windowDays,
-    zones, hrZones, powerZones, bikeHrZones, thresholdPace,
+    zones, hrZones, powerZones, bikeHrZones, swimZones, thresholdPace,
     hasPlanWeek: !!weekRow,
     upcomingBlock,
     weekLabel, weekPurpose,

@@ -413,15 +413,20 @@ export async function pushWorkoutEvent(args: {
   dateLocal: string;      // yyyy-mm-dd
   name: string;
   description: string;
+  type?: 'Run' | 'Ride' | 'Swim';   // the workout sport (default Run)
+  poolLengthM?: number | null;      // swim only — sets the watch's pool length
 }): Promise<string> {
   const ctx = await intervalsCtx();
   if (!ctx) throw new Error('intervals.icu is not configured for this user');
+  const type = args.type ?? 'Run';
   const event: Record<string, unknown> = {
     category: 'WORKOUT',
-    type: 'Run',
+    type,
     start_date_local: `${args.dateLocal}T00:00:00`,
     name: args.name,
     description: args.description,
+    // Pool length (m) so the watch counts laps correctly for a pool swim workout.
+    ...(type === 'Swim' && args.poolLengthM ? { pool_length: args.poolLengthM } : {}),
   };
   // POST /events and PUT /events/{id} both take a SINGLE event object. (The array
   // form is only for POST /events/bulk — sending an array here is a JSON parse error.)

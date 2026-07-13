@@ -202,19 +202,25 @@ export function parseThresholdPace(str: string): number {
   return m + (s || 0) / 60;
 }
 
-// One TSS for either sport: run (NGP/pace vs threshold) when a `runPace` is given,
-// else ride (power vs FTP). `runPace` is the caller's chosen pace (NGP ?? avg).
-// Mirrors the same hours × IF² × 100 model the run formula uses. Returns null
-// without enough to compute (e.g. strength/yoga with neither pace nor power).
+// One TSS across sports: run (NGP/pace vs threshold) when a `runPace` is given,
+// else ride (power vs FTP), else swim (CSS vs pace-per-100m). All share the same
+// hours × IF² × 100 model — only the intensity factor differs per sport. Returns
+// null without enough to compute (e.g. strength/yoga with none of the inputs).
 export function sessionTss(
-  input: { mins: number | null; runPace: number | null; power: number | null },
+  input: { mins: number | null; runPace: number | null; power: number | null; swimPaceSec?: number | null },
   threshMinKm: number | null,
   ftp: number | null,
+  cssSec?: number | null,
 ): number | null {
   const run = runTss(input.mins, input.runPace, threshMinKm);
   if (run != null) return run;
   if (input.mins != null && input.power != null && ftp && ftp > 0) {
     const intensity = input.power / ftp;
+    return Math.round((input.mins / 60) * intensity * intensity * 100);
+  }
+  // Swim: IF = CSS ÷ actual pace (both sec/100 m); faster than CSS → IF > 1.
+  if (input.mins != null && input.swimPaceSec && input.swimPaceSec > 0 && cssSec && cssSec > 0) {
+    const intensity = cssSec / input.swimPaceSec;
     return Math.round((input.mins / 60) * intensity * intensity * 100);
   }
   return null;
