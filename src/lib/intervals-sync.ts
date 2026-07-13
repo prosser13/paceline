@@ -8,12 +8,12 @@
 
 import crypto from 'node:crypto';
 import { todayISO } from '@/lib/dates';
-import { listPaceZones } from '@/data/zones';
+import { listPaceZones, listSwimPaceZones, getSwimConfig } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import {
-  listUpcomingRunsForSync, listIntervalEventsInWindow, updatePlanSession,
+  listUpcomingRunsForSync, listUpcomingSwimsForSync, listIntervalEventsInWindow, updatePlanSession,
 } from '@/data/plan-sessions';
-import { structureToWorkoutText, easyRunText } from '@/lib/intervals-workout';
+import { structureToWorkoutText, easyRunText, structureToSwimWorkoutText } from '@/lib/intervals-workout';
 import { pushWorkoutEvent, deleteIntervalEvent } from '@/lib/intervals';
 import { getIntervalsCreds, getIntervalsWorkoutSync } from '@/data/user-integrations';
 
@@ -139,8 +139,50 @@ export async function syncUpcomingRunWorkouts(days = DEFAULT_DAYS, force = false
     }
   }
 
+  // ── Pool swims → intervals.icu (distance-based, %Pace, 25 m pool length) ──
+  const swimZoneRows = await listSwimPaceZones();
+  const { swimZones, swimCssSec } = buildZoneMaps({ paceZones: [], hrZones: [], powerZones: [], bikeHrZones: [], swimZones: swimZoneRows });
+  const poolLengthM = (await getSwimConfig())?.pool_size_m ?? 25;
+  for (const s of await listUpcomingSwimsForSync(from, to)) {
+    handled.add(s.id as string);
+    const date = s.scheduled_date as string;
+    const name = (s.name as string) || 'Swim';
+    const eventId = (s.intervals_event_id as string | null) ?? null;
+    const priorHash = s.intervals_workout_hash as string | null;
+    const override = (s.intervals_workout_override as string | null)?.trim() || null;
+    const text = override ?? structureToSwimWorkoutText(s.structure, swimZones, swimCssSec);
+    try {
+      if (!text) {
+        if (eventId) {
+          await deleteIntervalEvent(eventId);
+          await updatePlanSession(s.id as string, { intervals_event_id: null, intervals_synced_at: null, intervals_workout_hash: null });
+          cleared++; details.push({ date, name, action: 'cleared', eventId });
+        } else {
+          details.push({ date, name, action: 'skipped-empty' });
+        }
+        continue;
+      }
+      const hash = hashText(`${date}\n${name}\nswim:${poolLengthM}\n${text}`);
+      if (!force && eventId && priorHash === hash) {
+        unchanged++; details.push({ date, name, action: 'unchanged', eventId });
+        continue;
+      }
+      const newId = await pushWorkoutEvent({ eventId, dateLocal: date, name, description: text, type: 'Swim', poolLengthM });
+      await updatePlanSession(s.id as string, {
+        intervals_event_id: newId,
+        intervals_synced_at: new Date().toISOString(),
+        intervals_workout_hash: hash,
+      });
+      pushed++;
+      details.push({ date, name, action: eventId ? 'updated' : 'pushed', eventId: newId, workout: text });
+    } catch (e) {
+      lastError = e instanceof Error ? e.message : String(e);
+      details.push({ date, name, action: 'error', error: lastError });
+    }
+  }
+
   // Cleanup: any event-bearing session in the window that's no longer an emittable
-  // run (edited to a rest/race, structure removed, activity changed) — delete its
+  // run/swim (edited to a rest/race, structure removed, activity changed) — delete its
   // stale event so the calendar can't disagree with the plan.
   for (const s of await listIntervalEventsInWindow(from, to)) {
     if (handled.has(s.id as string)) continue;
