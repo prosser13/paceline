@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth';
 import {
   setThresholdPace, replacePaceZones, saveHrConfig, replaceHrZones,
   savePowerConfig, replacePowerZones, saveBikeHrConfig, replaceBikeHrZones,
+  saveSwimConfig, replaceSwimPaceZones,
 } from '@/data/zones';
 import { getPlanTargetInfo, updatePlanTarget, updatePlanStrengthPriority } from '@/data/plans';
 import { revertPlanChange } from '@/data/plan-mutations';
@@ -139,6 +140,48 @@ export async function savePowerZones(threshold: string, zones: PowerZoneInput[])
       sort_order: i + 1,
     }));
   await replacePowerZones(rows);
+
+  revalidatePath('/settings');
+  revalidatePath('/plan');
+  revalidatePath('/');
+
+  return { ok: true };
+}
+
+// ── Swimming: pace zones (sec/100m) + CSS + pool size ────────
+
+export interface SwimZoneInput {
+  name: string;
+  pace_min: string;   // "m:ss" per 100m (fast end)
+  pace_max: string;   // "m:ss" per 100m (slow end)
+}
+
+// "1:45" → 105 sec; a bare number is taken as seconds; blank/garbage → null.
+function paceStrToSec(s: string): number | null {
+  const t = s.trim();
+  if (!t) return null;
+  if (t.includes(':')) {
+    const [m, sec] = t.split(':').map(Number);
+    return Number.isFinite(m) && Number.isFinite(sec) ? m * 60 + sec : null;
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+export async function saveSwimZones(css: string, poolSize: string, zones: SwimZoneInput[]) {
+  await requireUser();
+  await saveSwimConfig({ css_sec_per_100: paceStrToSec(css), pool_size_m: toInt(poolSize) ?? 25 });
+
+  const rows = zones
+    .filter(z => z.name.trim() || z.pace_min.trim() || z.pace_max.trim())
+    .map((z, i) => ({
+      zone_key:     `Z${i + 1}`,
+      name:         z.name.trim() || `Zone ${i + 1}`,
+      pace_min_sec: paceStrToSec(z.pace_min) ?? 0,
+      pace_max_sec: paceStrToSec(z.pace_max) ?? 0,
+      sort_order:   i + 1,
+    }));
+  await replaceSwimPaceZones(rows);
 
   revalidatePath('/settings');
   revalidatePath('/plan');

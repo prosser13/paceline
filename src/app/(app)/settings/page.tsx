@@ -5,6 +5,7 @@ import { listRacePlans } from '@/data/plans';
 import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
+  getSwimConfig, listSwimPaceZones,
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
@@ -17,6 +18,7 @@ import StrengthProgressionClient from './StrengthProgressionClient';
 import ZonesClient from './ZonesClient';
 import HrZonesClient from './HrZonesClient';
 import PowerZonesClient from './PowerZonesClient';
+import SwimZonesClient from './SwimZonesClient';
 import TargetTimesClient, { type TargetTimeRow } from './TargetTimesClient';
 import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
@@ -32,7 +34,7 @@ import { getImpersonatedUserId, listImpersonatableUsers } from '@/lib/impersonat
 import { getMcpTokenInfo } from '@/data/mcp-tokens';
 import {
   saveBikeHrZones,
-  type ZoneInput, type HrZoneInput, type PowerZoneInput, type ConstraintInput,
+  type ZoneInput, type HrZoneInput, type PowerZoneInput, type SwimZoneInput, type ConstraintInput,
 } from './actions';
 
 export default async function SettingsPage() {
@@ -41,6 +43,7 @@ export default async function SettingsPage() {
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
     constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
+    swimConfig, swimZones,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -63,6 +66,8 @@ export default async function SettingsPage() {
     listThresholdChecks(10),
     getRevertableChange(),
     getUserIntegrations(),
+    getSwimConfig(),
+    listSwimPaceZones(),
   ]);
 
   // "View as" is owner-only. getViewer reflects the REAL session identity (not the
@@ -102,6 +107,16 @@ export default async function SettingsPage() {
     name:      z.name,
     power_min: String(z.power_min),
     power_max: String(z.power_max),
+  }));
+
+  // Swim: sec/100m → "m:ss" for the inputs.
+  const secToMss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+  const swimCss  = swimConfig?.css_sec_per_100 != null ? secToMss(swimConfig.css_sec_per_100) : '';
+  const swimPool = swimConfig?.pool_size_m != null ? String(swimConfig.pool_size_m) : '25';
+  const swimZoneInputs: SwimZoneInput[] = swimZones.map(z => ({
+    name:     z.name,
+    pace_min: secToMss(z.pace_min_sec),
+    pace_max: secToMss(z.pace_max_sec),
   }));
 
   const bikeHrThreshold = bikeHrConfig?.threshold_hr != null ? String(bikeHrConfig.threshold_hr) : '';
@@ -217,6 +232,11 @@ export default async function SettingsPage() {
             initialZones={bikeHrZoneInputs}
             save={saveBikeHrZones}
           />
+        </SettingsCard>
+
+        <SettingsCard cat="Swimming" color="var(--color-swim)" title="Swim pace zones"
+          subtitle="Your Critical Swim Speed (CSS) threshold and pace zones in min:sec per 100 m, plus your default pool size. Swims are built from these zones and pushed to the watch with the pool length.">
+          <SwimZonesClient initialCss={swimCss} initialPool={swimPool} initialZones={swimZoneInputs} />
         </SettingsCard>
 
         <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null}>
