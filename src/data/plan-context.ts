@@ -279,7 +279,9 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     plan: activePlan,
     upcoming_races: upcomingRaces,
     current_week: currentWeek as Record<string, unknown> | null,
-    upcoming,
+    // Each run carries its prescribed `target` — paired pace + HR from the same zone,
+    // so a reader never mixes (e.g.) a Z2 pace with a Z1 HR on an unstructured easy run.
+    upcoming: upcoming.map(s => ({ ...s, target: runTargets(s, runZones, runHrBands) })),
     recent,
     wellness: wellness as Record<string, unknown> | null,
     zones: {
@@ -455,6 +457,50 @@ function structureZoneKeys(structure: any, zones: ZoneMap): string[] {
     else for (const sub of st.steps) if (sub.zoneKey) keys.add(sub.zoneKey);
   }
   return [...keys];
+}
+
+// Session intensity → the zone it prescribes (mirrors the UI's INTENSITY map).
+const INTENSITY_ZONE: Record<string, string> = {
+  easy: 'Z2', recovery: 'Z1', steady: 'Z3', tempo: 'Z4', hard: 'Z5', race: 'Z5',
+};
+
+// The prescribed pace AND HR window(s) for a planned run, BOTH drawn from the same
+// zone so a briefing reader can't pair (say) a Z2 pace with a Z1 HR ceiling. An
+// unstructured run (no `structure`) resolves one zone from its intensity, falling
+// back to the zone its target_pace lands in; a structured run lists each distinct
+// segment zone. Returns null for non-runs (zones don't apply to strength/yoga/rides).
+function runTargets(
+  session: Record<string, unknown>,
+  runZones: ZoneMap,
+  hrBands: HrBand[],
+): { zone: string; pace: string | null; hr: string | null }[] | null {
+  const activityType = session.activity_type as string | null;
+  const sessionType = session.session_type as string | null;
+  const isRun = (activityType === 'running' || activityType == null)
+    && (sessionType == null || !NON_RUN_TYPES.includes(sessionType));
+  if (!isRun) return null;
+
+  let keys = structureZoneKeys(session.structure, runZones);
+  if (!keys.length) {
+    const intensity = session.intensity as string | null;
+    const fromIntensity = intensity ? INTENSITY_ZONE[intensity] : null;
+    const fromPace = zoneFromPace(session.target_pace as string | null, runZones)?.key ?? null;
+    const k = fromIntensity ?? fromPace;
+    if (k) keys = [k];
+  }
+  if (!keys.length) return null;
+
+  keys.sort((a, b) => (runZones[a]?.sortOrder ?? 0) - (runZones[b]?.sortOrder ?? 0));
+  return keys.map(key => {
+    const pz = runZones[key];
+    const hz = hrBands.find(b => b.key === key);
+    const name = pz?.name ?? hz?.name;
+    return {
+      zone: name ? `${key} ${name}` : key,
+      pace: pz?.paceMin && pz?.paceMax ? `${pz.paceMin}–${pz.paceMax}/km` : null,
+      hr: hz ? `${hz.min}–${hz.max} bpm` : null,
+    };
+  });
 }
 
 // The single prescribed zone for an easy/steady run: the zone token in its

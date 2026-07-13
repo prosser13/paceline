@@ -45,6 +45,20 @@ export async function getLatestCoachMessages(): Promise<{ morning: CoachMessage 
   };
 }
 
+// The last `limit` messages (both kinds), newest first — fed back into the
+// generators so the coach can see what it has recently said and avoid repeating
+// recaps/reassurances the athlete already read.
+export async function listRecentCoachMessages(limit = 4): Promise<CoachMessage[]> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('coach_messages')
+    .select(READ_COLS)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  return (data as CoachMessage[] | null) ?? [];
+}
+
 // The message for a given London day + kind, or null. Used by the generators to
 // stay idempotent and to retry a generated-but-undelivered Telegram send.
 export interface CoachMessageRow {

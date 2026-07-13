@@ -23,7 +23,7 @@ import { getCurrentUser, isCronRequest } from '@/lib/auth';
 import { currentUserId, runWithUser } from '@/lib/scope';
 import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { getPlanContext } from '@/data/plan-context';
-import { getCoachContext, upsertCoachContext } from '@/data/coach';
+import { getCoachContext, upsertCoachContext, listRecentCoachMessages } from '@/data/coach';
 import { generateEveningReview } from '@/lib/coach-generate';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
@@ -103,8 +103,10 @@ async function runEveningForUser(forDate: string, londonHour: number, forced: bo
   try {
     // throughToday: the review runs after today's session, so it must see today's
     // result (with actuals) rather than treating it as an upcoming session.
-    const [ctx, memory] = await Promise.all([getPlanContext(forDate, { throughToday: true }), getCoachContext()]);
-    const review = await generateEveningReview(ctx, memory.summary);
+    const [ctx, memory, recent] = await Promise.all([
+      getPlanContext(forDate, { throughToday: true }), getCoachContext(), listRecentCoachMessages(4),
+    ]);
+    const review = await generateEveningReview(ctx, memory.summary, recent);
 
     const { data, error } = await supabaseAdmin
       .from('coach_messages')
