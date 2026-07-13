@@ -23,7 +23,7 @@ import { getCurrentUser, isCronRequest } from '@/lib/auth';
 import { runWithUser } from '@/lib/scope';
 import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { getPlanContext, type PlanContext } from '@/data/plan-context';
-import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered } from '@/data/coach';
+import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered, listRecentCoachMessages } from '@/data/coach';
 import { getCoachingPrefs } from '@/data/coaching';
 import { markAvailabilityReviewed } from '@/data/availability';
 import { getLatestWellnessDay, listRecentWellnessDays, type WellnessDay } from '@/data/wellness-days';
@@ -157,9 +157,9 @@ async function runMorningForUser(forDate: string, londonHHMM: string, forced: bo
       return { ok: true, skipped: 'rest-day', for_date: forDate };
     }
 
-    const memory = await getCoachContext();
+    const [memory, priorMessages] = await Promise.all([getCoachContext(), listRecentCoachMessages(4)]);
     const readiness = buildReadiness(hasOvernight ? latest : null, recent);
-    const briefing = await generateMorningBriefing(ctx, memory.summary, readiness);
+    const briefing = await generateMorningBriefing(ctx, memory.summary, readiness, priorMessages);
 
     // The briefing has now reviewed the next 14 days of availability — advance the
     // gate so it won't re-lead with the same conflicts until availability changes
