@@ -45,6 +45,7 @@ export interface SessionRowContext {
   today?: boolean;
   next?: boolean;
   done?: boolean;
+  missed?: boolean;            // past day, planned but unlogged
   emphasis?: boolean;          // dashboard "Tomorrow" sizing
   isExpanded?: boolean;        // run: parent-controlled expansion (plan page)
   onToggle?: () => void;
@@ -70,7 +71,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           title={session.session_type === 'CORE' ? 'Core' : 'Strength'}
           focus={session.description ?? null}
           duration={session.estimated_duration ?? null}
-          today={ctx.today} next={ctx.next} done={ctx.done}
+          today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           note={null}
           exercises={(session.structure as unknown as StrengthEx[] | null) ?? []}
         />
@@ -81,7 +82,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           compact emphasis={ctx.emphasis}
           focus={session.description ?? null}
           duration={session.estimated_duration ?? null}
-          today={ctx.today} next={ctx.next} done={ctx.done}
+          today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           note={session.rationale ?? null}
           poses={(session.structure as unknown as YogaPose[] | null) ?? []}
         />
@@ -93,7 +94,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           session={session}
           powerZones={ctx.powerZones}
           bikeHrZones={ctx.bikeHrZones}
-          today={ctx.today} next={ctx.next} done={ctx.done}
+          today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           completed={ctx.done ? (ctx.completed ?? null) : null}
         />
       );
@@ -105,7 +106,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           hrZones={ctx.hrZones}
           thresholdPace={ctx.thresholdPace}
           completed={ctx.completed ?? null}
-          today={ctx.today} next={ctx.next} done={ctx.done}
+          today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           emphasis={ctx.emphasis}
           isExpanded={ctx.isExpanded}
           onToggle={ctx.onToggle}

@@ -81,6 +81,9 @@ function resolveStatus(
   const db = session.status as SessionStatus | null;
   if (db === 'rest' || db === 'missed_injury' || db === 'skipped') return db;
   if (session.scheduled_date === todayStr) return 'today';
+  // A past day with a planned session but no completion (and no explicit
+  // rest/skip/injury) went unlogged — mark it missed.
+  if (session.scheduled_date < todayStr) return 'missed';
   return 'planned';
 }
 
@@ -252,6 +255,7 @@ export default function PlanThread({
     const status    = resolveStatus(session, todayStr, completedMap);
     const isRest    = status === 'rest';
     const isDone    = status === 'done';
+    const isMissed  = status === 'missed';
     const isToday   = status === 'today';
     const isNext    = session.id === nextSessionId;
     const isFocus   = isToday || isNext;
@@ -287,6 +291,7 @@ export default function PlanThread({
           today: isFocus,
           next: isNext && !isToday,
           done: isDone,
+          missed: isMissed,
           isExpanded,
           onToggle: () => toggleExpanded(session.id),
         }}
@@ -353,10 +358,12 @@ export default function PlanThread({
     const sessionNode = (s: PlanSession) => {
       const st = resolveStatus(s, todayStr, completedMap);
       if (st === 'rest') return <RestCard key={s.id} />;
-      // Completed sessions get a green right rail so they read as "done" at a glance.
-      const doneRail = st === 'done' ? 'border-r-[3px] border-r-fern' : '';
+      // Completed sessions get a green right rail; missed (past, unlogged) get a red
+      // one — so each reads as done/missed at a glance.
+      const rail = st === 'done' ? 'border-r-[3px] border-r-fern'
+        : st === 'missed' ? 'border-r-[3px] border-r-oxblood' : '';
       return (
-        <div key={s.id} className={`border border-fog ${doneRail} rounded-[16px] bg-paper overflow-hidden mb-[9px]`}>
+        <div key={s.id} className={`border border-fog ${rail} rounded-[16px] bg-paper overflow-hidden mb-[9px]`}>
           {renderSessionRow(s)}
         </div>
       );
