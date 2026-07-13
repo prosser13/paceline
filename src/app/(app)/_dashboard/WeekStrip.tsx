@@ -3,8 +3,8 @@
 // dark hero tile and race days in race-red. Matches the dashboard mockup.
 
 import type { WindowDay } from './data';
-import { Dumbbell, BikeGlyph, YogaGlyph } from '@/components/glyphs';
-import { RUN, RIDE, STRENGTH, YOGA, RUN_B, RIDE_B, STRENGTH_B, YOGA_B } from '@/lib/colors';
+import { Dumbbell, BikeGlyph, SwimGlyph, YogaGlyph } from '@/components/glyphs';
+import { RUN, RIDE, SWIM, STRENGTH, YOGA, RUN_B, RIDE_B, SWIM_B, STRENGTH_B, YOGA_B } from '@/lib/colors';
 
 function Flag({ color, size = 17 }: { color: string; size?: number }) {
   return (
@@ -38,18 +38,20 @@ export default function WeekStrip({ days }: { days: WindowDay[] }) {
           <span className="font-display font-bold text-[19px]" style={{ color: isToday ? RUN_B : RUN, lineHeight: 1 }}>{Math.round(day.volumeKm)}</span>
         );
         else if (day.hasRide) middle = <BikeGlyph size={17} strokeWidth={2.1} className="" />;
+        else if (day.hasSwim) middle = <SwimGlyph size={17} strokeWidth={2.1} className="" />;
         else if (day.hasStrength) middle = <Dumbbell size={17} strokeWidth={2.1} className="" />;
         else if (day.hasYoga) middle = <YogaGlyph size={17} strokeWidth={2.1} className="" />;
         else middle = <span className="text-[15px]" style={{ opacity: .4 }}>·</span>;
 
         const midColor = day.hasRide ? (isToday ? RIDE_B : RIDE)
+          : day.hasSwim ? (isToday ? SWIM_B : SWIM)
           : day.hasStrength ? (isToday ? STRENGTH_B : STRENGTH)
           : day.hasYoga ? (isToday ? YOGA_B : YOGA)
           : undefined;
 
         // Bottom label
         const label = isRace ? 'race' : isToday ? 'today'
-          : day.hasRun ? 'km' : day.hasRide ? 'ride' : day.hasStrength ? 'lift' : day.hasYoga ? 'yoga' : 'rest';
+          : day.hasRun ? 'km' : day.hasRide ? 'ride' : day.hasSwim ? 'swim' : day.hasStrength ? 'lift' : day.hasYoga ? 'yoga' : 'rest';
         const labelBold = isRace || isToday;
 
         return (

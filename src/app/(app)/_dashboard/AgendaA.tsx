@@ -61,7 +61,8 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   const NON_RUN = new Set(['STRENGTH', 'CORE', 'YOGA', 'REST']);
   const todayRun = d.todaySessions.find(s =>
     !doneIds.has(s.id) && s.target_pace &&
-    !NON_RUN.has(s.session_type ?? '') && (s.activity_type ?? 'running') !== 'cycling');
+    !NON_RUN.has(s.session_type ?? '') &&
+    (s.activity_type ?? 'running') !== 'cycling' && (s.activity_type ?? 'running') !== 'swimming');
   const renderTodayBlock = (s: PlanSession) => {
     const done  = doneIds.has(s.id);
     const label = done ? 'Done' : 'Today';
@@ -120,7 +121,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mb-[18px]">
               {tmrw.map(s => (
                 <TomorrowCard key={s.id} session={s}
-                  zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} />
+                  zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} swimZones={d.swimZones} />
               ))}
             </div>
           );

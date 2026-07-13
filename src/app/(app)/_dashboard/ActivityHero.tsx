@@ -4,6 +4,7 @@
 
 import SessionHero from './SessionHero';
 import CyclingHero from '@/components/CyclingHero';
+import SwimHero from '@/components/SwimHero';
 import { resolveSport } from '@/lib/sports/registry';
 import type { DashboardData, PlanSession, CompletedToday } from './data';
 
@@ -16,9 +17,15 @@ export default function ActivityHero({
   d: DashboardData;
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
 }) {
-  return resolveSport(session) === 'cycling'
-    ? <CyclingHero label={label} session={session} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} light={light}
-        planSessionId={session.id} perceivedEffort={completed?.perceivedEffort ?? null} />
-    : <SessionHero label={label} session={session} thresholdPace={d.thresholdPace}
-        zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} fuelProducts={d.fuelProducts} />;
+  const sport = resolveSport(session);
+  if (sport === 'cycling') {
+    return <CyclingHero label={label} session={session} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} completed={completed} light={light}
+        planSessionId={session.id} perceivedEffort={completed?.perceivedEffort ?? null} />;
+  }
+  if (sport === 'swimming') {
+    return <SwimHero label={label} session={session} swimZones={d.swimZones} completed={completed} light={light}
+        planSessionId={session.id} perceivedEffort={completed?.perceivedEffort ?? null} />;
+  }
+  return <SessionHero label={label} session={session} thresholdPace={d.thresholdPace}
+      zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} fuelProducts={d.fuelProducts} />;
 }
