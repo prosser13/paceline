@@ -20,12 +20,14 @@ export default function ElevationProfile({
   totalKm: routeKm,
   title,
   ascentM,
+  lineColor = OXBLOOD,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
   totalKm: number;
   title?: string;
   ascentM?: number | null;
+  lineColor?: string;
 }) {
   // Build (km, ele) samples either from the GPX or the checkpoint table.
   let samples: { km: number; ele: number }[];
@@ -65,8 +67,8 @@ export default function ElevationProfile({
         {/* baseline */}
         <line x1={PAD_L} y1={H - PAD_B} x2={W - 8} y2={H - PAD_B} stroke={FOG} strokeWidth={1} />
 
-        <polygon points={area} fill={OXBLOOD} opacity={0.1} />
-        <polyline points={line} fill="none" stroke={OXBLOOD} strokeWidth={1.8}
+        <polygon points={area} fill={lineColor} opacity={0.1} />
+        <polyline points={line} fill="none" stroke={lineColor} strokeWidth={1.8}
           strokeLinejoin="round" strokeLinecap="round" />
 
         {/* checkpoint markers */}

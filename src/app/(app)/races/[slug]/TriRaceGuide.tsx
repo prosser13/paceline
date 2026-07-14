@@ -6,10 +6,13 @@
 import CoachNotes from './CoachNotes';
 import KitChecklist from './KitChecklist';
 import RaceWeather from './RaceWeather';
+import RouteMap from './RouteMap';
+import ElevationProfile from './ElevationProfile';
 import { SwimGlyph, BikeGlyph, RunGlyph } from '@/components/glyphs';
 import { SWIM, RIDE, RUN } from '@/lib/colors';
 import type { RaceGuide, Discipline } from '@/data/races/types';
 import type { TriEstimate, TriRow } from '@/data/races/tri-pacing';
+import type { ParsedGpx } from '@/lib/gpx';
 
 function fmtHMS(secs: number | null): string {
   if (secs == null) return '—';
@@ -29,13 +32,14 @@ function rowColor(kind: TriRow['kind']): string {
 }
 
 export default function TriRaceGuide({
-  guide, raceDate, daysToGo, estimate, owned,
+  guide, raceDate, daysToGo, estimate, owned, legTracks = [],
 }: {
   guide: RaceGuide;
   raceDate: string | null;
   daysToGo: number | null;
   estimate: TriEstimate;
   owned: boolean;
+  legTracks?: (ParsedGpx | null)[];   // parsed GPX per discipline, aligned to guide.disciplines
 }) {
   const dateLabel = raceDate
     ? new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
@@ -126,6 +130,31 @@ export default function TriRaceGuide({
           );
         })}
       </div>
+
+      {/* Per-leg course maps + elevation (swim map only — its profile is sea-level) */}
+      {legTracks.some(Boolean) && (
+        <div className="flex flex-col gap-[16px]">
+          {legs.map((d, i) => {
+            const parsed = legTracks[i];
+            if (!parsed) return null;
+            const spec = SPORT[d.sport];
+            const showProfile = d.sport !== 'swim';
+            return (
+              <div key={i} className="flex flex-col gap-[10px]">
+                <div className="flex items-center gap-[8px]">
+                  <span style={{ color: spec.color }}><spec.Glyph size={16} /></span>
+                  <span className="font-display font-bold text-[15px]">{d.name} course</span>
+                  <span className="font-mono text-[11px] text-stone">{kmStr(d.distanceKm)} km{d.ascentM ? ` · ${d.ascentM} m` : ''}</span>
+                </div>
+                <RouteMap parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} lineColor={spec.color} />
+                {showProfile && (
+                  <ElevationProfile parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} ascentM={d.ascentM ?? null} title="Elevation" lineColor={spec.color} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Course briefing */}
       <Card title="The course">

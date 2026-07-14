@@ -16,11 +16,13 @@ export default function RouteMap({
   checkpoints,
   totalKm: routeKm,
   title,
+  lineColor = OXBLOOD,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
   totalKm: number;
   title?: string;
+  lineColor?: string;
 }) {
   if (!parsed) {
     return (
@@ -60,7 +62,7 @@ export default function RouteMap({
         {/* route casing + line */}
         <polyline points={polyline} fill="none" stroke={FOG} strokeWidth={6}
           strokeLinejoin="round" strokeLinecap="round" />
-        <polyline points={polyline} fill="none" stroke={OXBLOOD} strokeWidth={2.5}
+        <polyline points={polyline} fill="none" stroke={lineColor} strokeWidth={2.5}
           strokeLinejoin="round" strokeLinecap="round" />
 
         {/* checkpoint dots */}
