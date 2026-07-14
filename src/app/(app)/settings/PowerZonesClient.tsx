@@ -16,13 +16,42 @@ type PowerZoneRow = PowerZoneInput & { _key: number };
 let nextKey = 0;
 const withKey = (z: PowerZoneInput): PowerZoneRow => ({ ...z, _key: nextKey++ });
 
+// Standard Coggan power zones from FTP (watts). A 20-min all-out test gives FTP ≈
+// 95% of the 20-min average; zones are then fixed fractions of FTP.
+const COGGAN: Array<{ name: string; lo: number; hi: number }> = [
+  { name: 'Recovery',          lo: 0,    hi: 0.55 },
+  { name: 'Aerobic Endurance', lo: 0.56, hi: 0.75 },
+  { name: 'Tempo',             lo: 0.76, hi: 0.90 },
+  { name: 'Threshold',         lo: 0.91, hi: 1.05 },
+  { name: 'Anaerobic',         lo: 1.06, hi: 1.50 },
+];
+function zonesFromFtp(ftp: number): PowerZoneRow[] {
+  return COGGAN.map(z => withKey({
+    name: z.name,
+    power_min: String(Math.round(ftp * z.lo)),
+    power_max: String(Math.round(ftp * z.hi)),
+  }));
+}
+
 export default function PowerZonesClient({ initialThreshold, initialZones }: Props) {
   const [threshold, setThreshold] = useState(initialThreshold);
   const [zones, setZones]         = useState<PowerZoneRow[]>(
     (initialZones.length ? initialZones : [{ name: '', power_min: '', power_max: '' }]).map(withKey),
   );
+  const [testWatts, setTestWatts] = useState('');
   const [saved, setSaved] = useState(false);
   const [pending, start]  = useTransition();
+
+  // Fill FTP + the full zone set from a 20-min test (FTP = 95% of the 20-min avg).
+  // Populates the fields; the athlete reviews and clicks Save.
+  function fillFromTest() {
+    const w = Number(testWatts);
+    if (!Number.isFinite(w) || w <= 0) return;
+    const ftp = Math.round(w * 0.95);
+    setThreshold(String(ftp));
+    setZones(zonesFromFtp(ftp));
+    setSaved(false);
+  }
 
   function update(i: number, field: keyof PowerZoneInput, value: string) {
     setZones(zs => zs.map((z, idx) => (idx === i ? { ...z, [field]: value } : z)));
@@ -48,6 +77,23 @@ export default function PowerZonesClient({ initialThreshold, initialZones }: Pro
 
   return (
     <div className="flex flex-col gap-5">
+      {/* FTP from a 20-min test → fills the threshold + zones below (review, then Save). */}
+      <div className="flex flex-wrap items-center gap-3 rounded-[8px] border border-fog bg-bone/40 px-3 py-[10px]">
+        <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone shrink-0">20-min test</label>
+        <input
+          value={testWatts}
+          onChange={e => setTestWatts(e.target.value)}
+          placeholder="e.g. 300"
+          inputMode="numeric"
+          className={`${INPUT} w-[80px] text-center`}
+        />
+        <span className="font-mono text-[11px] text-stone">W avg</span>
+        <button type="button" onClick={fillFromTest}
+          className="font-mono text-[12px] text-marine hover:text-marine-dark transition-colors">
+          → Set FTP + zones (95%)
+        </button>
+      </div>
+
       {/* Threshold power (FTP) */}
       <div className="flex items-center gap-3">
         <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone w-[120px] shrink-0">
