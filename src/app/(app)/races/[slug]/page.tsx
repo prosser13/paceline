@@ -111,8 +111,9 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   // from the athlete's fitness. Rendered by its own component; the single-discipline
   // path below is untouched.
   if (guide.disciplines?.length) {
-    const [swimCfg, powerZonesRows, thresholdStr] = await Promise.all([
+    const [swimCfg, powerZonesRows, thresholdStr, legTracks] = await Promise.all([
       getSwimConfig(), listPowerZones(), getThresholdPace(),
+      Promise.all(guide.disciplines.map(d => loadGpx(d.gpxPath ?? null))),
     ]);
     const ftp = (powerZonesRows.find(z => z.zone_key === 'Z4')?.power_max as number | undefined) ?? null;
     const estimate = buildTriEstimate(guide, {
@@ -127,6 +128,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         daysToGo={raceDate ? daysUntil(raceDate) : null}
         estimate={estimate}
         owned={owned}
+        legTracks={legTracks}
       />
     );
   }

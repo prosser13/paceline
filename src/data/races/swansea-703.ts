@@ -1,8 +1,9 @@
 // IRONMAN 70.3 Swansea — curated multi-discipline race guide (1.9 km swim / 90 km
 // bike / 21.1 km run). The `disciplines` + `transitions` drive the per-leg guide and
 // the estimated finish (from the athlete's fitness — no goal is set). Course facts
-// from the organiser + public route info; per-leg GPX + the exact 2027 date are TBC
-// (dropped in later). Joined to the live `plans` row (slug 'swansea-703').
+// from the organiser + public route info. Per-leg GPX are the official 2025 IMSWA
+// routes (swim/bike/run); the race date is 11 July 2027. Joined to the live `plans`
+// row (slug 'swansea-703').
 
 import type { RaceGuide } from './types';
 
@@ -18,7 +19,7 @@ export const SWANSEA_703: RaceGuide = {
   distanceKm: 113,       // 1.9 + 90 + 21.1 (overall)
   ascentM: 1106,         // essentially all on the bike
   startTime: '06:30',    // rolling swim start; refine when the 2027 schedule lands
-  gpxPath: null,         // per-leg GPX supplied later (see `disciplines[].gpxPath`)
+  gpxPath: '/races/swansea-703-bike.gpx',   // headline route = the bike (the story of the day)
 
   summary:
     'A half-distance triathlon on the South Wales coast: a sea swim off Prince of Wales Dock, ' +
@@ -37,19 +38,19 @@ export const SWANSEA_703: RaceGuide = {
   // Multi-discipline: the page renders each leg + T1/T2 and an ESTIMATED finish.
   disciplines: [
     {
-      sport: 'swim', name: 'Swim', distanceKm: 1.9, ascentM: 0, gpxPath: null,
+      sport: 'swim', name: 'Swim', distanceKm: 1.9, ascentM: 0, gpxPath: '/races/swansea-703-swim.gpx',
       start: { name: 'Prince of Wales Dock', lat: 51.621, lng: -3.918 },
       summary: '1.9 km sea swim in Swansea Bay — wetsuit-legal, open water. Settle into rhythm, sight often, and don’t redline early.',
       fuelNote: 'Nothing on the swim. A gel in T1 if the stomach’s ready.',
     },
     {
-      sport: 'bike', name: 'Bike', distanceKm: 90, ascentM: 1106, gpxPath: null,
+      sport: 'bike', name: 'Bike', distanceKm: 90, ascentM: 1106, gpxPath: '/races/swansea-703-bike.gpx',
       start: { name: 'T1 · dock', lat: 51.621, lng: -3.918 },
       summary: 'One 90 km loop out to the Mumbles and around the Gower’s coastal clifftops before returning along Swansea Bay. 1,106 m of climbing — ride the hills by power, not ego, and recover on the descents.',
       fuelNote: '~60–80 g carbs/h + fluids; drink to the climbs, eat on the flats. This is where the race is won or lost.',
     },
     {
-      sport: 'run', name: 'Run', distanceKm: 21.1, ascentM: 60, gpxPath: null,
+      sport: 'run', name: 'Run', distanceKm: 21.1, ascentM: 60, gpxPath: '/races/swansea-703-run.gpx',
       start: { name: 'T2 · city centre', lat: 51.617, lng: -3.939 },
       summary: 'Two flat laps through the city centre and along the bay past Swansea Arena. Off a hilly bike, start conservative — the first 5 km should feel too easy.',
       fuelNote: 'Gel every ~30–40 min + water/electrolyte at aid stations; cola in the back half.',
