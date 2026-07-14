@@ -6,7 +6,9 @@
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
 import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, getSwimPredictions, getPredictedRaces, getEnduranceReadiness, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView, type SwimPredictionView, type PredictedRace } from '@/data/benchmarks';
-import { getThresholdPace } from '@/data/zones';
+import { getThresholdPace, getSwimConfig, listPowerZones } from '@/data/zones';
+import { buildTriEstimate } from '@/data/races/tri-pacing';
+import { SWANSEA_703 } from '@/data/races/swansea-703';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
@@ -24,6 +26,18 @@ function addDays(iso: string, n: number): string {
 
 export interface Series { date: string; v: number }
 
+// The 70.3 finish predictor — the athlete's Swansea time projected from their live
+// fitness (swim CSS, bike FTP, run threshold) over the course profile + T1/T2. This
+// is the same estimate the race guide shows, surfaced as a Benchmarks tile.
+export interface Tri703Leg { kind: string; name: string; estSeconds: number | null }
+export interface Tri703View {
+  raceName: string;
+  slug: string;
+  finishSeconds: number | null;   // null when any leg's fitness input is missing
+  legs: Tri703Leg[];              // swim · T1 · bike · T2 · run
+  missing: string[];              // which inputs are absent (for the "set X" hint)
+}
+
 export interface BenchmarksData {
   asOf: string;
   raceName: string | null;
@@ -35,6 +49,7 @@ export interface BenchmarksData {
   signals: { source: string; label: string; impliedSeconds: number }[];
   experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
   swimPredictions: SwimPredictionView[];        // 750 m / 1900 m swim projections
+  tri703: Tri703View;                           // Swansea 70.3 finish predictor
   predictedRaces: PredictedRace[];              // 5k/10k/HM/marathon predictions + deltas
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
@@ -78,7 +93,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
     getSwimPredictions(asOf),
@@ -86,6 +101,8 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     getEnduranceReadiness(asOf),
     getGoalMarathon(asOf),
     getThresholdPace(),
+    getSwimConfig(),
+    listPowerZones(),
     listBenchmarkSnapshotsSince(isoWeekStart(since)),
     listRecentWellnessDays(WINDOW_DAYS),
     listRaceResultsSince(addDays(asOf, -365)),   // races are sparse milestones — wider window
@@ -116,6 +133,22 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   // Delta since the first tracked week (needs ≥2 snapshots or there's no trend yet).
   const thresholdTrend: Series[] = snapshots.flatMap(s => s.threshold_min_km != null ? [{ date: s.week_start, v: Number(s.threshold_min_km) }] : []);
   const thresholdMinKm = thresholdStr ? parseThresholdPace(thresholdStr) : null;
+
+  // 70.3 finish predictor — the athlete's Swansea time from live fitness over the
+  // course profile + T1/T2 (same model as the race guide's estimated splits).
+  const ftpW = (powerZones.find(z => z.zone_key === 'Z4')?.power_max as number | undefined) ?? null;
+  const triEstimate = buildTriEstimate(SWANSEA_703, {
+    swimCssSec: swimCfg?.css_sec_per_100 ?? null,
+    ftpW,
+    runThresholdMinKm: thresholdMinKm,
+  });
+  const tri703: Tri703View = {
+    raceName: SWANSEA_703.eventName,
+    slug: SWANSEA_703.slug,
+    finishSeconds: triEstimate.finishSeconds,
+    legs: triEstimate.rows.map(r => ({ kind: r.kind, name: r.name, estSeconds: r.estSeconds })),
+    missing: triEstimate.missing,
+  };
   const thresholdDeltaSec = thresholdTrend.length >= 2 && thresholdMinKm != null
     ? Math.round((thresholdMinKm - thresholdTrend[0].v) * 60) : null;
   const predSnaps = snapshots.filter(s => s.predicted_seconds != null);
@@ -133,6 +166,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
     experimental,
     swimPredictions,
+    tri703,
     predictedRaces,
     thresholdMinKm,
     thresholdTrend,
