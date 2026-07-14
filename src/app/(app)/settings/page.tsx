@@ -10,6 +10,8 @@ import {
 import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
+import { getLatestPowerCheck, getPendingPowerSuggestion, listPowerChecks, getRevertablePowerChange } from '@/data/power-suggestion';
+import PowerSuggestion from '../benchmarks/PowerSuggestion';
 import { getProgressionMode } from '@/data/strength-progression';
 import { listPlanPrefs } from '@/data/plans';
 import { listAdjustments } from '@/data/plan-mutations';
@@ -44,6 +46,7 @@ export default async function SettingsPage() {
     constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
+    pwrLatest, pwrPending, pwrHistory, pwrRevertable,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -68,6 +71,10 @@ export default async function SettingsPage() {
     getUserIntegrations(),
     getSwimConfig(),
     listSwimPaceZones(),
+    getLatestPowerCheck(),
+    getPendingPowerSuggestion(),
+    listPowerChecks(10),
+    getRevertablePowerChange(),
   ]);
 
   // "View as" is owner-only. getViewer reflects the REAL session identity (not the
@@ -221,6 +228,7 @@ export default async function SettingsPage() {
         <SettingsCard cat="Cycling" color="var(--color-ride)" title="Power zones"
           subtitle="Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from these zones, so editing one updates every ride's targets.">
           <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
+          <PowerSuggestion latest={pwrLatest} pending={pwrPending} history={pwrHistory} revertable={pwrRevertable} />
         </SettingsCard>
 
         <SettingsCard cat="Cycling" color="var(--color-ride)" title="Bike heart-rate zones"
