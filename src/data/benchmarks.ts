@@ -24,8 +24,52 @@ import {
 } from '@/lib/experimental-predictions';
 import { parseThresholdPace, efficiencyFactor } from '@/lib/run-tss';
 import { activityKind } from '@/lib/activity-types';
+import { swimPrediction, type SwimTrial } from '@/lib/swim-prediction';
 
 const MARATHON_M = 42195;
+
+// ── Swim predictions (750 m / 1900 m) — Riegel over swim time-trials ──
+
+export interface SwimPredictionView {
+  targetM: number;
+  label: string;
+  predictedSeconds: number | null;
+  detail: string | null;
+  unavailableReason: string | null;
+}
+
+const SWIM_TARGETS: Array<{ m: number; label: string }> = [
+  { m: 750,  label: 'Sprint-tri swim · 750 m' },
+  { m: 1900, label: '70.3 swim · 1900 m' },
+];
+
+export const getSwimPredictions = cache(async (asOf: string): Promise<SwimPredictionView[]> => {
+  const userId = await currentUserId();
+  const since = new Date(`${asOf}T00:00:00`);
+  since.setFullYear(since.getFullYear() - 1);
+  const sinceIso = since.toISOString().slice(0, 10);
+
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('completed_date, actual_duration_secs, actual_duration_mins, actual_distance_km, plan_sessions!inner(name, activity_type)')
+    .eq('user_id', userId)
+    .gte('completed_date', sinceIso)
+    .eq('plan_sessions.activity_type', 'swimming');
+
+  const trials: SwimTrial[] = (data ?? []).flatMap(r => {
+    const distM = r.actual_distance_km != null ? Number(r.actual_distance_km) * 1000 : 0;
+    const secs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
+      : (r.actual_duration_mins != null ? Number(r.actual_duration_mins) * 60 : 0);
+    if (!(distM > 0) || !(secs > 0)) return [];
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as { name?: string } | null;
+    return [{ distanceM: distM, timeSeconds: secs, date: r.completed_date as string, label: ps?.name ?? `${Math.round(distM)} m swim` }];
+  });
+
+  return SWIM_TARGETS.map(t => {
+    const p = swimPrediction(trials, t.m);
+    return { targetM: t.m, label: t.label, predictedSeconds: p.predictedSeconds, detail: p.detail, unavailableReason: p.unavailableReason };
+  });
+});
 
 // ── date helpers ──────────────────────────────────────────────
 

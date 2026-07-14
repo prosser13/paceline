@@ -5,7 +5,7 @@
 // show Garmin's wellness VO2max, which is the athlete's *cycling* number. Cycling
 // markers (eFTP) are omitted for now. Long-run quality + gear arrive in later waves.
 
-import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, getPredictedRaces, getEnduranceReadiness, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView, type PredictedRace } from '@/data/benchmarks';
+import { getCurrentPrediction, getGoalMarathon, getExperimentalPredictions, getSwimPredictions, getPredictedRaces, getEnduranceReadiness, listRaceResultsSince, listLongRunsSince, listBenchmarkSnapshotsSince, isoWeekStart, type ExperimentalPredictionView, type SwimPredictionView, type PredictedRace } from '@/data/benchmarks';
 import { getThresholdPace } from '@/data/zones';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
@@ -34,6 +34,7 @@ export interface BenchmarksData {
   endurance: { score: number; avgWeeklyKm: number; longestKm: number; anchorWeeklyKm: number };
   signals: { source: string; label: string; impliedSeconds: number }[];
   experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
+  swimPredictions: SwimPredictionView[];        // 750 m / 1900 m swim projections
   predictedRaces: PredictedRace[];              // 5k/10k/HM/marathon predictions + deltas
   thresholdMinKm: number | null;
   thresholdTrend: Series[];          // min/km per week
@@ -77,9 +78,10 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, predictedRaces, endurance, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
+    getSwimPredictions(asOf),
     getPredictedRaces(asOf),
     getEnduranceReadiness(asOf),
     getGoalMarathon(asOf),
@@ -130,6 +132,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     endurance: { score: endurance.score, avgWeeklyKm: endurance.avgWeeklyKm, longestKm: endurance.longestKm, anchorWeeklyKm: endurance.anchorWeeklyKm },
     signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
     experimental,
+    swimPredictions,
     predictedRaces,
     thresholdMinKm,
     thresholdTrend,
