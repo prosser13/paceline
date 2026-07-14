@@ -1,39 +1,63 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { humanHMM } from './session-ui';
 import { YogaGlyph } from './glyphs';
 import { COFFEE, FERN, BONE } from '@/lib/colors';
 import { type YogaPose, YogaDetailTable } from './YogaRow';
 import EffortScale from './EffortScale';
+import { startPlannedSession } from '@/app/(app)/strength/actions';
 
 // Dashboard hero for a yoga session — mirrors StrengthHero (coloured header,
-// title + descriptor, a "The flow" accordion with the poses) but rails in EMBER
-// and has no CTA: yoga is mobility/stretch guidance, not a tracked sets/reps
-// session, so completion comes from a matched Strava activity.
+// title + descriptor, a "Session detail" accordion with the poses) and, like
+// strength, a Start pill that preloads the planned flow into the active-session
+// player. When done it shows the ✓ + a manual RPE scale (completion still comes
+// from a matched Strava activity).
 export default function YogaHero({
   label, focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null,
 }: {
   label: string; focus: string | null; duration: string | null;
   note: string | null; poses: YogaPose[]; done?: boolean;
-  planSessionId?: string | null;      // enables the manual RPE scale when done (7B)
+  planSessionId?: string | null;      // enables Start (when planned) + the RPE scale (when done)
   perceivedEffort?: number | null;
 }) {
   const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const router = useRouter();
+
+  function go() {
+    if (!planSessionId) return;
+    start(async () => {
+      const r = await startPlannedSession(planSessionId);
+      if (r.ok) router.push(`/strength/session/${r.shortId}`);
+    });
+  }
 
   return (
     <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
       {/* Header bar — ember when planned, fern when completed */}
       <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: done ? FERN : COFFEE, color: BONE }}>
         <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
-        {done && (
+        {done ? (
           <span className="flex items-center gap-[7px] font-mono text-[13px]">
             ✓ Completed
             <svg width="13" height="13" viewBox="0 0 24 24" fill={BONE} role="img" aria-label="Strava">
               <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
             </svg>
           </span>
-        )}
+        ) : planSessionId ? (
+          <span
+            role="button" tabIndex={0}
+            onClick={() => { if (!pending) go(); }}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!pending) go(); } }}
+            className="shrink-0 inline-flex items-center gap-[6px] text-[13px] font-bold cursor-pointer"
+            style={{ background: BONE, color: COFFEE, padding: '7px 16px', borderRadius: '20px', opacity: pending ? 0.6 : 1 }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            {pending ? 'Loading…' : 'Start'}
+          </span>
+        ) : null}
       </div>
 
       <div className="px-[18px] py-[18px] sm:p-[22px_26px]">

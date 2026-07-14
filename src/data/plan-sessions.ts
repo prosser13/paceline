@@ -184,7 +184,7 @@ export async function getPlanSessionPrescription(id: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('estimated_duration, structure, rationale')
+    .select('estimated_duration, structure, rationale, session_type, activity_type')
     .eq('user_id', userId)
     .eq('id', id)
     .single();

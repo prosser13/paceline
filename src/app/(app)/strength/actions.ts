@@ -111,13 +111,36 @@ export async function startPlannedSession(
   const ps = await getPlanSessionPrescription(planSessionId);
   if (!ps) return { ok: false, error: 'Planned session not found' };
 
-  const [context, stateMaps, niggles] = await Promise.all([
-    getStrengthContext(), loadBuilderStateMaps(), listActiveNiggles(),
-  ]);
-
   const parts = String(ps.estimated_duration ?? '0:40').split(':').map(Number);
   const mins = (parts[0] || 0) * 60 + (parts[1] || 0);
   const duration: Duration = mins <= 25 ? 'short' : mins <= 45 ? 'medium' : 'long';
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const structure = (ps.structure as any[] | null) ?? [];
+
+  // Yoga: load the planned flow verbatim — no progression, no auto-regulation
+  // modifier, no weights. The plan's authored poses/holds ARE the session; the
+  // library lookup only supplies the cue/video + a sensible fallback hold.
+  if (ps.activity_type === 'yoga' || ps.session_type === 'YOGA') {
+    const poses: SaveSessionExercise[] = structure.map(e => {
+      const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
+      const exerciseId = Number.isFinite(fromStruct) && fromStruct > 0
+        ? fromStruct : resolveExerciseId(String(e.name ?? ''));
+      const lib = LIB_BY_ID.get(exerciseId);
+      return {
+        exerciseId, exerciseName: String(e.name),
+        repsType: e.reps_type ?? lib?.repsType ?? 'secs',
+        sets: Number(e.sets) || lib?.sets || 1,
+        repsValue: e.reps != null ? Number(e.reps) : (lib?.repsValue ?? null),
+        weightKg: null,
+      };
+    });
+    return saveSession('yoga', duration, [], poses, { planSessionId });
+  }
+
+  const [context, stateMaps, niggles] = await Promise.all([
+    getStrengthContext(), loadBuilderStateMaps(), listActiveNiggles(),
+  ]);
   // Intent from the plan block, not a rationale regex.
   const intent: SessionIntent = context.suggestion.intent;
   const stateRecord = intent === 'strength' ? stateMaps.strength : intent === 'mobility' ? {} : stateMaps.maintain;
@@ -125,10 +148,8 @@ export async function startPlannedSession(
   const modLite = { loadScale: mod.loadScale, repsScale: mod.repsScale, setBias: mod.setBias };
   const isAdjusted = mod.loadScale !== 1 || mod.setBias !== 0 || mod.groupBias !== 'none' || mod.repsScale !== 1;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const presc = (ps.structure as any[] | null) ?? [];
   const exercises: SaveSessionExercise[] = [];
-  for (const e of presc) {
+  for (const e of structure) {
     const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
     const exerciseId = Number.isFinite(fromStruct) && fromStruct > 0
       ? fromStruct
