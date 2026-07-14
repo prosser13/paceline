@@ -18,6 +18,7 @@ import { runWithUser } from '@/lib/scope';
 import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { writeBenchmarkSnapshot } from '@/data/benchmarks';
 import { runThresholdCheck } from '@/data/threshold-suggestion';
+import { runPowerCheck } from '@/data/power-suggestion';
 import { claimDailyAlert } from '@/data/sync-alerts';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 import { todayISO } from '@/lib/dates';
@@ -45,6 +46,7 @@ async function syncOneUser(): Promise<{ ok: boolean; days: number; latest: strin
   const today = todayISO();
   await writeBenchmarkSnapshot(today);
   await runThresholdCheck(today);
+  await runPowerCheck(today);
   return { ...result, rpe_updated: rpe.updated };
 }
 

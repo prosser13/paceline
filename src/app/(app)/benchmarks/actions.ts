@@ -3,6 +3,7 @@
 import { requireUser } from '@/lib/auth';
 import { addFuelProduct, saveRunFuel, type FuelItem, type FuelProduct } from '@/data/fuel';
 import { applyThresholdSuggestion, dismissThresholdSuggestion, revertThresholdChange } from '@/data/threshold-suggestion';
+import { applyPowerSuggestion, dismissPowerSuggestion, revertPowerChange } from '@/data/power-suggestion';
 import { revalidatePath } from 'next/cache';
 
 // ── threshold suggestion ──────────────────────────────────────
@@ -27,6 +28,34 @@ export async function dismissThreshold(checkId: string): Promise<{ ok: boolean }
 export async function revertThreshold(checkId: string): Promise<{ ok: boolean; error?: string }> {
   await requireUser();
   const res = await revertThresholdChange(checkId);
+  revalidatePath('/benchmarks');
+  revalidatePath('/settings');
+  revalidatePath('/');
+  return res;
+}
+
+// ── bike FTP (power) suggestion ───────────────────────────────
+
+export async function applyPower(checkId: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const res = await applyPowerSuggestion(checkId);
+  revalidatePath('/benchmarks');
+  revalidatePath('/settings');
+  revalidatePath('/');   // TSS + power zones changed everywhere
+  return res;
+}
+
+export async function dismissPower(checkId: string): Promise<{ ok: boolean }> {
+  await requireUser();
+  const res = await dismissPowerSuggestion(checkId);
+  revalidatePath('/benchmarks');
+  revalidatePath('/settings');
+  return res;
+}
+
+export async function revertPower(checkId: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const res = await revertPowerChange(checkId);
   revalidatePath('/benchmarks');
   revalidatePath('/settings');
   revalidatePath('/');
