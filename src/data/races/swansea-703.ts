@@ -22,13 +22,13 @@ export const SWANSEA_703: RaceGuide = {
   gpxPath: '/races/swansea-703-bike.gpx',   // headline route = the bike (the story of the day)
 
   summary:
-    'A half-distance triathlon on the South Wales coast: a sea swim off Prince of Wales Dock, ' +
+    'A half-distance triathlon on the South Wales coast: a sea-water swim inside the sheltered Prince of Wales Dock, ' +
     'a genuinely hilly 90 km bike loop out around the Gower peninsula, and a two-lap city half ' +
     'marathon along Swansea Bay. The bike is the story — 1,106 m of climbing over the Gower ' +
     'clifftops makes this a strength-rider’s course, not a flat-and-fast one. Success is a ' +
     'controlled swim, disciplined power on the climbs, and legs held back enough to run the two loops.',
   terrain: [
-    'Swim: open sea in Swansea Bay — can be calm or choppy; sighting matters',
+    'Swim: sheltered sea water in the enclosed Prince of Wales Dock — flat and calm, no surf; sighting the buoys still matters',
     'Bike: rolling-to-hilly Gower loop, coastal clifftops, exposed to wind',
     '1,106 m of bike climbing — relentless rather than one big col',
     'Run: two flat city-centre loops along the bay',
@@ -40,7 +40,7 @@ export const SWANSEA_703: RaceGuide = {
     {
       sport: 'swim', name: 'Swim', distanceKm: 1.9, ascentM: 0, gpxPath: '/races/swansea-703-swim.gpx',
       start: { name: 'Prince of Wales Dock', lat: 51.621, lng: -3.918 },
-      summary: '1.9 km sea swim in Swansea Bay — wetsuit-legal, open water. Settle into rhythm, sight often, and don’t redline early.',
+      summary: '1.9 km swim inside the enclosed Prince of Wales Dock — sea water but sheltered and flat, wetsuit-legal. Settle into rhythm, sight the buoys, and don’t redline early.',
       fuelNote: 'Nothing on the swim. A gel in T1 if the stomach’s ready.',
     },
     {
@@ -74,8 +74,8 @@ export const SWANSEA_703: RaceGuide = {
             '(around your 70.3 target, not threshold), soft-pedal the descents to recover, and arrive at T2 with ' +
             'legs that can still run two laps.' },
     { heading: 'Swim controlled, sight often',
-      body: 'A sea swim rewards a calm, repeatable stroke over a fast start. Sight every few strokes off the ' +
-            'buoys, draft feet where you can, and treat the swim as the warm-up it is.' },
+      body: 'The dock swim is flat and sheltered — reward a calm, repeatable stroke over a fast start. Sight the ' +
+            'buoys every few strokes, draft feet where you can, and treat the swim as the warm-up it is.' },
     { heading: 'Run the first 5 k like a diesel',
       body: 'The classic 70.3 error is running the first lap on adrenaline and walking the second. Start the run ' +
             'deliberately easy — it should feel almost too slow — then let it come to you over the two loops.' },
@@ -95,7 +95,7 @@ export const SWANSEA_703: RaceGuide = {
     note: 'The engine room is the bike: 60–80 g carbs/h from drink-mix + gels/chews, front-loaded so the run ' +
           'is a top-up. Carry electrolyte for the warm/exposed sections. Rehearse this exact combination on long rides.',
   },
-  kitNote: 'Wetsuit-legal sea swim; standard IRONMAN 70.3 kit. Check the athlete guide for the year’s specifics.',
+  kitNote: 'Wetsuit-legal dock swim (sheltered sea water); standard IRONMAN 70.3 kit. Check the athlete guide for the year’s specifics.',
   kitWear: [
     { label: 'Tri suit' },
     { label: 'Wetsuit', detail: 'Sea ~15–18 °C — wetsuit-legal' },
