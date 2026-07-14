@@ -3,7 +3,7 @@
 // VO2max / eFTP / resting HR trends, and recent race results.
 
 import { fmtHms, fmtPace } from '@/lib/prediction';
-import type { ExperimentalPredictionView } from '@/data/benchmarks';
+import type { ExperimentalPredictionView, SwimPredictionView } from '@/data/benchmarks';
 import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from '@/components/FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
@@ -163,6 +163,18 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         training log, and heart-rate economy. They&rsquo;re experimental and intentionally kept out of the main
         blend: when they agree the prediction is trustworthy; when one diverges, it says something about
         where your fitness is coming from.
+      </p>
+
+      {/* Swim predictions — Riegel scaling over swim time-trials (own model; VDOT is
+          running-only). Activates once a swim time-trial is logged. */}
+      <SecLabel>Swim predictions</SecLabel>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+        {d.swimPredictions.map(p => <SwimPredictionTile key={p.targetM} p={p} />)}
+      </div>
+      <p className="text-[11.5px] text-stone mt-[8px]">
+        Your 750 m and 1900 m swim times projected from your own swim time-trials with Riegel&rsquo;s power
+        law (fatigue exponent fitted once you have two distinct distances). Swim a hard time-trial to
+        activate — VDOT doesn&rsquo;t transfer to the water, so this is its own small model.
       </p>
 
       {/* Threshold pace */}
@@ -343,6 +355,28 @@ function ExperimentalTile({ p }: { p: ExperimentalPredictionView }) {
       {/* lower time = faster, so invert makes an improving trend read as up */}
       <div className="mt-[10px]"><Sparkline series={p.trend} color={EXPERIMENTAL_COLOR[p.key]} invert /></div>
       <p className="text-[11px] text-stone/80 mt-auto pt-[10px]">{meta.theory}</p>
+    </div>
+  );
+}
+
+// Swim time as "m:ss" (750 m / 1900 m are minutes, not hours).
+function fmtMinSec(sec: number): string {
+  const s = Math.round(sec);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function SwimPredictionTile({ p }: { p: SwimPredictionView }) {
+  return (
+    <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '14px 16px' }}>
+      <div className="flex items-center justify-between gap-2">
+        <Eyebrow>{p.label}</Eyebrow>
+        <span className="text-[9.5px] uppercase font-bold shrink-0" style={{ letterSpacing: '.05em', color: 'var(--color-swim)' }}>Swim</span>
+      </div>
+      <div className="font-display font-bold text-[24px] leading-none my-[8px]">
+        {p.predictedSeconds != null ? fmtMinSec(p.predictedSeconds) : '—'}
+      </div>
+      {p.detail && <div className="text-[11.5px] text-stone">{p.detail}</div>}
+      {p.unavailableReason && <div className="text-[11.5px] text-stone">{p.unavailableReason}</div>}
     </div>
   );
 }
