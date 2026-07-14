@@ -13,6 +13,8 @@ interface Props {
   initialMorningBriefing: boolean;
   initialMorningFallback: string;
   initialMorningSkipRest: boolean;
+  initialCoachUpdates: boolean;
+  coachLocked: boolean;   // account is hard-locked off; toggle disabled + forced off
 }
 
 const INPUT =
@@ -27,6 +29,7 @@ const AUTONOMY_OPTS: { value: Autonomy; label: string; hint: string }[] = [
 export default function CoachingClient({
   initialAutonomy, initialMaxRamp, initialMinRest, initialProtectA, initialNotes,
   initialMorningBriefing, initialMorningFallback, initialMorningSkipRest,
+  initialCoachUpdates, coachLocked,
 }: Props) {
   const [autonomy, setAutonomy]   = useState<Autonomy>(initialAutonomy);
   const [maxRamp, setMaxRamp]     = useState(initialMaxRamp);
@@ -36,6 +39,7 @@ export default function CoachingClient({
   const [morningOn, setMorningOn]     = useState(initialMorningBriefing);
   const [morningFallback, setMorningFallback] = useState(initialMorningFallback);
   const [morningSkipRest, setMorningSkipRest] = useState(initialMorningSkipRest);
+  const [coachUpdates, setCoachUpdates] = useState(coachLocked ? false : initialCoachUpdates);
   const [saved, setSaved]         = useState(false);
   const [pending, start]          = useTransition();
 
@@ -52,6 +56,7 @@ export default function CoachingClient({
         morning_briefing: morningOn,
         morning_fallback_time: morningFallback,
         morning_skip_rest: morningSkipRest,
+        coach_updates_enabled: coachLocked ? false : coachUpdates,
       });
       setSaved(true);
     });
@@ -61,6 +66,21 @@ export default function CoachingClient({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Master coach-updates toggle */}
+      <div className="flex flex-col gap-1.5 border-b border-fog pb-4">
+        <label className={`flex items-center gap-2.5 select-none ${coachLocked ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}>
+          <input type="checkbox" checked={coachUpdates} disabled={coachLocked}
+                 onChange={e => { setCoachUpdates(e.target.checked); dirty(); }}
+                 className="w-[15px] h-[15px] accent-oxblood" />
+          <span className="text-[14px] text-ink font-medium">Coach notes &amp; updates</span>
+        </label>
+        <span className="text-[13px] text-stone -mt-1">
+          {coachLocked
+            ? 'Coach updates are turned off for this account and can’t be enabled here.'
+            : 'The morning + evening coach — the “From your coach” card on your dashboard and the Telegram messages. Turn off to silence all coach updates.'}
+        </span>
+      </div>
+
       {/* Autonomy */}
       <div className="flex flex-col gap-1.5">
         <label className="font-mono text-[11px] uppercase tracking-[.08em] text-stone">Autonomy</label>

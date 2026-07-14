@@ -10,7 +10,7 @@ import { getPlanTargetInfo, updatePlanTarget, updatePlanStrengthPriority } from 
 import { revertPlanChange } from '@/data/plan-mutations';
 import { listSessionsByTargetPace, updatePlanSession } from '@/data/plan-sessions';
 import {
-  replacePlanConstraints, saveCoachingPrefs,
+  replacePlanConstraints, saveCoachingPrefs, coachUpdatesLockedForCurrentUser,
   type ConstraintKind, type Autonomy,
 } from '@/data/coaching';
 import { setProgressionMode } from '@/data/strength-progression';
@@ -367,6 +367,7 @@ export interface CoachingPrefsInput {
   morning_briefing: boolean;
   morning_fallback_time: string;
   morning_skip_rest: boolean;
+  coach_updates_enabled: boolean;
 }
 
 // London HH:MM in 24h form, clamped to a sane fallback if malformed.
@@ -381,6 +382,10 @@ function normalizeTime(v: string): string {
 export async function saveCoaching(prefs: CoachingPrefsInput) {
   await requireUser();
 
+  // Locked accounts can never enable coach updates — force it off server-side,
+  // regardless of what the (disabled) client submitted.
+  const locked = await coachUpdatesLockedForCurrentUser();
+
   await saveCoachingPrefs({
     autonomy:            prefs.autonomy,
     max_weekly_ramp_pct: Number(prefs.max_weekly_ramp_pct) || 0,
@@ -390,6 +395,7 @@ export async function saveCoaching(prefs: CoachingPrefsInput) {
     morning_briefing:      prefs.morning_briefing,
     morning_fallback_time: normalizeTime(prefs.morning_fallback_time),
     morning_skip_rest:     prefs.morning_skip_rest,
+    coach_updates_enabled: locked ? false : prefs.coach_updates_enabled,
   });
 
   revalidatePath('/settings');

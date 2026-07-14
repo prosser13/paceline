@@ -16,7 +16,7 @@ import {
 import { standouts, type Standout, type StandoutRace } from '@/lib/wellness-stats';
 import { getRaceGuide } from '@/data/races';
 import { listOffPlanActivitiesBetween, type OffPlanActivity } from '@/data/activities';
-import { getLatestCoachMessages, type CoachMessage } from '@/data/coach';
+import { getVisibleCoachMessages, type CoachMessage } from '@/data/coach';
 import { getDailyNote } from '@/data/daily-notes';
 import { getLatestWellnessDay, listRecentWellnessDays } from '@/data/wellness-days';
 import { activityKind } from '@/lib/activity-types';
@@ -233,7 +233,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getNextRace(todayStr),
     listOffPlanActivitiesBetween(weekAgoStr, todayStr),
     getMostRecentCompletedSession(todayStr),
-    getLatestCoachMessages(),
+    getVisibleCoachMessages(),
     getDailyNote(todayStr),
     listSportLoadBetween(weekAgoStr, todayStr),
     getFuelPlanForGoalBlock(todayStr),

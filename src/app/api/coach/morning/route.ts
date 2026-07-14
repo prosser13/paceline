@@ -20,7 +20,8 @@
 //     final=1 — the window's last fire; on failure, alert via Telegram
 
 import { getCurrentUser, isCronRequest } from '@/lib/auth';
-import { runWithUser } from '@/lib/scope';
+import { runWithUser, currentUserEmail } from '@/lib/scope';
+import { coachUpdatesLocked } from '@/lib/roles';
 import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { getPlanContext, type PlanContext } from '@/data/plan-context';
 import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered, listRecentCoachMessages } from '@/data/coach';
@@ -124,6 +125,14 @@ async function runMorningForUser(forDate: string, londonHHMM: string, forced: bo
   await syncUpcomingRunWorkouts().catch(() => { /* best-effort; never fail the briefing */ });
 
   const prefs = await getCoachingPrefs();
+  // Master coach-updates gate. A locked account never generates/delivers (even
+  // forced); a self-disabled account skips unless a manual force run overrides it.
+  if (coachUpdatesLocked(await currentUserEmail())) {
+    return { ok: true, skipped: 'coach-updates-locked', for_date: forDate };
+  }
+  if (prefs?.coach_updates_enabled === false && !forced) {
+    return { ok: true, skipped: 'coach-updates-off', for_date: forDate };
+  }
   if (prefs?.morning_briefing === false && !forced) {
     return { ok: true, skipped: 'disabled', for_date: forDate };
   }
