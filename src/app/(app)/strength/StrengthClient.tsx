@@ -30,15 +30,16 @@ const LEGS_FEEL: { key: LegsFeel; label: string }[] = [
   { key: 'heavy', label: 'Heavy' }, { key: 'sore', label: 'Sore' },
 ];
 
-const INTENTS: SessionIntent[] = ['strength', 'maintain', 'mobility', 'balanced'];
+const INTENTS: SessionIntent[] = ['strength', 'maintain', 'mobility', 'balanced', 'yoga'];
 const DURATIONS: Duration[] = ['short', 'medium', 'long'];
 
-// Icon path per intent (barbell / shield / wave / scales).
+// Icon path per intent (barbell / shield / wave / scales / lotus).
 const INTENT_ICON: Record<SessionIntent, string> = {
   strength: 'M6 7v10M18 7v10M6 9h12M6 15h12M3 10v4M21 10v4',
   maintain: 'M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z',
   mobility: 'M3 12c3 0 3-4 6-4s3 8 6 8 3-4 6-4',
   balanced: 'M12 3v18M5 8l-3 5h6zM19 8l-3 5h6zM8 21h8',
+  yoga:     'M12 4a2 2 0 100 4 2 2 0 000-4zM12 9v5M4 21c2-4 5-5 8-5s6 1 8 5M6 12l6 2 6-2',
 };
 
 const pickRandom = <T,>(arr: T[]): T | undefined => arr[Math.floor(Math.random() * arr.length)];
@@ -105,10 +106,10 @@ export default function StrengthClient({ exercises, history, stateMaps, context,
   const isAdjusted = modifier.loadScale !== 1 || modifier.setBias !== 0 || modifier.groupBias !== 'none' || modifier.repsScale !== 1;
 
   // Saved progression state for the current intent (strength track, maintain
-  // track, or none for mobility). Layered onto the library by resolveIntentConfig.
+  // track, or none for mobility/yoga). Layered onto the library by resolveIntentConfig.
   const stateRecord = useMemo<Record<number, ExerciseStateLite>>(() => {
     if (intent === 'strength') return stateMaps.strength;
-    if (intent === 'mobility') return {};
+    if (intent === 'mobility' || intent === 'yoga') return {};
     return stateMaps.maintain;
   }, [intent, stateMaps]);
 
