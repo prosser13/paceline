@@ -17,12 +17,16 @@ export default function RouteMap({
   totalKm: routeKm,
   title,
   lineColor = OXBLOOD,
+  compact = false,
 }: {
   parsed: ParsedGpx | null;
   checkpoints: RaceCheckpoint[];
   totalKm: number;
   title?: string;
   lineColor?: string;
+  // Compact: size the SVG to the route's own aspect ratio (no wasted vertical
+  // space on a linear track) and drop the footer legend. For tight grids.
+  compact?: boolean;
 }) {
   if (!parsed) {
     return (
@@ -35,7 +39,15 @@ export default function RouteMap({
     );
   }
 
-  const { project, polyline } = buildProjection(parsed, W, H);
+  // Height: fixed for the full card; in compact mode, follow the route's geographic
+  // aspect ratio (clamped) so a wide, flat track isn't boxed into a tall frame.
+  const { minLat, maxLat, minLng, maxLng } = parsed.bounds;
+  const lngScale = Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180);
+  const geoW = (maxLng - minLng) * lngScale || 1e-9;
+  const geoH = (maxLat - minLat) || 1e-9;
+  const h = compact ? Math.round(Math.min(300, Math.max(150, W * (geoH / geoW)))) : H;
+
+  const { project, polyline } = buildProjection(parsed, W, h);
 
   // Find the track point closest to each checkpoint's cumulative distance.
   // Scale the checkpoint's km to the GPX's own length (they can differ).
@@ -57,8 +69,8 @@ export default function RouteMap({
 
   return (
     <div className="border border-fog rounded-[14px] bg-paper overflow-hidden">
-      {title && <div className="px-[16px] pt-[14px]"><CardTitle>{title}</CardTitle></div>}
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Course map">
+      {title && <div className={compact ? 'px-[14px] pt-[12px]' : 'px-[16px] pt-[14px]'}><CardTitle right={compact ? `${parsed.totalKm.toFixed(1)} km` : undefined}>{title}</CardTitle></div>}
+      <svg viewBox={`0 0 ${W} ${h}`} width="100%" role="img" aria-label="Course map">
         {/* route casing + line */}
         <polyline points={polyline} fill="none" stroke={FOG} strokeWidth={6}
           strokeLinejoin="round" strokeLinecap="round" />
@@ -83,14 +95,16 @@ export default function RouteMap({
         <circle cx={startP[0]} cy={startP[1]} r={6} fill={FERN} stroke="#fbf8f2" strokeWidth={2} />
         <circle cx={endP[0]} cy={endP[1]} r={6} fill={OXBLOOD} stroke="#fbf8f2" strokeWidth={2} />
       </svg>
-      <div className="flex flex-wrap items-center gap-x-[16px] gap-y-[4px] px-[16px] py-[10px] border-t border-fog">
-        <Legend color={FERN} label="Start" />
-        <Legend color={MARINE} label="Checkpoint" ring />
-        <Legend color={OXBLOOD} label="Finish" />
-        <span className="font-mono text-[11px] text-stone ml-auto">
-          {parsed.totalKm.toFixed(1)} km · GPX route
-        </span>
-      </div>
+      {!compact && (
+        <div className="flex flex-wrap items-center gap-x-[16px] gap-y-[4px] px-[16px] py-[10px] border-t border-fog">
+          <Legend color={FERN} label="Start" />
+          <Legend color={MARINE} label="Checkpoint" ring />
+          <Legend color={OXBLOOD} label="Finish" />
+          <span className="font-mono text-[11px] text-stone ml-auto">
+            {parsed.totalKm.toFixed(1)} km · GPX route
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -182,21 +182,21 @@ export default function TriRaceGuide({
         })}
       </div>
 
-      {/* ── Course (per-leg maps + elevation) ── */}
+      {/* ── Course — the three legs side by side, each map sized to its own route
+             so a flat, linear track isn't boxed into wasted vertical space. ── */}
       {legTracks.some(Boolean) && (
-        <div className="flex flex-col gap-[14px] mt-[24px]">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-[12px] mt-[24px] items-start">
           {legs.map((d, i) => {
             const parsed = legTracks[i];
             if (!parsed) return null;
             const spec = SPORT[d.sport];
-            const showProfile = d.sport !== 'swim';
-            return showProfile ? (
-              <div key={i} className="grid lg:grid-cols-2 gap-[14px]">
-                <RouteMap title={`${d.name} course`} parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} lineColor={spec.color} />
-                <ElevationProfile title="Elevation" parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} ascentM={d.ascentM ?? null} lineColor={spec.color} />
+            return (
+              <div key={i} className="flex flex-col gap-[10px]">
+                <RouteMap compact title={`${d.name} course`} parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} lineColor={spec.color} />
+                {d.sport !== 'swim' && (
+                  <ElevationProfile title="Elevation" parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} ascentM={d.ascentM ?? null} lineColor={spec.color} />
+                )}
               </div>
-            ) : (
-              <RouteMap key={i} title={`${d.name} course`} parsed={parsed} checkpoints={d.checkpoints ?? []} totalKm={d.distanceKm} lineColor={spec.color} />
             );
           })}
         </div>

@@ -33,8 +33,10 @@ function mss(sec: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 
-// Open-water 1.9 km swim pace ≈ CSS + a small open-water tax (sighting, chop).
-const OW_TAX_SEC_PER_100 = 6;
+// 1.9 km race swim pace ≈ CSS + a small tax over pool CSS (mass start, sighting, no
+// wall push; a wetsuit offsets some of it). Sheltered dock/flat water sits at the low
+// end — open sea would be higher.
+const OW_TAX_SEC_PER_100 = 4;
 
 // Bike: a 70.3 is ridden at ~72% of FTP (normalised). A calibrated flat-road speed
 // curve (≈ 3.88·P^0.40 km/h: 200 W→32, 250 W→35, 300 W→38), then a climbing haircut
@@ -54,7 +56,7 @@ function legEstimate(d: Discipline, fit: TriFitness): { est: number | null; deta
   if (d.sport === 'swim') {
     if (fit.swimCssSec == null) return { est: null, detail: null, missing: 'swim CSS' };
     const pacePer100 = fit.swimCssSec + OW_TAX_SEC_PER_100;
-    return { est: Math.round(pacePer100 * d.distanceKm * 10), detail: `@ ${mss(pacePer100)}/100m (CSS + open-water)` };
+    return { est: Math.round(pacePer100 * d.distanceKm * 10), detail: `@ ${mss(pacePer100)}/100m (CSS + race tax)` };
   }
   if (d.sport === 'bike') {
     if (fit.ftpW == null) return { est: null, detail: null, missing: 'bike FTP' };
