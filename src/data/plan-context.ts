@@ -44,6 +44,29 @@ const SESSION_SCHEMAS = {
       { phase: 'Ultra pace', description: '10km at 5:30/km ultra pace', pace_per_km: '5:30', duration_mins: 55 },
     ],
   },
+  cycling: {
+    field: 'structure (jsonb array of phases/repeats) — the session\'s activity_type must be "cycling"',
+    phase: { type: "'phase'", label: 'string, e.g. "Threshold"', zone: "string 'Z1'..'Z5' (optional)", power_pct_ftp: 'number = %FTP, e.g. 110 (optional; overrides zone). Use power_pct_min/power_pct_max for a band', duration_mins: 'number' },
+    repeat: { type: "'repeat'", count: 'number', steps: '[phase, ...] — usually a work phase + a recovery phase' },
+    note: 'Cycling is power + duration. Target power by ZONE or an explicit %FTP (110 = 110% of FTP; re-derives if FTP changes). Recovery is just a lower phase inside a repeat — there is no separate rest flag. e.g. "10min @60%, then 4×(5min @110% + 3min @90%)".',
+    example: [
+      { type: 'phase', label: 'Warm-up', duration_mins: 10, power_pct_ftp: 60 },
+      { type: 'repeat', count: 4, steps: [
+        { type: 'phase', label: 'Threshold', duration_mins: 5, power_pct_ftp: 110 },
+        { type: 'phase', label: 'Recovery', duration_mins: 3, power_pct_ftp: 90 },
+      ] },
+    ],
+  },
+  swim: {
+    field: 'structure (jsonb array of phases/repeats) — the session\'s activity_type must be "swimming"',
+    phase: { type: "'phase'", label: 'string, e.g. "Drills" | "Aerobic"', zone: "string 'Z1'..'Z5' (swim pace zone)", distance_m: 'number metres', rest_sec: 'number seconds rest after this rep (optional)' },
+    repeat: { type: "'repeat'", count: 'number', steps: '[phase, ...]' },
+    note: 'Swim is distance + pace-per-100m by zone (its own swim_pace_zones). Rest between reps via rest_sec. Pool swims push to the watch; name/describe an open-water swim as such to keep it off the watch. e.g. "5×100m drills 30s rest, then 4×100m Z2 60s rest".',
+    example: [
+      { type: 'repeat', count: 5, steps: [{ type: 'phase', label: 'Drills', zone: 'Z1', distance_m: 100, rest_sec: 30 }] },
+      { type: 'repeat', count: 4, steps: [{ type: 'phase', label: 'Aerobic', zone: 'Z2', distance_m: 100, rest_sec: 60 }] },
+    ],
+  },
   strength: {
     field: 'structure (jsonb array of exercises)',
     exercise: { name: 'string', sets: 'number', reps: 'number', reps_type: "'reps' | 'secs'", weight: 'number kg | null (bodyweight/band)', target: 'string, e.g. "Chest"', exercise_id: 'number — REQUIRED, from reference.exercise_catalog' },

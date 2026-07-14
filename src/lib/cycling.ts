@@ -35,6 +35,8 @@ function resolvePowerZone(rawZone: string | null | undefined, zones: PowerZoneMa
   return m ? zones[`Z${m[1]}`] ?? null : null;
 }
 
+const numOrNull = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function segment(s: any, powerZones: PowerZoneMap, hrZones: BikeHrZoneMap): CyclingSegment {
   const pz = resolvePowerZone(s.zone, powerZones);
@@ -42,12 +44,22 @@ function segment(s: any, powerZones: PowerZoneMap, hrZones: BikeHrZoneMap): Cycl
   // lowercase "z2" or spaced "Z 2" still resolves its HR window instead of missing.
   const hm = s.zone ? String(s.zone).match(/Z\s*([1-9])/i) : null;
   const hz = hm ? hrZones[`Z${hm[1]}`] ?? undefined : undefined;
+
+  // An explicit %FTP target (single `power_pct_ftp`, or a `power_pct_min`/`_max`
+  // band) WINS over the zone lookup — so a workout like "4×5min @110%" resolves its
+  // watts from FTP directly (and re-derives if FTP changes). FTP proxy = top of Z4.
+  const ftp = powerZones['Z4']?.powerMax ?? null;
+  const pctLo = numOrNull(s.power_pct_min ?? s.power_pct_ftp);
+  const pctHi = numOrNull(s.power_pct_max ?? s.power_pct_ftp);
+  const hasPct = ftp != null && pctLo != null && pctHi != null;
+  const wattFromPct = (pct: number) => Math.round(ftp! * pct / 100);
+
   return {
     label: s.label ?? pz?.name ?? 'Ride',
     zoneKey: pz?.key ?? (s.zone ?? null),
     durationMins: Number(s.duration_mins) || 0,
-    powerMin: pz?.powerMin ?? null,
-    powerMax: pz?.powerMax ?? null,
+    powerMin: hasPct ? wattFromPct(Math.min(pctLo!, pctHi!)) : (pz?.powerMin ?? null),
+    powerMax: hasPct ? wattFromPct(Math.max(pctLo!, pctHi!)) : (pz?.powerMax ?? null),
     hrMin: hz?.min ?? null,
     hrMax: hz?.max ?? null,
     note: s.description ?? s.note ?? undefined,
