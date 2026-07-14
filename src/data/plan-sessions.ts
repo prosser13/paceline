@@ -647,23 +647,32 @@ export async function listLongRunsMissingQuality(limit: number) {
 // are written. Scoped to the current user.
 export async function recomputeAllCompletedTss(): Promise<void> {
   const userId = await currentUserId();
-  const [{ data: cfg }, { data: pz }, { data: rows }] = await Promise.all([
+  const [{ data: cfg }, { data: pz }, { data: swimCfg }, { data: rows }] = await Promise.all([
     supabaseAdmin.from('app_config').select('threshold_pace_per_km').eq('user_id', userId).limit(1).maybeSingle(),
     supabaseAdmin.from('power_zones').select('zone_key, power_max').eq('user_id', userId),
+    supabaseAdmin.from('swim_config').select('css_sec_per_100').eq('user_id', userId).limit(1).maybeSingle(),
     supabaseAdmin.from('completed_workouts')
-      .select('id, tss, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_power')
+      .select('id, tss, actual_duration_mins, actual_duration_secs, actual_distance_km, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_power, plan_sessions(activity_type)')
       .eq('user_id', userId),
   ]);
 
   const threshMinKm = parseThresholdPace((cfg?.threshold_pace_per_km as string | null) ?? '3:40');
   const ftp = (pz ?? []).find(z => z.zone_key === 'Z4')?.power_max ?? null;
+  const cssSec = swimCfg?.css_sec_per_100 != null ? Number(swimCfg.css_sec_per_100) : null;
 
   await Promise.all((rows ?? []).map(r => {
     const mins  = r.actual_duration_mins != null ? Number(r.actual_duration_mins) : null;
     const ngp   = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km) : null;
     const pace  = r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
     const power = r.actual_avg_power != null ? Number(r.actual_avg_power) : null;
-    const tss = sessionTss({ mins, runPace: ngp ?? pace, power }, threshMinKm, ftp);
+    // Swim: no run pace / power is stored, so derive pace-per-100 m from the matched
+    // distance + moving time (secs ÷ (km × 10)) and score it against CSS in sessionTss.
+    const ps = Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions;
+    const isSwim = (ps as { activity_type?: string | null } | null)?.activity_type === 'swimming';
+    const distKm = r.actual_distance_km != null ? Number(r.actual_distance_km) : null;
+    const secs = r.actual_duration_secs != null ? Number(r.actual_duration_secs) : (mins != null ? Math.round(mins * 60) : null);
+    const swimPaceSec = isSwim && distKm && distKm > 0 && secs != null ? secs / (distKm * 10) : null;
+    const tss = sessionTss({ mins, runPace: ngp ?? pace, power, swimPaceSec }, threshMinKm, ftp, cssSec);
     const prev = r.tss != null ? Number(r.tss) : null;
     return tss === prev
       ? Promise.resolve()

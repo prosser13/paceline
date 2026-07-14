@@ -295,6 +295,8 @@ export async function saveSwimConfig(cfg: SwimConfigInput): Promise<void> {
 export async function replaceSwimPaceZones(rows: SwimPaceZoneRow[]): Promise<void> {
   await replaceKeyedZones(await currentUserId(), 'swim_pace_zones', rows);
   revalidateTag(ZONES_TAG, 'max');
-  // The Z4 window (CSS proxy) drives swim TSS — refresh stored rows.
+  // Swim CSS (swim_config.css_sec_per_100) drives swim TSS. This runs at the end of
+  // the saveSwimZones action — after the CSS upsert — so stored swim TSS refreshes
+  // whenever the athlete edits their swim thresholds.
   await recomputeAllCompletedTss();
 }

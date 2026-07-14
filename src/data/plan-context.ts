@@ -551,7 +551,7 @@ function buildPaceCheck(
   elevationGainM: number | null, distanceKm: number | null,
   zones: ZoneMap, hrBands: HrBand[],
 ): PaceCheck | null {
-  if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling') return null;
+  if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling' || s.activity_type === 'swimming') return null;
   if (actualPaceMinKm == null) return null;
 
   const dateLabel = fmtShortDate(s.scheduled_date);
