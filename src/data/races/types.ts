@@ -34,6 +34,33 @@ export interface GoalTier {
   note: string;        // what it represents
 }
 
+// ── Triathlon (multi-discipline) ─────────────────────────────
+// A RaceGuide with `disciplines` renders a per-leg guide (swim/bike/run) with
+// transitions and an ESTIMATED finish derived from the athlete's fitness; without
+// it, the single-discipline fields render as before (existing run guides untouched).
+
+export type DisciplineSport = 'swim' | 'bike' | 'run';
+
+export interface Discipline {
+  sport: DisciplineSport;
+  name: string;                       // "Swim" | "Bike" | "Run"
+  distanceKm: number;
+  ascentM?: number | null;            // bike/run climbing
+  gpxPath?: string | null;            // per-leg route (optional; null → no map)
+  start?: { name: string; lat: number; lng: number } | null;
+  finish?: { name: string; lat: number; lng: number } | null;
+  summary?: string | null;            // one-line leg narrative
+  checkpoints?: RaceCheckpoint[];      // optional per-leg checkpoints (cumulative within the leg)
+  fuelNote?: string | null;           // per-leg fuelling cue
+}
+
+export interface Transition {
+  kind: 'T1' | 'T2';
+  name: string;                       // "T1 · Swim → Bike"
+  estSeconds: number;                 // fixed time estimate
+  note?: string | null;
+}
+
 export interface FuelPlan {
   carbsPerHourG: [number, number];   // target range, grams/hour
   fluidPerHourMl: [number, number];  // base ml/hour (adjusted up/down by weather)
@@ -84,6 +111,12 @@ export interface RaceGuide {
 
   checkpoints: RaceCheckpoint[];
   goalTiers: GoalTier[];
+
+  /** Triathlon legs in order (swim → bike → run). When present the page renders a
+   *  multi-discipline guide with transitions; when absent, the single-discipline
+   *  fields render as before. */
+  disciplines?: Discipline[];
+  transitions?: Transition[];
 
   /** Typical race-day conditions for the venue/season — shown when a live
    *  forecast isn't yet available (race > 16 days out). */

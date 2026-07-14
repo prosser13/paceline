@@ -11,6 +11,10 @@ import { getViewedUser } from '@/lib/impersonation';
 import { getPlanBySlug, listPlanWeeks } from '@/data/plans';
 import { getRaceKit } from '@/data/race-kit';
 import { buildPacing, formatTargetTime } from '@/data/races/pacing';
+import { buildTriEstimate } from '@/data/races/tri-pacing';
+import { getSwimConfig, listPowerZones, getThresholdPace } from '@/data/zones';
+import { parseThresholdPace } from '@/lib/run-tss';
+import TriRaceGuide from './TriRaceGuide';
 import { listPlannedTssBetween, listRunningDoneForPlan, listSessionDistancesForPlan } from '@/data/plan-sessions';
 import { weekRunKm } from '@/lib/weekly-volume';
 import { parseGpx, type ParsedGpx } from '@/lib/gpx';
@@ -102,6 +106,30 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
   const distanceKm = plan?.distance_km ?? guide.distanceKm;
 
   const todayStr = todayISO();
+
+  // Multi-discipline (triathlon) guide → the per-leg guide with an ESTIMATED finish
+  // from the athlete's fitness. Rendered by its own component; the single-discipline
+  // path below is untouched.
+  if (guide.disciplines?.length) {
+    const [swimCfg, powerZonesRows, thresholdStr] = await Promise.all([
+      getSwimConfig(), listPowerZones(), getThresholdPace(),
+    ]);
+    const ftp = (powerZonesRows.find(z => z.zone_key === 'Z4')?.power_max as number | undefined) ?? null;
+    const estimate = buildTriEstimate(guide, {
+      swimCssSec: swimCfg?.css_sec_per_100 ?? null,
+      ftpW: ftp,
+      runThresholdMinKm: thresholdStr ? parseThresholdPace(thresholdStr) : null,
+    });
+    return (
+      <TriRaceGuide
+        guide={guide}
+        raceDate={raceDate}
+        daysToGo={raceDate ? daysUntil(raceDate) : null}
+        estimate={estimate}
+        owned={owned}
+      />
+    );
+  }
 
   const [parsed, forecast, wellness, plannedTss, planWeeks, runningDone, plannedSessions, kitOverride] = await Promise.all([
     loadGpx(guide.gpxPath),

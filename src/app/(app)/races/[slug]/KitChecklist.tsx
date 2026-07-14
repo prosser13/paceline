@@ -29,7 +29,7 @@ function cleanItems(arr: KitItem[]): KitItem[] {
 }
 
 export default function KitChecklist({
-  slug, wear, carry, dropBag, nightBefore, intro,
+  slug, wear, carry, dropBag, nightBefore, intro, dropBagSubtitle = 'CP4 · 43.5 km',
 }: {
   slug: string;
   wear: KitItem[];
@@ -37,6 +37,7 @@ export default function KitChecklist({
   dropBag: KitItem[];
   nightBefore: string[];
   intro?: string | null;
+  dropBagSubtitle?: string;
 }) {
   const [view, setView] = useState<Draft>({ wear, carry, dropBag, nightBefore });
   const [editing, setEditing] = useState(false);
@@ -150,7 +151,7 @@ export default function KitChecklist({
             <div className={`grid ${hasDropBag ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-x-[22px] gap-y-[18px]`}>
               <Group title="Wear" subtitle="On the day" items={view.wear} prefix="w" checked={checked} onToggle={toggle} />
               <Group title="Carry" subtitle="On the day" items={view.carry} prefix="c" checked={checked} onToggle={toggle} />
-              {hasDropBag && <Group title="Drop bag" subtitle="CP4 · 43.5 km" items={view.dropBag} prefix="d" checked={checked} onToggle={toggle} />}
+              {hasDropBag && <Group title="Drop bag" subtitle={dropBagSubtitle} items={view.dropBag} prefix="d" checked={checked} onToggle={toggle} />}
             </div>
             <div className="border-t border-fog mt-[18px] pt-[14px]">
               <p className="font-mono text-[10px] uppercase tracking-[.1em] text-oxblood mb-[8px]">To do · night before</p>
