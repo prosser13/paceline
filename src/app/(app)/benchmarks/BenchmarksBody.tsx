@@ -7,7 +7,7 @@ import type { ExperimentalPredictionView, SwimPredictionView } from '@/data/benc
 import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from '@/components/FuelLogCell';
 import ThresholdSuggestion from './ThresholdSuggestion';
-import type { BenchmarksData, Series } from './data';
+import type { BenchmarksData, Series, Tri703View } from './data';
 
 // A strong negative split inflates aerobic decoupling (it reads the intended
 // surge, not fatigue), so we flag it as unreliable rather than colour it red.
@@ -175,6 +175,16 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         Your 750 m and 1900 m swim times projected from your own swim time-trials with Riegel&rsquo;s power
         law (fatigue exponent fitted once you have two distinct distances). Swim a hard time-trial to
         activate — VDOT doesn&rsquo;t transfer to the water, so this is its own small model.
+      </p>
+
+      {/* 70.3 finish predictor — swim + T1 + bike + T2 + run from live fitness over
+          the Swansea course profile. The capstone of the multi-sport benchmarks. */}
+      <SecLabel>70.3 predictor</SecLabel>
+      <Tri703Tile t={d.tri703} />
+      <p className="text-[11.5px] text-stone mt-[8px]">
+        Your projected {d.tri703.raceName} finish, built leg by leg from your current fitness — swim from
+        CSS, bike from FTP over the course&rsquo;s 1,106 m of climbing, run from threshold pace off the bike —
+        plus fixed transitions. Not a goal; set your CSS and FTP in Settings to sharpen it.
       </p>
 
       {/* Threshold pace */}
@@ -377,6 +387,46 @@ function SwimPredictionTile({ p }: { p: SwimPredictionView }) {
       </div>
       {p.detail && <div className="text-[11.5px] text-stone">{p.detail}</div>}
       {p.unavailableReason && <div className="text-[11.5px] text-stone">{p.unavailableReason}</div>}
+    </div>
+  );
+}
+
+// Colour a tri leg by its discipline (transitions stay neutral stone).
+function triLegColor(kind: string): string {
+  return kind === 'swim' ? 'var(--color-swim)'
+    : kind === 'bike' ? 'var(--color-ride)'
+    : kind === 'run' ? 'var(--color-run)'
+    : 'var(--color-stone)';
+}
+
+function Tri703Tile({ t }: { t: Tri703View }) {
+  // The main legs (swim/bike/run) carry the headline breakdown; T1/T2 are folded
+  // into the elapsed clock on the race page, so here we show just the three sports.
+  const sportLegs = t.legs.filter(l => l.kind === 'swim' || l.kind === 'bike' || l.kind === 'run');
+  return (
+    <div className="border border-fog rounded-[16px] bg-paper" style={{ padding: '16px 18px' }}>
+      <div className="flex items-baseline justify-between gap-3">
+        <div>
+          <Eyebrow>{t.raceName}</Eyebrow>
+          <div className="font-display font-bold text-[30px] leading-none mt-[5px]">
+            {t.finishSeconds != null ? fmtHms(t.finishSeconds) : '—'}
+          </div>
+        </div>
+        <a href={`/races/${t.slug}`} className="text-[11px] font-bold text-stone hover:text-ink border border-fog rounded-[16px] px-[10px] py-[4px] transition-colors shrink-0">Race guide →</a>
+      </div>
+      <div className="grid grid-cols-3 gap-[10px] mt-[14px]">
+        {sportLegs.map(l => (
+          <div key={l.kind} className="border-t-2 pt-[7px]" style={{ borderColor: triLegColor(l.kind) }}>
+            <div className="font-mono text-[9.5px] uppercase tracking-[.06em] text-stone">{l.name}</div>
+            <div className="font-display font-bold text-[17px] leading-none mt-[3px]">
+              {l.estSeconds != null ? fmtHms(l.estSeconds) : '—'}
+            </div>
+          </div>
+        ))}
+      </div>
+      {t.missing.length > 0 && (
+        <div className="text-[11.5px] text-oxblood mt-[12px]">Set your {t.missing.join(' + ')} in Settings for a full estimate.</div>
+      )}
     </div>
   );
 }
