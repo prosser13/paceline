@@ -10,7 +10,7 @@ export type MuscleGroup =
 export type MovementPattern =
   | 'hinge' | 'squat' | 'single_leg' | 'push' | 'pull' | 'carry' | 'core' | 'activation' | 'mobility';
 
-export type SessionIntent = 'strength' | 'maintain' | 'mobility' | 'balanced';
+export type SessionIntent = 'strength' | 'maintain' | 'mobility' | 'balanced' | 'yoga';
 export type Duration = 'short' | 'medium' | 'long';
 export type RepsType = 'reps' | 'secs';
 
@@ -138,6 +138,7 @@ export const SESSION_INTENT_CONFIG: Record<SessionIntent, { label: string; descr
   maintain: { label: 'Maintain', description: 'Moderate loads. The workhorse session.' },
   mobility: { label: 'Mobility', description: 'Light or bodyweight. Move well.' },
   balanced: { label: 'Balanced', description: 'A mix. Good when short on time.' },
+  yoga:     { label: 'Yoga', description: 'A flowing pose sequence. Breathe and unwind.' },
 };
 
 export const DURATION_CONFIG: Record<Duration, { label: string; minutes: number; sets: number }> = {
@@ -321,9 +322,13 @@ export function buildSession(
     if (total >= target) break;
   }
 
+  // Flow intents (mobility, yoga) are pose/stretch sequences — no upper-body
+  // guarantee, no injected warm-up; they're built purely from their own pool.
+  const isFlow = intent === 'mobility' || intent === 'yoga';
+
   // Upper-body guarantee — running doesn't tax the upper body, so keep it in every
-  // session (more when legs are tired). Skipped only for a pure mobility session.
-  if (intent !== 'mobility') {
+  // session (more when legs are tired). Skipped for a pure flow session.
+  if (!isFlow) {
     const quota = groupBias === 'upper' ? 2 : 1;
     let upperCount = picked.filter(se => isUpper(se.exercise)).length;
     for (const ex of shuffle(supported.filter(ex => isUpper(ex) && !isWarmup(ex) && !usedIds.has(ex.id)))) {
@@ -338,7 +343,7 @@ export function buildSession(
   const accessories = picked.filter(se => !isWarmup(se.exercise) && !isPrimary(se.exercise));
 
   // Always open with a warm-up (add one if the fill produced none).
-  if (warmups.length === 0 && intent !== 'mobility') {
+  if (warmups.length === 0 && !isFlow) {
     const warm = shuffle(supported.filter(ex => isWarmup(ex) && !usedIds.has(ex.id)))[0];
     if (warm) warmups.push(toSE(warm));
   }

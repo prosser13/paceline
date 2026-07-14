@@ -13,10 +13,10 @@ import {
 } from './strength-progression-rules';
 
 // State intent a session intent progresses under: strength → its own track,
-// maintain/balanced → the maintain track, mobility → no progression.
+// maintain/balanced → the maintain track, mobility + yoga → no progression.
 function stateIntentFor(intent: string): 'strength' | 'maintain' | null {
   if (intent === 'strength') return 'strength';
-  if (intent === 'mobility') return null;
+  if (intent === 'mobility' || intent === 'yoga') return null;
   return 'maintain';
 }
 
