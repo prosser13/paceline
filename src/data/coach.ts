@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
+import { coachUpdatesEnabled } from '@/data/coaching';
 
 // Coach messages — the nightly evening review (kind 'evening') and the morning
 // briefing (kind 'morning'). Generated + saved by the GitHub coach crons
@@ -43,6 +44,14 @@ export async function getLatestCoachMessages(): Promise<{ morning: CoachMessage 
     evening: (evening.data as CoachMessage | null) ?? null,
     morning: (morning.data as CoachMessage | null) ?? null,
   };
+}
+
+// Coach messages for display, honouring the master coach-updates toggle: returns
+// nothing when the scoped user has coach updates off (or is locked off), so the
+// dashboard card hides even if older messages still sit in the table.
+export async function getVisibleCoachMessages(): Promise<{ morning: CoachMessage | null; evening: CoachMessage | null }> {
+  if (!(await coachUpdatesEnabled())) return { morning: null, evening: null };
+  return getLatestCoachMessages();
 }
 
 // The last `limit` messages (both kinds), newest first — fed back into the

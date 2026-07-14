@@ -4,7 +4,8 @@
 // Today these are global single-set / single-row tables.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { currentUserId } from '@/lib/scope';
+import { currentUserId, currentUserEmail } from '@/lib/scope';
+import { coachUpdatesLocked } from '@/lib/roles';
 
 export type ConstraintKind = 'recurring' | 'blackout' | 'note';
 
@@ -28,6 +29,7 @@ export interface CoachingPrefs {
   morning_briefing: boolean;
   morning_fallback_time: string;   // London HH:MM
   morning_skip_rest: boolean;
+  coach_updates_enabled: boolean;  // master switch for coach messages (card + updates)
 }
 
 // ── reads ────────────────────────────────────────────────────
@@ -68,4 +70,21 @@ export async function saveCoachingPrefs(prefs: CoachingPrefs): Promise<void> {
   const userId = await currentUserId();
   await supabaseAdmin
     .from('coaching_prefs').upsert({ user_id: userId, ...prefs }, { onConflict: 'user_id' });
+}
+
+// ── coach-updates gate ───────────────────────────────────────
+
+// Whether coach updates are HARD-LOCKED off for the scoped user (email allowlist).
+// A locked user's toggle is forced off and cannot be turned on, anywhere.
+export async function coachUpdatesLockedForCurrentUser(): Promise<boolean> {
+  return coachUpdatesLocked(await currentUserEmail());
+}
+
+// The EFFECTIVE coach-updates state for the scoped user: the stored preference,
+// overridden to off when the account is locked. The single source of truth read by
+// the dashboard and the coach generators. Defaults on when unseeded.
+export async function coachUpdatesEnabled(): Promise<boolean> {
+  if (await coachUpdatesLockedForCurrentUser()) return false;
+  const prefs = await getCoachingPrefs();
+  return (prefs?.coach_updates_enabled as boolean | undefined) ?? true;
 }

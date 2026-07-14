@@ -19,6 +19,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getCurrentUser as getSessionUser } from './supabase-server';
 import { getImpersonatedUserId } from './impersonation';
+import { supabaseAdmin } from './supabase-admin';
 
 const store = new AsyncLocalStorage<string>();
 
@@ -47,4 +48,13 @@ export async function currentUserId(): Promise<string> {
     );
   }
   return user.id;
+}
+
+// The email of the scoped user — resolved by id via the service role so it works in
+// both request context (session) and explicit scopes (cron `runWithUser`). Used by
+// the coach-updates lock, which is keyed on email. Null if the lookup fails.
+export async function currentUserEmail(): Promise<string | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+  return data.user?.email ?? null;
 }

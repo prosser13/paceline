@@ -26,6 +26,23 @@ const VIEWER_EMAILS = new Set(
     .filter(Boolean),
 );
 
+// Accounts for whom the coach messages feature (dashboard card + morning/evening
+// updates + Telegram) is force-disabled and CANNOT be re-enabled from Settings.
+// Comma-separated env override; defaults to the known locked account so the lock
+// holds without any env configuration. Enforced server-side everywhere the toggle
+// is read (Settings display + save, dashboard, coach generation).
+const COACH_DISABLED_EMAILS = new Set(
+  (process.env.COACH_DISABLED_EMAILS ?? 'bethanaprosser@gmail.com')
+    .split(',')
+    .map(e => e.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+// True when coach updates are hard-locked off for this email (no opt-in allowed).
+export function coachUpdatesLocked(email: string | null | undefined): boolean {
+  return COACH_DISABLED_EMAILS.has((email ?? '').trim().toLowerCase());
+}
+
 export type Role = 'owner' | 'viewer';
 
 // The single source of truth mapping an email → access tier (or null for neither).

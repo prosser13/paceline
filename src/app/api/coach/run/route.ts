@@ -20,7 +20,9 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { getCurrentUser, isCronRequest } from '@/lib/auth';
-import { currentUserId, runWithUser } from '@/lib/scope';
+import { currentUserId, runWithUser, currentUserEmail } from '@/lib/scope';
+import { coachUpdatesLocked } from '@/lib/roles';
+import { getCoachingPrefs } from '@/data/coaching';
 import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integrations';
 import { getPlanContext } from '@/data/plan-context';
 import { getCoachContext, upsertCoachContext, listRecentCoachMessages } from '@/data/coach';
@@ -83,6 +85,16 @@ async function existingEvening(forDate: string): Promise<{ id: string; headline:
 async function runEveningForUser(forDate: string, londonHour: number, forced: boolean, isFinal: boolean): Promise<Record<string, unknown>> {
   const userId = await currentUserId();
   const chatId = await getTelegramChatId();
+
+  // Master coach-updates gate — mirror the morning route. A locked account never
+  // generates/delivers (even forced); a self-disabled account skips unless forced.
+  if (coachUpdatesLocked(await currentUserEmail())) {
+    return { ok: true, skipped: 'coach-updates-locked', for_date: forDate };
+  }
+  const prefs = await getCoachingPrefs();
+  if (prefs?.coach_updates_enabled === false && !forced) {
+    return { ok: true, skipped: 'coach-updates-off', for_date: forDate };
+  }
 
   // ── already have tonight's message? deliver it if a prior send failed. ──
   const existing = await existingEvening(forDate);

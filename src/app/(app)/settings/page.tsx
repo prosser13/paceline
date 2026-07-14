@@ -7,7 +7,7 @@ import {
   getPowerConfig, listPowerZones, getBikeHrConfig, listBikeHrZones,
   getSwimConfig, listSwimPaceZones,
 } from '@/data/zones';
-import { listPlanConstraints, getCoachingPrefs, type Autonomy } from '@/data/coaching';
+import { listPlanConstraints, getCoachingPrefs, coachUpdatesLockedForCurrentUser, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
 import { getLatestPowerCheck, getPendingPowerSuggestion, listPowerChecks, getRevertablePowerChange } from '@/data/power-suggestion';
@@ -151,6 +151,9 @@ export default async function SettingsPage() {
   const morningBriefing = coachingPrefs?.morning_briefing ?? true;
   const morningFallback = (coachingPrefs?.morning_fallback_time as string | undefined) ?? '09:30';
   const morningSkipRest = coachingPrefs?.morning_skip_rest ?? false;
+  const coachLocked = await coachUpdatesLockedForCurrentUser();
+  // Locked accounts read as off and can't turn it on; everyone else uses their pref.
+  const coachUpdates = coachLocked ? false : (coachingPrefs?.coach_updates_enabled ?? true);
 
   return (
     <>
@@ -168,6 +171,8 @@ export default async function SettingsPage() {
             initialMorningBriefing={morningBriefing}
             initialMorningFallback={morningFallback}
             initialMorningSkipRest={morningSkipRest}
+            initialCoachUpdates={coachUpdates}
+            coachLocked={coachLocked}
           />
         </SettingsCard>
 
