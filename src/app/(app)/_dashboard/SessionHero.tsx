@@ -170,6 +170,10 @@ export default function SessionHero({
                 movingSecs: completed.mins != null ? Math.round(completed.mins * 60) : null,
                 fuelItems: completed.fuelItems,
                 products: fuelProducts,
+                weightBeforeKg: completed.weightBeforeKg,
+                weightAfterKg: completed.weightAfterKg,
+                fluidMl: completed.fluidMl,
+                runTempC: completed.runTempC,
               } : null}
             />
           </div>

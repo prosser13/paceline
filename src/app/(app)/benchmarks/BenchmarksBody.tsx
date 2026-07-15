@@ -6,6 +6,7 @@ import { fmtHms, fmtPace } from '@/lib/prediction';
 import type { ExperimentalPredictionView, SwimPredictionView } from '@/data/benchmarks';
 import MetricTrendChart from '@/components/MetricTrendChart';
 import FuelLogCell from '@/components/FuelLogCell';
+import { sweatLossL } from '@/lib/hydration';
 import ThresholdSuggestion from './ThresholdSuggestion';
 import type { BenchmarksData, Series, Tri703View } from './data';
 
@@ -305,7 +306,8 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                       : <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.decouplingPct, 5, 8)}`}>{fmtPct(r.decouplingPct)}</td>}
                     <td className={`py-[9px] border-b border-fog/60 text-right font-semibold ${driftColor(r.paceDecayPct, 2, 4)}`}>{fmtPct(r.paceDecayPct)}</td>
                     <td className="py-[9px] border-b border-fog/60 text-right">
-                      <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts} />
+                      <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts}
+                        initialWeightBeforeKg={r.weightBeforeKg} initialWeightAfterKg={r.weightAfterKg} initialFluidMl={r.fluidMl} initialRunTempC={r.runTempC} />
                     </td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{r.perceivedEffort != null ? r.perceivedEffort : '—'}</td>
                   </tr>
@@ -314,6 +316,132 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
             </table>
             <p className="text-[11.5px] text-stone mt-[8px]">EF = grade-adj. m/min per bpm (higher = fitter). Decoupling = HR drift vs pace (lower = more durable; &lt;5% is strong) — <b>*</b> marks runs where a negative split inflates it, so read EF there. Final-⅓ decay = grade-adjusted slowdown over the last third.</p>
           </div>
+        )}
+      </Card>
+
+      {/* Fuelling — carbs/h trend + gut-training adherence */}
+      <SecLabel>Fuelling</SecLabel>
+      <Card>
+        {(() => {
+          const trend = d.fuelling.carbsPerHTrend;
+          const latest = trend.length ? trend[trend.length - 1].v : null;
+          return (
+            <>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <Eyebrow>Carbs · latest long run</Eyebrow>
+                  <div className="font-display font-bold text-[26px] leading-none mt-[4px]">
+                    {latest != null ? <>{Math.round(latest)}<span className="text-[12px] text-stone"> g/h</span></> : '—'}
+                  </div>
+                </div>
+                {d.fuelling.repsCompleted > 0 && (
+                  <span className="text-[12px] font-bold" style={{ color: d.fuelling.repsOnPlan === d.fuelling.repsCompleted ? 'var(--color-ready)' : 'var(--color-strength)' }}>
+                    {d.fuelling.repsOnPlan} of {d.fuelling.repsCompleted} gut-training reps on plan
+                  </span>
+                )}
+              </div>
+              <MetricTrendChart
+                points={trend.map(s => ({ key: s.date, value: s.v }))}
+                color="var(--color-fern)"
+                guide={d.fuelling.targetGph != null ? { value: d.fuelling.targetGph, label: `${d.fuelling.targetGph} g/h` } : null}
+                endLabel={latest != null ? String(Math.round(latest)) : null}
+                footerLeft={trend.length >= 2 ? shortDate(trend[0].date) : null}
+                footerRight={trend.length >= 2 ? shortDate(trend[trend.length - 1].date) : null}
+                ariaLabel="Carbohydrate intake trending up across long runs"
+                emptyHint="Log the fuel you take on long runs and the carbs/h trend builds here."
+              />
+              <p className="text-[11.5px] text-stone mt-[8px]">Carbohydrate per hour logged on long runs, against your gut-training target (dashed). Build toward it across the block so race-day fuelling is rehearsed, not tried for the first time.</p>
+            </>
+          );
+        })()}
+      </Card>
+
+      {/* Hydration — sweat-rate model + estimated fluid/sodium loss by condition */}
+      <SecLabel>Hydration &amp; sweat rate</SecLabel>
+      <Card>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <Eyebrow>Sweat sodium</Eyebrow>
+            <div className="font-display font-bold text-[26px] leading-none mt-[4px]">
+              {Math.round(d.hydration.sweatSodiumMgL)}<span className="text-[12px] text-stone"> mg/L</span>
+            </div>
+          </div>
+          <span className="text-[12px] font-bold" style={{ color: d.hydration.hasModel ? 'var(--color-ready)' : 'var(--color-stone)' }}>
+            {d.hydration.confidence.label}
+          </span>
+        </div>
+        <p className="text-[11.5px] text-stone mt-[6px]">{d.hydration.confidence.detail}</p>
+
+        {d.hydration.buckets.length > 0 && (
+          <div className="overflow-x-auto mt-[14px]">
+            <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {[['Conditions', 'l'], ['Sweat rate', 'r'], ['Fluid loss', 'r'], ['Sodium loss', 'r']].map(([h, a]) => (
+                    <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {d.hydration.buckets.map(b => (
+                  <tr key={b.tempC}>
+                    <td className="py-[9px] border-b border-fog/60">
+                      {b.tempC}°C{b.isRace && <span className="ml-[6px] text-[10.5px] font-bold" style={{ color: 'var(--color-oxblood)' }}>race day</span>}
+                    </td>
+                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{b.sweatRateLh.toFixed(2)} L/h</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">{b.fluidLossMlPerH} ml/h</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right">{b.sodiumMgPerH} mg/h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="text-[11.5px] text-stone mt-[8px]">Estimated loss at marathon effort, from your weigh-ins. On race day aim to replace <b>60–80%</b> of fluid loss (gut tolerance caps around 800 ml/h) and match sodium to sweat.</p>
+          </div>
+        )}
+
+        {d.hydration.sweatRateTrend.length >= 2 && (
+          <MetricTrendChart
+            points={d.hydration.sweatRateTrend.map(s => ({ key: s.date, value: s.v }))}
+            color="var(--color-ride)"
+            footerLeft={shortDate(d.hydration.sweatRateTrend[0].date)}
+            footerRight={shortDate(d.hydration.sweatRateTrend[d.hydration.sweatRateTrend.length - 1].date)}
+            ariaLabel="Measured sweat rate across weighed runs"
+            emptyHint="Weigh yourself before & after runs and the sweat-rate trend builds here."
+          />
+        )}
+
+        {d.hydration.runs.length > 0 ? (
+          <div className="overflow-x-auto mt-[14px]">
+            <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {[['Date', 'l'], ['Dist', 'r'], ['Temp', 'r'], ['Before', 'r'], ['After', 'r'], ['Fluid', 'r'], ['Loss', 'r'], ['Rate', 'r']].map(([h, a]) => (
+                    <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {d.hydration.runs.map(r => {
+                  const loss = sweatLossL(r.weightBeforeKg, r.weightAfterKg, r.fluidMl);
+                  return (
+                    <tr key={r.id}>
+                      <td className="py-[9px] border-b border-fog/60">{shortDate(r.date)}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{Math.round(r.km)} km</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{r.runTempC != null ? `${Math.round(r.runTempC)}°C` : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{r.weightBeforeKg != null ? r.weightBeforeKg.toFixed(1) : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{r.weightAfterKg != null ? r.weightAfterKg.toFixed(1) : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{r.fluidMl != null ? `${Math.round(r.fluidMl)} ml` : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right">{loss != null ? `${loss.toFixed(2)} L` : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{r.sweatRateLh != null ? `${r.sweatRateLh.toFixed(2)}` : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p className="text-[11.5px] text-stone mt-[8px]">Every weighed run. Loss = weight lost + fluid drunk; rate = loss ÷ moving time. Log a run’s weigh-in from its fuel + fluid button on the plan or dashboard.</p>
+          </div>
+        ) : (
+          <p className="text-[13px] text-stone mt-[12px]">No weigh-ins yet. On any run, open the <b>fuel + fluid</b> button and enter your weight before and after — the sweat model and estimates build from there.</p>
         )}
       </Card>
 

@@ -123,6 +123,10 @@ export interface LongRun {
   movingSecs: number | null;
   fuelCarbsPerH: number | null;
   fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+  weightBeforeKg: number | null;
+  weightAfterKg: number | null;
+  fluidMl: number | null;
+  runTempC: number | null;
 }
 
 // Completed long runs since `since` — planned long runs (type 'LR') OR any run
@@ -132,7 +136,7 @@ export const listLongRunsSince = cache(async (since: string): Promise<LongRun[]>
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_avg_hr, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, perceived_effort, plan_sessions!inner(session_type, activity_type, distance_km)')
+    .select('id, completed_date, actual_ngp_min_km, actual_avg_pace_min_km, actual_avg_hr, actual_distance_km, actual_duration_secs, actual_duration_mins, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, run_temp_c, perceived_effort, plan_sessions!inner(session_type, activity_type, distance_km)')
     .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.activity_type', 'running');
@@ -158,6 +162,10 @@ export const listLongRunsSince = cache(async (since: string): Promise<LongRun[]>
       movingSecs,
       fuelCarbsPerH: r.fuel_carbs_per_h != null ? Number(r.fuel_carbs_per_h) : null,
       fuelItems: (r.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
+      weightBeforeKg: r.weight_before_kg != null ? Number(r.weight_before_kg) : null,
+      weightAfterKg: r.weight_after_kg != null ? Number(r.weight_after_kg) : null,
+      fluidMl: r.fluid_ml != null ? Number(r.fluid_ml) : null,
+      runTempC: r.run_temp_c != null ? Number(r.run_temp_c) : null,
     }];
   }).sort((a, b) => a.date.localeCompare(b.date));
 });

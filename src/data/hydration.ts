@@ -1,0 +1,157 @@
+// Hydration data layer (Málaga hydration wave). Owns the single-row
+// `hydration_config` (the athlete's sweat-sodium concentration) AND — like
+// src/data/fuel.ts does for the fuel columns — is the sanctioned writer of the
+// hydration columns on `completed_workouts` (weight_before/after, fluid, the
+// derived sweat rate, and the run's temperature). This is the second, deliberate
+// cross-cluster write; see docs/architecture.md §6.
+
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
+import { getWeatherConfig, effectiveLocation } from '@/data/weather-config';
+import { getRaceWeatherHistory } from '@/lib/weather';
+import { sweatLossL, sweatRateLh } from '@/lib/hydration';
+
+export const DEFAULT_SWEAT_SODIUM_MG_L = 553;
+
+export interface HydrationInput {
+  weightBeforeKg: number | null;
+  weightAfterKg: number | null;
+  fluidMl: number | null;
+  runTempC?: number | null;    // manual override; auto-fetched when omitted
+}
+
+export interface HydrationRun {
+  id: string;
+  date: string;
+  km: number;
+  movingSecs: number | null;
+  ngpMinKm: number | null;
+  weightBeforeKg: number | null;
+  weightAfterKg: number | null;
+  fluidMl: number | null;
+  runTempC: number | null;
+  sweatRateLh: number | null;
+}
+
+// ── config ────────────────────────────────────────────────────
+
+// The athlete's sweat-sodium concentration (mg/L), defaulting to 553 when unset.
+export async function getSweatSodium(): Promise<number> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('hydration_config')
+    .select('sweat_sodium_mg_l')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const v = data?.sweat_sodium_mg_l;
+  return v != null ? Number(v) : DEFAULT_SWEAT_SODIUM_MG_L;
+}
+
+export async function setSweatSodium(mgPerL: number): Promise<void> {
+  if (!(mgPerL > 0)) return;
+  const userId = await currentUserId();
+  await supabaseAdmin
+    .from('hydration_config')
+    .upsert({ user_id: userId, sweat_sodium_mg_l: mgPerL, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+}
+
+// ── per-run write ─────────────────────────────────────────────
+
+// The run's temperature from the weather archive: the athlete's home/override
+// location at the run's date, picking the configured default hour (else the day's
+// high). Null when there's no location configured or the fetch fails.
+async function fetchRunTemp(dateISO: string): Promise<number | null> {
+  const cfg = await getWeatherConfig();
+  const loc = effectiveLocation(cfg);
+  if (!loc) return null;
+  const res = await getRaceWeatherHistory(loc.lat, loc.lng, dateISO);
+  if (!res) return null;
+  const hour = cfg?.default_hour;
+  const match = hour != null
+    ? res.forecast.hours.find(h => h.hourLabel === `${String(hour).padStart(2, '0')}:00`)
+    : null;
+  return match ? match.tempC : res.forecast.high;
+}
+
+// Save the weigh-in + fluid for a completion. Computes the sweat rate when both
+// weights and a moving time are present; resolves the run temperature (manual
+// override wins, else auto-fetched) when both weights exist.
+export async function saveRunHydration(
+  completedId: string,
+  input: HydrationInput,
+  movingSecs: number | null,
+): Promise<{ sweatRateLh: number | null; runTempC: number | null }> {
+  const userId = await currentUserId();
+  const { weightBeforeKg, weightAfterKg, fluidMl } = input;
+
+  const loss = sweatLossL(weightBeforeKg, weightAfterKg, fluidMl);
+  const rate = sweatRateLh(loss, movingSecs);
+  const rateRounded = rate != null ? Math.round(rate * 100) / 100 : null;
+
+  // Resolve temperature only when there's a weigh-in to attach it to.
+  let runTempC = input.runTempC ?? null;
+  const haveWeights = weightBeforeKg != null && weightAfterKg != null;
+  if (runTempC == null && haveWeights) {
+    const { data: row } = await supabaseAdmin
+      .from('completed_workouts')
+      .select('completed_date')
+      .eq('id', completedId)
+      .eq('user_id', userId)
+      .maybeSingle();
+    const date = row?.completed_date as string | undefined;
+    if (date) runTempC = await fetchRunTemp(date);
+  }
+
+  await supabaseAdmin
+    .from('completed_workouts')
+    .update({
+      weight_before_kg: weightBeforeKg,
+      weight_after_kg: weightAfterKg,
+      fluid_ml: fluidMl,
+      sweat_rate_l_per_h: rateRounded,
+      run_temp_c: runTempC,
+    })
+    .eq('id', completedId)
+    .eq('user_id', userId);
+
+  return { sweatRateLh: rateRounded, runTempC };
+}
+
+// ── read ──────────────────────────────────────────────────────
+
+// Every completed RUN since `since` that has a weigh-in logged — any distance
+// (the sweat model wants data across conditions, not just long runs).
+export async function listHydrationRunsSince(since: string): Promise<HydrationRun[]> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, completed_date, actual_distance_km, actual_duration_secs, actual_duration_mins, actual_ngp_min_km, actual_avg_pace_min_km, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c, plan_sessions!inner(activity_type, distance_km)')
+    .eq('user_id', userId)
+    .eq('plan_sessions.activity_type', 'running')
+    .gte('completed_date', since)
+    .not('weight_before_kg', 'is', null);
+
+  return (data ?? []).flatMap(r => {
+    if (!r.completed_date) return [];
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+      { distance_km: number | null } | null;
+    const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
+      : ps?.distance_km != null ? Number(ps.distance_km) : 0;
+    const movingSecs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
+      : r.actual_duration_mins != null ? Math.round(Number(r.actual_duration_mins) * 60) : null;
+    const ngp = r.actual_ngp_min_km != null ? Number(r.actual_ngp_min_km)
+      : r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
+    return [{
+      id: r.id as string,
+      date: r.completed_date as string,
+      km,
+      movingSecs,
+      ngpMinKm: ngp,
+      weightBeforeKg: r.weight_before_kg != null ? Number(r.weight_before_kg) : null,
+      weightAfterKg: r.weight_after_kg != null ? Number(r.weight_after_kg) : null,
+      fluidMl: r.fluid_ml != null ? Number(r.fluid_ml) : null,
+      runTempC: r.run_temp_c != null ? Number(r.run_temp_c) : null,
+      sweatRateLh: r.sweat_rate_l_per_h != null ? Number(r.sweat_rate_l_per_h) : null,
+    }];
+  }).sort((a, b) => a.date.localeCompare(b.date));
+}

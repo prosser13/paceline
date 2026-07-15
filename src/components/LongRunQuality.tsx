@@ -39,7 +39,16 @@ export default function LongRunQuality({
   paceDecayPct: number | null;
   fuelCarbsPerH: number | null;
   recommendedGph?: number | null;   // the gut-training target for this session
-  log?: { workoutId: string; movingSecs: number | null; fuelItems: { name: string; carbs_g: number; qty: number }[] | null; products: FuelProduct[] } | null;
+  log?: {
+    workoutId: string;
+    movingSecs: number | null;
+    fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+    products: FuelProduct[];
+    weightBeforeKg?: number | null;
+    weightAfterKg?: number | null;
+    fluidMl?: number | null;
+    runTempC?: number | null;
+  } | null;
 }) {
   // Nothing to show without at least one metric.
   if (efficiencyFactor == null && decouplingPct == null && paceDecayPct == null) return null;
@@ -122,6 +131,10 @@ export default function LongRunQuality({
             initialCarbsPerH={fuelCarbsPerH}
             initialItems={log.fuelItems}
             products={log.products}
+            initialWeightBeforeKg={log.weightBeforeKg ?? null}
+            initialWeightAfterKg={log.weightAfterKg ?? null}
+            initialFluidMl={log.fluidMl ?? null}
+            initialRunTempC={log.runTempC ?? null}
           />
         ) : fuelCarbsPerH != null
           ? <span><span className="font-display font-bold text-[15px]">{Math.round(fuelCarbsPerH)}</span><span className="text-[12px] text-stone"> g/h</span></span>

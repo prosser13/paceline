@@ -11,6 +11,9 @@ import { buildTriEstimate } from '@/data/races/tri-pacing';
 import { SWANSEA_703 } from '@/data/races/swansea-703';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
+import { getFuelProgressionAdherence } from '@/data/fuel-plan';
+import { listHydrationRunsSince, getSweatSodium, type HydrationRun } from '@/data/hydration';
+import { buildSweatModel, conditionBuckets, modelConfidence, type ConditionBucket } from '@/lib/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
@@ -65,10 +68,28 @@ export interface BenchmarksData {
     efficiencyFactor: number | null; perceivedEffort: number | null;
     movingSecs: number | null; fuelCarbsPerH: number | null;
     fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+    weightBeforeKg: number | null; weightAfterKg: number | null;
+    fluidMl: number | null; runTempC: number | null;
   }[];
   // Efficiency Factor trend across the block's long runs (one point per run).
   ef: { current: number | null; first: number | null; series: Series[] };
   fuelProducts: FuelProduct[];
+  // Fuelling — carbs/h trend across long runs + gut-training progression adherence.
+  fuelling: {
+    carbsPerHTrend: Series[];        // one point per long run with fuel logged (oldest→newest)
+    targetGph: number | null;        // block peak gut-training target (dashed guide line)
+    repsCompleted: number;
+    repsOnPlan: number;
+  };
+  // Hydration — sweat-rate model + estimated fluid/sodium loss by condition.
+  hydration: {
+    sweatSodiumMgL: number;
+    hasModel: boolean;
+    confidence: { label: string; detail: string };
+    buckets: ConditionBucket[];      // estimated loss at typical temps (marathon effort)
+    sweatRateTrend: Series[];        // one point per weighed run (oldest→newest), L/h
+    runs: HydrationRun[];            // all weighed runs (most recent first) for the tracking table
+  };
 }
 
 // Running VDOT implied by a marathon time (seconds), rounded to one decimal.
@@ -93,7 +114,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, fuelAdherence, hydrationRuns, sweatSodiumMgL, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
     getSwimPredictions(asOf),
@@ -108,6 +129,9 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     listRaceResultsSince(addDays(asOf, -365)),   // races are sparse milestones — wider window
     listLongRunsSince(since),                     // rolling 12-week window
     listFuelProducts(),
+    getFuelProgressionAdherence(asOf),
+    listHydrationRunsSince(since),
+    getSweatSodium(),
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
@@ -155,6 +179,23 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const predictedDeltaSec = predSnaps.length >= 2 && adjustedPredictedSeconds != null
     ? Math.round(adjustedPredictedSeconds - Number(predSnaps[0].predicted_seconds)) : null;
 
+  // Fuelling: carbs/h trend across long runs (oldest→newest) + progression adherence.
+  const carbsPerHTrend: Series[] = [...longRuns]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .flatMap(r => r.fuelCarbsPerH != null ? [{ date: r.date, v: r.fuelCarbsPerH }] : []);
+
+  // Hydration: reference effort = the goal marathon pace (target time, else the
+  // endurance-adjusted prediction) so the sweat model normalises across efforts.
+  const marathonSeconds = goal?.targetSeconds ?? adjustedPredictedSeconds ?? null;
+  const marathonPaceMinKm = marathonSeconds != null ? (marathonSeconds / 60) / 42.195 : null;
+  const sweatModel = buildSweatModel(
+    hydrationRuns.flatMap(r => r.sweatRateLh != null && r.runTempC != null
+      ? [{ tempC: r.runTempC, sweatRateLh: r.sweatRateLh, ngpMinKm: r.ngpMinKm }] : []),
+    marathonPaceMinKm,
+  );
+  const sweatRateTrend: Series[] = hydrationRuns
+    .flatMap(r => r.sweatRateLh != null ? [{ date: r.date, v: r.sweatRateLh }] : []);
+
   return {
     asOf,
     raceName: goal?.name ?? null,
@@ -184,5 +225,19 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     longRuns: [...longRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
     ef: efTrend(longRuns),
     fuelProducts,
+    fuelling: {
+      carbsPerHTrend,
+      targetGph: fuelAdherence.targetGph,
+      repsCompleted: fuelAdherence.repsCompleted,
+      repsOnPlan: fuelAdherence.repsOnPlan,
+    },
+    hydration: {
+      sweatSodiumMgL,
+      hasModel: sweatModel != null,
+      confidence: modelConfidence(sweatModel),
+      buckets: sweatModel ? conditionBuckets(sweatModel, sweatSodiumMgL) : [],
+      sweatRateTrend,
+      runs: [...hydrationRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
+    },
   };
 }

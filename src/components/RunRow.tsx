@@ -60,6 +60,10 @@ export interface RunRowCompleted {
   paceDecayPct?: number | null;
   fuelCarbsPerH?: number | null;
   fuelItems?: { name: string; carbs_g: number; qty: number }[] | null;
+  weightBeforeKg?: number | null;
+  weightAfterKg?: number | null;
+  fluidMl?: number | null;
+  runTempC?: number | null;
   efficiencyFactor?: number | null;
 }
 
@@ -296,6 +300,10 @@ export default function RunRow({
                   movingSecs: (completed.durationMins ?? null) != null ? Math.round((completed.durationMins as number) * 60) : null,
                   fuelItems: completed.fuelItems ?? null,
                   products: fuelProducts,
+                  weightBeforeKg: completed.weightBeforeKg ?? null,
+                  weightAfterKg: completed.weightAfterKg ?? null,
+                  fluidMl: completed.fluidMl ?? null,
+                  runTempC: completed.runTempC ?? null,
                 } : null}
               />
             </div>

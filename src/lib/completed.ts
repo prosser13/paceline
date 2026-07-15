@@ -28,6 +28,11 @@ export interface CompletedActuals {
   paceDecayPct: number | null;
   fuelCarbsPerH: number | null;
   fuelItems: { name: string; carbs_g: number; qty: number }[] | null;   // logged fuel (pre-fills the picker)
+  // Hydration weigh-in (pre-fills the fuel+fluid picker). Null until logged.
+  weightBeforeKg: number | null;
+  weightAfterKg: number | null;
+  fluidMl: number | null;
+  runTempC: number | null;
   efficiencyFactor: number | null;   // grade-adj m/min per bpm (NGP + avg HR)
 }
 
@@ -48,6 +53,10 @@ export interface CompletedRow {
   pace_decay_pct?: number | string | null;
   fuel_carbs_per_h?: number | string | null;
   fuel_items?: unknown;
+  weight_before_kg?: number | string | null;
+  weight_after_kg?: number | string | null;
+  fluid_ml?: number | string | null;
+  run_temp_c?: number | string | null;
 }
 
 export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
@@ -83,6 +92,10 @@ export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp
     paceDecayPct: cw.pace_decay_pct != null ? Number(cw.pace_decay_pct) : null,
     fuelCarbsPerH: cw.fuel_carbs_per_h != null ? Number(cw.fuel_carbs_per_h) : null,
     fuelItems: (cw.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
+    weightBeforeKg: cw.weight_before_kg != null ? Number(cw.weight_before_kg) : null,
+    weightAfterKg: cw.weight_after_kg != null ? Number(cw.weight_after_kg) : null,
+    fluidMl: cw.fluid_ml != null ? Number(cw.fluid_ml) : null,
+    runTempC: cw.run_temp_c != null ? Number(cw.run_temp_c) : null,
     // EF from the grade-adjusted pace (NGP preferred, else avg pace) + avg HR.
     efficiencyFactor: efficiencyFactor(ngp ?? pace, cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null),
   };

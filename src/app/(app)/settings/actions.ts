@@ -16,6 +16,7 @@ import {
 import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
+import { setSweatSodium } from '@/data/hydration';
 import { upsertUserIntegrations } from '@/data/user-integrations';
 import { geocodePlace } from '@/lib/weather';
 import { correctThreshold } from '@/data/threshold-suggestion';
@@ -48,6 +49,19 @@ export async function savePaceZones(threshold: string, zones: ZoneInput[]) {
   revalidatePath('/plan');
   revalidatePath('/');
 
+  return { ok: true };
+}
+
+// Save the athlete's sweat-sodium concentration (mg/L, from a sweat test). Drives
+// the sodium side of the hydration estimates + race plans.
+export async function saveSweatSodium(mgPerL: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const n = Number(mgPerL);
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'Enter a positive value' };
+  await setSweatSodium(n);
+  revalidatePath('/settings');
+  revalidatePath('/benchmarks');
+  revalidatePath('/races', 'layout');
   return { ok: true };
 }
 

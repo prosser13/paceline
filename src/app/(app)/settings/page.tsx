@@ -9,6 +9,7 @@ import {
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, coachUpdatesLockedForCurrentUser, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
+import { getSweatSodium } from '@/data/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
 import { getLatestPowerCheck, getPendingPowerSuggestion, listPowerChecks, getRevertablePowerChange } from '@/data/power-suggestion';
 import PowerSuggestion from '../benchmarks/PowerSuggestion';
@@ -26,6 +27,7 @@ import PlanPrefsClient from './PlanPrefsClient';
 import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
 import TrainingLocationClient from './TrainingLocationClient';
+import HydrationConfigClient from './HydrationConfigClient';
 import IntegrationsClient from './IntegrationsClient';
 import ChangeLogClient from './ChangeLogClient';
 import SignOutClient from './SignOutClient';
@@ -43,7 +45,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig,
+    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig, sweatSodium,
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
     pwrLatest, pwrPending, pwrHistory, pwrRevertable,
@@ -64,6 +66,7 @@ export default async function SettingsPage() {
     listAdjustments(),
     getProgressionMode(),
     getWeatherConfig(),
+    getSweatSodium(),
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
@@ -188,6 +191,11 @@ export default async function SettingsPage() {
             initialDefaultHour={weatherConfig?.default_hour ?? 7}
             initialOverrideLabel={(weatherConfig?.override_label as string | null) ?? null}
           />
+        </SettingsCard>
+
+        <SettingsCard cat="Training" color="var(--color-hard)" title="Hydration"
+          subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans.">
+          <HydrationConfigClient initialSweatSodium={sweatSodium} />
         </SettingsCard>
 
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"

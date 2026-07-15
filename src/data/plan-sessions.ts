@@ -365,7 +365,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, strava_activity_id, plan_sessions!inner(*)')
+    .select('id, completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c, strava_activity_id, plan_sessions!inner(*)')
     .eq('user_id', userId)
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
@@ -435,7 +435,7 @@ export async function getCompletedForSession(planSessionId: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items')
+    .select('id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
     .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
@@ -449,7 +449,7 @@ export async function listCompletedForSessions(planSessionIds: string[]) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items')
+    .select('id, plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
     .eq('user_id', userId)
     .in('plan_session_id', planSessionIds);
   return data ?? [];
@@ -467,7 +467,7 @@ export async function listCompletedDistancesBetween(from: string, to: string) {
   return data ?? [];
 }
 
-const COMPLETED_DISPLAY_COLS = 'id, plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, strava_activity_id, merged_strava_ids';
+const COMPLETED_DISPLAY_COLS = 'id, plan_session_id, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c, strava_activity_id, merged_strava_ids';
 
 // Completions for one plan's sessions (plan page) — display fields keyed by
 // plan_session_id, scoped so the page (and its client payload) don't carry every

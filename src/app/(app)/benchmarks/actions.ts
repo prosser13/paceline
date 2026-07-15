@@ -2,6 +2,7 @@
 
 import { requireUser } from '@/lib/auth';
 import { addFuelProduct, saveRunFuel, type FuelItem, type FuelProduct } from '@/data/fuel';
+import { saveRunHydration, type HydrationInput } from '@/data/hydration';
 import { applyThresholdSuggestion, dismissThresholdSuggestion, revertThresholdChange } from '@/data/threshold-suggestion';
 import { applyPowerSuggestion, dismissPowerSuggestion, revertPowerChange } from '@/data/power-suggestion';
 import { revalidatePath } from 'next/cache';
@@ -73,6 +74,24 @@ export async function logRunFuel(
   revalidatePath('/plan');     // fuel now also logs inline on plan rows + the dashboard hero (7B)
   revalidatePath('/');
   return { ok: true, carbsPerH: perH };
+}
+
+// Log fuel AND the hydration weigh-in for a completed run in one call — the picker
+// captures both. Fuel items flow through the existing saveRunFuel; weights/fluid
+// through saveRunHydration (which derives the sweat rate + resolves run temp).
+export async function logRunNutrition(
+  completedId: string,
+  items: FuelItem[],
+  hydration: HydrationInput,
+  movingSecs: number | null,
+): Promise<{ ok: true; carbsPerH: number | null; sweatRateLh: number | null; runTempC: number | null }> {
+  await requireUser();
+  const perH = await saveRunFuel(completedId, items, movingSecs);
+  const { sweatRateLh, runTempC } = await saveRunHydration(completedId, hydration, movingSecs);
+  revalidatePath('/benchmarks');
+  revalidatePath('/plan');
+  revalidatePath('/');
+  return { ok: true, carbsPerH: perH, sweatRateLh, runTempC };
 }
 
 // Add a one-off product to the catalog ("keep in catalog").
