@@ -19,6 +19,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getCurrentUser as getSessionUser } from './supabase-server';
 import { getImpersonatedUserId } from './impersonation';
+import { guestTargetUserId } from './guest';
+import { roleFor } from './roles';
 import { supabaseAdmin } from './supabase-admin';
 
 const store = new AsyncLocalStorage<string>();
@@ -41,13 +43,21 @@ export async function currentUserId(): Promise<string> {
   // separately blocked (getCurrentUser in auth.ts), so this only ever widens reads.
   const impersonated = await getImpersonatedUserId();
   if (impersonated) return impersonated;
+  // A real allowlisted session (owner/viewer) resolves to its own id and takes
+  // precedence over any guest cookie, so a logged-in owner is never downgraded to a
+  // read-only guest scope.
   const user = await getSessionUser();
-  if (!user) {
-    throw new Error(
-      'No user in scope: data access requires an authenticated session or runWithUser().',
-    );
-  }
-  return user.id;
+  if (user && roleFor(user.email)) return user.id;
+  // A temporary read-only guest scopes reads to the owner (resolved server-side from
+  // the DB; writes are separately blocked in auth.ts).
+  const guest = await guestTargetUserId();
+  if (guest) return guest;
+  // Legacy: a non-allowlisted authenticated session keeps its own id (the page/read
+  // gate bounces it, so this only matters for edge callers).
+  if (user) return user.id;
+  throw new Error(
+    'No user in scope: data access requires an authenticated session or runWithUser().',
+  );
 }
 
 // The email of the scoped user — resolved by id via the service role so it works in

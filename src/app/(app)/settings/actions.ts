@@ -17,6 +17,10 @@ import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
 import { setSweatSodium, setGutCap } from '@/data/hydration';
+import {
+  enableGuestAccess, disableGuestAccess, rotatePassword as rotateGuestPasswordData,
+  rotateLinkToken, setSessionHours as setGuestSessionHoursData,
+} from '@/data/guest-access';
 import { upsertUserIntegrations } from '@/data/user-integrations';
 import { geocodePlace } from '@/lib/weather';
 import { correctThreshold } from '@/data/threshold-suggestion';
@@ -75,6 +79,53 @@ export async function saveGutCap(ml: string): Promise<{ ok: boolean; error?: str
   revalidatePath('/settings');
   revalidatePath('/races', 'layout');
   return { ok: true };
+}
+
+// ── guest access (owner-only) ─────────────────────────────────
+
+function clampGuestHours(n: number): number {
+  if (!Number.isFinite(n)) return 12;
+  return Math.max(1, Math.min(168, Math.round(n)));   // 1h .. 1 week
+}
+
+export async function enableGuest(password: string, sessionHours: string): Promise<{ ok: boolean; linkToken?: string; error?: string }> {
+  const user = await requireUser();
+  const pw = password.trim();
+  if (pw.length < 6) return { ok: false, error: 'Use at least 6 characters' };
+  const { linkToken } = await enableGuestAccess(user.id, pw, clampGuestHours(Number(sessionHours)));
+  revalidatePath('/settings');
+  return { ok: true, linkToken };
+}
+
+export async function disableGuest(): Promise<{ ok: boolean }> {
+  await requireUser();
+  await disableGuestAccess();
+  revalidatePath('/settings');
+  return { ok: true };
+}
+
+export async function rotateGuestPassword(password: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const pw = password.trim();
+  if (pw.length < 6) return { ok: false, error: 'Use at least 6 characters' };
+  await rotateGuestPasswordData(pw);
+  revalidatePath('/settings');
+  return { ok: true };
+}
+
+export async function rotateGuestLink(): Promise<{ ok: true; linkToken: string }> {
+  await requireUser();
+  const linkToken = await rotateLinkToken();
+  revalidatePath('/settings');
+  return { ok: true, linkToken };
+}
+
+export async function setGuestSessionHours(hours: string): Promise<{ ok: true; hours: number }> {
+  await requireUser();
+  const h = clampGuestHours(Number(hours));
+  await setGuestSessionHoursData(h);
+  revalidatePath('/settings');
+  return { ok: true, hours: h };
 }
 
 export interface IntegrationsInput {
