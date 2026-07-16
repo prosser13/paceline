@@ -9,7 +9,7 @@ import {
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, coachUpdatesLockedForCurrentUser, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
-import { getSweatSodium } from '@/data/hydration';
+import { getSweatSodium, getGutCapMl } from '@/data/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
 import { getLatestPowerCheck, getPendingPowerSuggestion, listPowerChecks, getRevertablePowerChange } from '@/data/power-suggestion';
 import PowerSuggestion from '../benchmarks/PowerSuggestion';
@@ -45,7 +45,7 @@ export default async function SettingsPage() {
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig, sweatSodium,
+    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig, sweatSodium, gutCapMl,
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
     pwrLatest, pwrPending, pwrHistory, pwrRevertable,
@@ -67,6 +67,7 @@ export default async function SettingsPage() {
     getProgressionMode(),
     getWeatherConfig(),
     getSweatSodium(),
+    getGutCapMl(),
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
@@ -195,7 +196,7 @@ export default async function SettingsPage() {
 
         <SettingsCard cat="Training" color="var(--color-hard)" title="Hydration"
           subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans.">
-          <HydrationConfigClient initialSweatSodium={sweatSodium} />
+          <HydrationConfigClient initialSweatSodium={sweatSodium} initialGutCap={gutCapMl} />
         </SettingsCard>
 
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"

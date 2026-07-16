@@ -16,7 +16,7 @@ import {
 import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
-import { setSweatSodium } from '@/data/hydration';
+import { setSweatSodium, setGutCap } from '@/data/hydration';
 import { upsertUserIntegrations } from '@/data/user-integrations';
 import { geocodePlace } from '@/lib/weather';
 import { correctThreshold } from '@/data/threshold-suggestion';
@@ -61,6 +61,18 @@ export async function saveSweatSodium(mgPerL: string): Promise<{ ok: boolean; er
   await setSweatSodium(n);
   revalidatePath('/settings');
   revalidatePath('/benchmarks');
+  revalidatePath('/races', 'layout');
+  return { ok: true };
+}
+
+// Save the athlete's race fluid gut-tolerance cap (ml/h) — the ceiling on the
+// personalised race fluid recommendation. Overrides the 800 ml/h default.
+export async function saveGutCap(ml: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const n = Number(ml);
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'Enter a positive value' };
+  await setGutCap(n);
+  revalidatePath('/settings');
   revalidatePath('/races', 'layout');
   return { ok: true };
 }

@@ -12,7 +12,7 @@ import { SWANSEA_703 } from '@/data/races/swansea-703';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { getFuelProgressionAdherence } from '@/data/fuel-plan';
-import { listHydrationRunsSince, getSweatSodium, type HydrationRun } from '@/data/hydration';
+import { listHydrationRunsSince, getSweatSodium, getGutCapMl, type HydrationRun } from '@/data/hydration';
 import { buildSweatModel, conditionBuckets, modelConfidence, type ConditionBucket } from '@/lib/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
@@ -84,6 +84,7 @@ export interface BenchmarksData {
   // Hydration — sweat-rate model + estimated fluid/sodium loss by condition.
   hydration: {
     sweatSodiumMgL: number;
+    gutCapMl: number;
     hasModel: boolean;
     confidence: { label: string; detail: string };
     buckets: ConditionBucket[];      // estimated loss at typical temps (marathon effort)
@@ -114,7 +115,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, fuelAdherence, hydrationRuns, sweatSodiumMgL, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, fuelAdherence, hydrationRuns, sweatSodiumMgL, gutCapMl, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
     getSwimPredictions(asOf),
@@ -132,6 +133,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     getFuelProgressionAdherence(asOf),
     listHydrationRunsSince(since),
     getSweatSodium(),
+    getGutCapMl(),
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
@@ -233,6 +235,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     },
     hydration: {
       sweatSodiumMgL,
+      gutCapMl,
       hasModel: sweatModel != null,
       confidence: modelConfidence(sweatModel),
       buckets: sweatModel ? conditionBuckets(sweatModel, sweatSodiumMgL) : [],

@@ -395,7 +395,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                 ))}
               </tbody>
             </table>
-            <p className="text-[11.5px] text-stone mt-[8px]">Estimated loss at marathon effort, from your weigh-ins. On race day aim to replace <b>60–80%</b> of fluid loss (gut tolerance caps around 800 ml/h) and match sodium to sweat.</p>
+            <p className="text-[11.5px] text-stone mt-[8px]">Estimated loss at marathon effort, from your weigh-ins. On race day aim to replace <b>60–80%</b> of fluid loss (capped at your <b>{d.hydration.gutCapMl} ml/h</b> gut tolerance) and match sodium to sweat.</p>
           </div>
         )}
 

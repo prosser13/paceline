@@ -25,8 +25,8 @@ import { projectFitness, readinessFromProjection } from '@/lib/fitness-projectio
 import { predictableDistanceM } from '@/lib/prediction';
 import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
 import { getFuelProgressionAdherence } from '@/data/fuel-plan';
-import { listHydrationRunsSince, getSweatSodium } from '@/data/hydration';
-import { buildSweatModel, raceFluidRecommendation } from '@/lib/hydration';
+import { listHydrationRunsSince, getSweatSodium, getGutCapMl } from '@/data/hydration';
+import { buildSweatModel, raceFluidRecommendation, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
 import { todayISO } from '@/lib/dates';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
@@ -103,13 +103,13 @@ async function resolveFluidPlan(
 
   if (owned) {
     const hydSince = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 180 * 86400000).toISOString().slice(0, 10);
-    const [hydrationRuns, sweatSodium] = await Promise.all([listHydrationRunsSince(hydSince), getSweatSodium()]);
+    const [hydrationRuns, sweatSodium, gutCapMl] = await Promise.all([listHydrationRunsSince(hydSince), getSweatSodium(), getGutCapMl()]);
     const model = buildSweatModel(
       hydrationRuns.flatMap(r => r.sweatRateLh != null && r.runTempC != null
         ? [{ tempC: r.runTempC, sweatRateLh: r.sweatRateLh, ngpMinKm: r.ngpMinKm }] : []),
       refPaceMinKm,
     );
-    const rec = raceFluidRecommendation(model, high, sweatSodium, refPaceMinKm);
+    const rec = raceFluidRecommendation(model, high, sweatSodium, refPaceMinKm, { ...DEFAULT_FLUID_OPTS, gutCapMl });
     if (rec) {
       fluidRange = rec.fluidMlPerH;
       sodiumOverrideMg = rec.sodiumMgPerH;

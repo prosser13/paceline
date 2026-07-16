@@ -9,9 +9,10 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
 import { getWeatherConfig, effectiveLocation } from '@/data/weather-config';
 import { getRaceWeatherHistory } from '@/lib/weather';
-import { sweatLossL, sweatRateLh } from '@/lib/hydration';
+import { sweatLossL, sweatRateLh, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
 
 export const DEFAULT_SWEAT_SODIUM_MG_L = 553;
+export const DEFAULT_GUT_CAP_ML = DEFAULT_FLUID_OPTS.gutCapMl;   // 800 ml/h
 
 export interface HydrationInput {
   weightBeforeKg: number | null;
@@ -53,6 +54,27 @@ export async function setSweatSodium(mgPerL: number): Promise<void> {
   await supabaseAdmin
     .from('hydration_config')
     .upsert({ user_id: userId, sweat_sodium_mg_l: mgPerL, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+}
+
+// The athlete's race fluid gut-tolerance cap (ml/h), defaulting to 800 when unset —
+// caps the personalised race fluid recommendation so it stays realistic.
+export async function getGutCapMl(): Promise<number> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('hydration_config')
+    .select('gut_cap_ml')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const v = data?.gut_cap_ml;
+  return v != null ? Number(v) : DEFAULT_GUT_CAP_ML;
+}
+
+export async function setGutCap(ml: number): Promise<void> {
+  if (!(ml > 0)) return;
+  const userId = await currentUserId();
+  await supabaseAdmin
+    .from('hydration_config')
+    .upsert({ user_id: userId, gut_cap_ml: ml, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 }
 
 // ── per-run write ─────────────────────────────────────────────
