@@ -12,7 +12,8 @@ import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import {
   INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, isMergedRun, collapseToWholeRun,
 } from '@/components/session-ui';
-import { RunGlyph } from '@/components/glyphs';
+import { RunGlyph, FuelGlyph, DropletGlyph } from '@/components/glyphs';
+import { sweatLossL } from '@/lib/hydration';
 import LongRunQuality from '@/components/LongRunQuality';
 import LogNutritionRow from '@/components/LogNutritionRow';
 import { fuelTargetLabel } from '@/lib/fuel-progression';
@@ -102,6 +103,10 @@ export default function SessionHero({
     isDone && completed?.perceivedEffort != null ? `RPE ${completed.perceivedEffort}/10` : null,
   ].filter(Boolean) as string[];
 
+  // Fuel + fluid logged — surfaced as glyph chips so they read on the collapsed hero.
+  const heroLoss = isDone ? sweatLossL(completed?.weightBeforeKg ?? null, completed?.weightAfterKg ?? null, completed?.fluidMl ?? null) : null;
+  const heroFuel = isDone && completed?.fuelCarbsPerH != null ? completed.fuelCarbsPerH : null;
+
   const stats = isDone
     ? [{ v: compare?.pace.actual ?? '—', l: 'pace' }, { v: tssActual != null ? `${tssActual}` : '—', l: 'TSS' }]
     : [{ v: displayDuration ?? '—', l: 'time' }, { v: displayTss != null ? `${displayTss}` : '—', l: 'TSS' }];
@@ -131,6 +136,12 @@ export default function SessionHero({
                 {chips.map(c => (
                   <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
                 ))}
+                {heroFuel != null && (
+                  <span className="inline-flex items-center gap-[5px] text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}><FuelGlyph size={13} />{Math.round(heroFuel)} g/h</span>
+                )}
+                {heroLoss != null && (
+                  <span className="inline-flex items-center gap-[5px] text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}><DropletGlyph size={13} />{heroLoss.toFixed(1)} L</span>
+                )}
               </div>
             )}
           </div>

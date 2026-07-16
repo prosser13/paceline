@@ -67,3 +67,25 @@ export function YogaGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }
     </svg>
   );
 }
+
+// Fuel — a gel sachet, for "food/carbs logged".
+export function FuelGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M8 3h8l-1 3v13a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2v-13z" />
+      <path d="M8 6h8" />
+      <path d="M10 10h4" />
+    </svg>
+  );
+}
+
+// Droplet — for "fluid / weigh-in logged".
+export function DropletGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M12 3.5c3 3.8 5.5 6.9 5.5 9.8a5.5 5.5 0 0 1 -11 0c0 -2.9 2.5 -6 5.5 -9.8z" />
+    </svg>
+  );
+}

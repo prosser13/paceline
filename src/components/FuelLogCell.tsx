@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { logRunNutrition, createFuelProduct } from '@/app/(app)/benchmarks/actions';
 import { sweatLossL, sweatRateLh } from '@/lib/hydration';
+import { FuelGlyph, DropletGlyph } from './glyphs';
 import type { FuelProduct, FuelItem } from '@/data/fuel';
 
 interface Row { key: string; name: string; carbs_g: number; qty: number; }
@@ -43,6 +44,7 @@ export default function FuelLogCell({
   initialRunTempC?: number | null;
 }) {
   const [carbsPerH, setCarbsPerH] = useState<number | null>(initialCarbsPerH);
+  const [loggedLoss, setLoggedLoss] = useState<number | null>(sweatLossL(initialWeightBeforeKg, initialWeightAfterKg, initialFluidMl));
   const [open, setOpen] = useState(false);
 
   // Seed rows from the catalog, pre-filling quantities from any existing log.
@@ -91,15 +93,25 @@ export default function FuelLogCell({
       runTempC: num(temp),   // blank → server auto-fetches from the weather archive
     }, movingSecs);
     setCarbsPerH(res.carbsPerH);
+    setLoggedLoss(lossL);
     setSaving(false);
     setOpen(false);
   }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="font-mono text-[12.5px] font-semibold hover:underline"
-        style={{ color: carbsPerH != null ? 'var(--color-ink)' : 'var(--color-stone)' }}>
-        {carbsPerH != null ? `${carbsPerH} g/h` : 'log'}
+      <button onClick={() => setOpen(true)} className="font-mono text-[12.5px] font-semibold hover:underline inline-flex items-center gap-[8px]"
+        style={{ color: (carbsPerH != null || loggedLoss != null) ? 'var(--color-ink)' : 'var(--color-stone)' }}>
+        {carbsPerH == null && loggedLoss == null ? 'log' : (
+          <>
+            {carbsPerH != null && (
+              <span className="inline-flex items-center gap-[3px]"><FuelGlyph size={12} />{carbsPerH}<span className="text-stone font-normal">g/h</span></span>
+            )}
+            {loggedLoss != null && (
+              <span className="inline-flex items-center gap-[3px]"><DropletGlyph size={12} />{loggedLoss.toFixed(1)}<span className="text-stone font-normal">L</span></span>
+            )}
+          </>
+        )}
       </button>
 
       {open && (
