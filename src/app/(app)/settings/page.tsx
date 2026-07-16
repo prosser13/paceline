@@ -43,8 +43,13 @@ import {
   saveBikeHrZones,
   type ZoneInput, type HrZoneInput, type PowerZoneInput, type SwimZoneInput, type ConstraintInput,
 } from './actions';
+import SettingsTabs, { type SettingsSection } from './SettingsTabs';
 
-export default async function SettingsPage() {
+const TAB_IDS = ['coaching', 'plan', 'zones', 'strength', 'training', 'connections', 'account'];
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+  const { tab } = await searchParams;
+  const initialTab = tab && TAB_IDS.includes(tab) ? tab : 'coaching';
   // Temporary read-only guests never see Settings (it exposes owner identifiers and
   // config). Bounce them before any data loads. getViewer() is request-cached.
   if ((await getViewer())?.role === 'guest') redirect('/');
@@ -167,159 +172,196 @@ export default async function SettingsPage() {
   // Locked accounts read as off and can't turn it on; everyone else uses their pref.
   const coachUpdates = coachLocked ? false : (coachingPrefs?.coach_updates_enabled ?? true);
 
+  const sections: SettingsSection[] = [
+    {
+      id: 'coaching', label: 'Coaching', color: 'var(--color-strength)', content: (
+        <>
+          <SettingsCard cat="Coaching" color="var(--color-strength)" title="Autonomy"
+            subtitle="How much latitude the coach has when it adapts your plan, and the guardrails it must stay within. Changes are picked up on the next coaching review.">
+            <CoachingClient
+              initialAutonomy={coachAutonomy}
+              initialMaxRamp={coachMaxRamp}
+              initialMinRest={coachMinRest}
+              initialProtectA={coachProtectA}
+              initialNotes={coachNotes}
+              initialMorningBriefing={morningBriefing}
+              initialMorningFallback={morningFallback}
+              initialMorningSkipRest={morningSkipRest}
+              initialCoachUpdates={coachUpdates}
+              coachLocked={coachLocked}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Coaching" color="var(--color-strength)" title="Constraints"
+            subtitle="Hard limits the coach must respect — recurring days off, travel blackouts, or a free-text rule it should always work around.">
+            <ConstraintsClient initialConstraints={constraintInputs} />
+          </SettingsCard>
+
+          <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
+            subtitle="Every change the coach (or you) makes to the plan, newest first — what changed, when, and why. Revert to undo one." last>
+            <ChangeLogClient entries={adjustments} />
+          </SettingsCard>
+        </>
+      ),
+    },
+    {
+      id: 'plan', label: 'Plan', color: 'var(--color-race)', content: (
+        <>
+          <SettingsCard cat="Plan" color="var(--color-race)" title="Target times"
+            subtitle="Goal finish time for each A-race. Target pace is derived from the time and distance, and drives the goal-pace segments in that plan's sessions.">
+            {targetTimePlans.length
+              ? <TargetTimesClient plans={targetTimePlans} />
+              : <p className="text-[14px] text-stone/70">No races yet.</p>}
+          </SettingsCard>
+
+          <SettingsCard cat="Plan" color="var(--color-race)" title="Strength priority"
+            subtitle="How a day with both a run and a lift is ordered — strength first leads with the lift (ultra/strength blocks); run first puts the run ahead." last>
+            {planPrefs.length
+              ? <PlanPrefsClient plans={planPrefs} />
+              : <p className="text-[14px] text-stone/70">No plans yet.</p>}
+          </SettingsCard>
+        </>
+      ),
+    },
+    {
+      id: 'zones', label: 'Zones & thresholds', color: 'var(--color-run)', content: (
+        <>
+          <SettingsCard cat="Running" color="var(--color-run)" title="Pace zones"
+            subtitle="Planned runs are built from zones — the paces across your plan derive from these windows, so editing a zone updates every session.">
+            <ZonesClient initialThreshold={threshold} initialZones={zones}
+              thresholdCheck={{ latest: thrLatest, pending: thrPending, history: thrHistory, revertable: thrRevertable }} />
+          </SettingsCard>
+
+          <SettingsCard cat="Running" color="var(--color-run)" title="Heart-rate zones"
+            subtitle="Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.">
+            <HrZonesClient
+              initialThreshold={hrThreshold}
+              initialMax={hrMax}
+              initialResting={hrResting}
+              initialZones={hrZoneInputs}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Cycling" color="var(--color-ride)" title="Power zones"
+            subtitle="Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from these zones, so editing one updates every ride's targets.">
+            <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
+            <PowerSuggestion latest={pwrLatest} pending={pwrPending} history={pwrHistory} revertable={pwrRevertable} />
+          </SettingsCard>
+
+          <SettingsCard cat="Cycling" color="var(--color-ride)" title="Bike heart-rate zones"
+            subtitle="Cycling heart rate runs lower than running, so it has its own threshold, max and resting values plus zone ranges in bpm.">
+            <HrZonesClient
+              initialThreshold={bikeHrThreshold}
+              initialMax={bikeHrMax}
+              initialResting={bikeHrResting}
+              initialZones={bikeHrZoneInputs}
+              save={saveBikeHrZones}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Swimming" color="var(--color-swim)" title="Swim pace zones"
+            subtitle="Your Critical Swim Speed (CSS) threshold and pace zones in min:sec per 100 m, plus your default pool size. Swims are built from these zones and pushed to the watch with the pool length." last>
+            <SwimZonesClient initialCss={swimCss} initialPool={swimPool} initialZones={swimZoneInputs} />
+          </SettingsCard>
+        </>
+      ),
+    },
+    {
+      id: 'strength', label: 'Strength', color: 'var(--color-strength)', content: (
+        <SettingsCard cat="Strength" color="var(--color-strength)" title="Progression"
+          subtitle="How the strength builder adapts as you get stronger. Hybrid grows upper-body work for tone while holding leg loads for injury-proofing; progressive climbs everything; maintenance holds throughout." last>
+          <StrengthProgressionClient initialMode={progressionMode} />
+        </SettingsCard>
+      ),
+    },
+    {
+      id: 'training', label: 'Training', color: 'var(--color-hard)', content: (
+        <>
+          <SettingsCard cat="Training" color="var(--color-hard)" title="Training location"
+            subtitle="Where you train, so the dashboard can heat-adjust today's run pace from the local forecast.">
+            <TrainingLocationClient
+              initialHomeLabel={(weatherConfig?.home_label as string | null) ?? null}
+              initialDefaultHour={weatherConfig?.default_hour ?? 7}
+              initialOverrideLabel={(weatherConfig?.override_label as string | null) ?? null}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Training" color="var(--color-hard)" title="Hydration"
+            subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans." last>
+            <HydrationConfigClient initialSweatSodium={sweatSodium} initialGutCap={gutCapMl} />
+          </SettingsCard>
+        </>
+      ),
+    },
+    {
+      id: 'connections', label: 'Connections', color: 'var(--color-yoga)', content: (
+        <>
+          <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null}>
+            <SettingsClient
+              connected={!!strava?.athlete_name}
+              athleteName={strava?.athlete_name ?? null}
+              lastSyncedAt={strava?.last_synced_at ?? null}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Connections" color="var(--color-yoga)" title="intervals.icu & Telegram"
+            subtitle="Your intervals.icu athlete id + API key (wellness/fitness sync and optional Garmin workout push) and the Telegram chat that receives your coach messages." last>
+            <IntegrationsClient
+              initialIntervalsAthleteId={integrations?.intervals_athlete_id ?? ''}
+              initialTelegramChatId={integrations?.telegram_chat_id ?? ''}
+              initialWorkoutSync={integrations?.intervals_workout_sync ?? false}
+              hasApiKey={!!integrations?.intervals_api_key}
+            />
+          </SettingsCard>
+        </>
+      ),
+    },
+    {
+      id: 'account', label: 'Account', color: 'var(--color-stone)', content: (
+        <>
+          {viewer?.role === 'owner' && (
+            <SettingsCard cat="Account" color="var(--color-stone)" title="Guest access"
+              subtitle="Give someone temporary read-only access to view your data. They can see everything except Settings and Admin, and can’t change anything. Share the password or the link; rotate or turn it off here to revoke everyone instantly.">
+              <GuestAccessClient
+                initialEnabled={guestAccess.enabled}
+                initialHasPassword={guestAccess.hasPassword}
+                initialLinkToken={guestAccess.linkToken}
+                initialSessionHours={guestAccess.sessionHours}
+              />
+            </SettingsCard>
+          )}
+
+          {viewAsUsers.length > 0 && (
+            <SettingsCard cat="Account" color="var(--color-stone)" title="View as"
+              subtitle="See the app as another athlete sees it — their dashboard, plan and coach messages — without their login. Read-only: you can look but not change their data. A banner and exit stay on screen while you're viewing.">
+              <ViewAsCard users={viewAsUsers} activeId={viewingAsId} />
+            </SettingsCard>
+          )}
+
+          <SettingsCard cat="Account" color="var(--color-stone)" title="Claude (MCP)"
+            subtitle="Connect Claude to your paceline data with a read-only MCP connector — query your plan, sessions, zones, races and recent workouts. Each token is yours alone.">
+            <McpClient
+              initialExists={mcpToken.exists}
+              initialCanWrite={mcpToken.canWrite}
+              createdAt={mcpToken.createdAt}
+              lastUsedAt={mcpToken.lastUsedAt}
+            />
+          </SettingsCard>
+
+          <SettingsCard cat="Account" color="var(--color-stone)" title="Session"
+            subtitle="Sign out of this device." last>
+            <SignOutClient />
+          </SettingsCard>
+        </>
+      ),
+    },
+  ];
+
   return (
     <>
       <div className="px-4 md:px-[26px] py-[22px] max-w-[760px]">
         <h1 className="font-display font-bold text-[26px] mb-5">Settings</h1>
-
-        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Autonomy"
-          subtitle="How much latitude the coach has when it adapts your plan, and the guardrails it must stay within. Changes are picked up on the next coaching review.">
-          <CoachingClient
-            initialAutonomy={coachAutonomy}
-            initialMaxRamp={coachMaxRamp}
-            initialMinRest={coachMinRest}
-            initialProtectA={coachProtectA}
-            initialNotes={coachNotes}
-            initialMorningBriefing={morningBriefing}
-            initialMorningFallback={morningFallback}
-            initialMorningSkipRest={morningSkipRest}
-            initialCoachUpdates={coachUpdates}
-            coachLocked={coachLocked}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Constraints"
-          subtitle="Hard limits the coach must respect — recurring days off, travel blackouts, or a free-text rule it should always work around.">
-          <ConstraintsClient initialConstraints={constraintInputs} />
-        </SettingsCard>
-
-        <SettingsCard cat="Training" color="var(--color-hard)" title="Training location"
-          subtitle="Where you train, so the dashboard can heat-adjust today's run pace from the local forecast.">
-          <TrainingLocationClient
-            initialHomeLabel={(weatherConfig?.home_label as string | null) ?? null}
-            initialDefaultHour={weatherConfig?.default_hour ?? 7}
-            initialOverrideLabel={(weatherConfig?.override_label as string | null) ?? null}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Training" color="var(--color-hard)" title="Hydration"
-          subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans.">
-          <HydrationConfigClient initialSweatSodium={sweatSodium} initialGutCap={gutCapMl} />
-        </SettingsCard>
-
-        {viewer?.role === 'owner' && (
-          <SettingsCard cat="Account" color="var(--color-stone)" title="Guest access"
-            subtitle="Give someone temporary read-only access to view your data. They can see everything except Settings and Admin, and can’t change anything. Share the password or the link; rotate or turn it off here to revoke everyone instantly.">
-            <GuestAccessClient
-              initialEnabled={guestAccess.enabled}
-              initialHasPassword={guestAccess.hasPassword}
-              initialLinkToken={guestAccess.linkToken}
-              initialSessionHours={guestAccess.sessionHours}
-            />
-          </SettingsCard>
-        )}
-
-        <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
-          subtitle="Every change the coach (or you) makes to the plan, newest first — what changed, when, and why. Revert to undo one.">
-          <ChangeLogClient entries={adjustments} />
-        </SettingsCard>
-
-        <SettingsCard cat="Strength" color="var(--color-strength)" title="Progression"
-          subtitle="How the strength builder adapts as you get stronger. Hybrid grows upper-body work for tone while holding leg loads for injury-proofing; progressive climbs everything; maintenance holds throughout.">
-          <StrengthProgressionClient initialMode={progressionMode} />
-        </SettingsCard>
-
-        <SettingsCard cat="Plan" color="var(--color-race)" title="Target times"
-          subtitle="Goal finish time for each A-race. Target pace is derived from the time and distance, and drives the goal-pace segments in that plan's sessions.">
-          {targetTimePlans.length
-            ? <TargetTimesClient plans={targetTimePlans} />
-            : <p className="text-[14px] text-stone/70">No races yet.</p>}
-        </SettingsCard>
-
-        <SettingsCard cat="Plan" color="var(--color-race)" title="Strength priority"
-          subtitle="How a day with both a run and a lift is ordered — strength first leads with the lift (ultra/strength blocks); run first puts the run ahead.">
-          {planPrefs.length
-            ? <PlanPrefsClient plans={planPrefs} />
-            : <p className="text-[14px] text-stone/70">No plans yet.</p>}
-        </SettingsCard>
-
-        <SettingsCard cat="Running" color="var(--color-run)" title="Pace zones"
-          subtitle="Planned runs are built from zones — the paces across your plan derive from these windows, so editing a zone updates every session.">
-          <ZonesClient initialThreshold={threshold} initialZones={zones}
-            thresholdCheck={{ latest: thrLatest, pending: thrPending, history: thrHistory, revertable: thrRevertable }} />
-        </SettingsCard>
-
-        <SettingsCard cat="Running" color="var(--color-run)" title="Heart-rate zones"
-          subtitle="Your running heart-rate threshold, max and resting values, plus zone ranges in bpm.">
-          <HrZonesClient
-            initialThreshold={hrThreshold}
-            initialMax={hrMax}
-            initialResting={hrResting}
-            initialZones={hrZoneInputs}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Cycling" color="var(--color-ride)" title="Power zones"
-          subtitle="Your cycling threshold power (FTP) and zone ranges in watts. Rides are built from these zones, so editing one updates every ride's targets.">
-          <PowerZonesClient initialThreshold={powerThreshold} initialZones={powerZoneInputs} />
-          <PowerSuggestion latest={pwrLatest} pending={pwrPending} history={pwrHistory} revertable={pwrRevertable} />
-        </SettingsCard>
-
-        <SettingsCard cat="Cycling" color="var(--color-ride)" title="Bike heart-rate zones"
-          subtitle="Cycling heart rate runs lower than running, so it has its own threshold, max and resting values plus zone ranges in bpm.">
-          <HrZonesClient
-            initialThreshold={bikeHrThreshold}
-            initialMax={bikeHrMax}
-            initialResting={bikeHrResting}
-            initialZones={bikeHrZoneInputs}
-            save={saveBikeHrZones}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Swimming" color="var(--color-swim)" title="Swim pace zones"
-          subtitle="Your Critical Swim Speed (CSS) threshold and pace zones in min:sec per 100 m, plus your default pool size. Swims are built from these zones and pushed to the watch with the pool length.">
-          <SwimZonesClient initialCss={swimCss} initialPool={swimPool} initialZones={swimZoneInputs} />
-        </SettingsCard>
-
-        <SettingsCard cat="Connections" color="var(--color-yoga)" title="Strava" subtitle={null}>
-          <SettingsClient
-            connected={!!strava?.athlete_name}
-            athleteName={strava?.athlete_name ?? null}
-            lastSyncedAt={strava?.last_synced_at ?? null}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Connections" color="var(--color-yoga)" title="intervals.icu & Telegram"
-          subtitle="Your intervals.icu athlete id + API key (wellness/fitness sync and optional Garmin workout push) and the Telegram chat that receives your coach messages.">
-          <IntegrationsClient
-            initialIntervalsAthleteId={integrations?.intervals_athlete_id ?? ''}
-            initialTelegramChatId={integrations?.telegram_chat_id ?? ''}
-            initialWorkoutSync={integrations?.intervals_workout_sync ?? false}
-            hasApiKey={!!integrations?.intervals_api_key}
-          />
-        </SettingsCard>
-
-        {viewAsUsers.length > 0 && (
-          <SettingsCard cat="Account" color="var(--color-stone)" title="View as"
-            subtitle="See the app as another athlete sees it — their dashboard, plan and coach messages — without their login. Read-only: you can look but not change their data. A banner and exit stay on screen while you're viewing.">
-            <ViewAsCard users={viewAsUsers} activeId={viewingAsId} />
-          </SettingsCard>
-        )}
-
-        <SettingsCard cat="Account" color="var(--color-stone)" title="Claude (MCP)"
-          subtitle="Connect Claude to your paceline data with a read-only MCP connector — query your plan, sessions, zones, races and recent workouts. Each token is yours alone.">
-          <McpClient
-            initialExists={mcpToken.exists}
-            initialCanWrite={mcpToken.canWrite}
-            createdAt={mcpToken.createdAt}
-            lastUsedAt={mcpToken.lastUsedAt}
-          />
-        </SettingsCard>
-
-        <SettingsCard cat="Account" color="var(--color-stone)" title="Session"
-          subtitle="Sign out of this device." last>
-          <SignOutClient />
-        </SettingsCard>
+        <SettingsTabs sections={sections} initialTab={initialTab} />
       </div>
     </>
   );
