@@ -3,6 +3,9 @@
 
 import { cache } from 'react';
 import { getViewedUser } from '@/lib/impersonation';
+import { getCurrentUser } from '@/lib/auth';
+import { getPendingThresholdSuggestion, type ThresholdCheck } from '@/data/threshold-suggestion';
+import { getPendingPowerSuggestion, type PowerCheck } from '@/data/power-suggestion';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks, getUpcomingPlan,
@@ -143,6 +146,14 @@ export interface DashboardData {
 
   coachMessages: { morning: CoachMessage | null; evening: CoachMessage | null };  // latest of each kind
   dailyNote: string;                   // today's athlete note (for tonight's review)
+
+  // Pending update-prompts (threshold pace / bike FTP), surfaced as the dashboard's
+  // "Action needed" card. Null unless there's a pending suggestion AND the current
+  // viewer can act on it (owner, not a read-only guest/impersonation) — the Apply/
+  // Dismiss actions are owner-only, so hiding the card for non-writers avoids a
+  // button that would just error.
+  pendingThreshold: ThresholdCheck | null;
+  pendingPower: PowerCheck | null;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -219,6 +230,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     sportLoad,
     fuelMap,
     fuelProducts,
+    writerUser,
+    pendingThresholdRaw,
+    pendingPowerRaw,
   ] = await Promise.all([
     getViewedUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -238,7 +252,14 @@ export async function loadDashboardData(): Promise<DashboardData> {
     listSportLoadBetween(weekAgoStr, todayStr),
     getFuelPlanForGoalBlock(todayStr),
     listFuelProducts(),
+    getCurrentUser(),   // the write gate — null for a read-only guest / while impersonating
+    getPendingThresholdSuggestion(),
+    getPendingPowerSuggestion(),
   ]);
+  // Only surface the update-prompts to a viewer who can actually Apply/Dismiss them.
+  const canManageSuggestions = !!writerUser;
+  const pendingThreshold = canManageSuggestions ? pendingThresholdRaw : null;
+  const pendingPower = canManageSuggestions ? pendingPowerRaw : null;
   // Attach gut-training fuel guidance to any goal-block session in the window.
   for (const s of (windowSessions ?? []) as PlanSession[]) {
     const t = fuelMap.get(s.id);
@@ -581,6 +602,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     fuelProducts,
     coachMessages,
     dailyNote,
+    pendingThreshold, pendingPower,
   };
 }
 

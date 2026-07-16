@@ -31,7 +31,7 @@ export default function PowerSuggestion({ latest, pending, history, revertable }
         <p className="text-[12.5px] text-fern">
           {done === 'applied' ? 'Applied — FTP updated, power zones scaled, TSS recomputed.'
             : done === 'reverted' ? `Reverted to ${revertable?.beforeW} W — FTP + zones restored.`
-            : 'Dismissed — won’t re-suggest until the evidence strengthens.'}
+            : 'Dismissed — won’t re-suggest until the number changes.'}
         </p>
       ) : (
         <>

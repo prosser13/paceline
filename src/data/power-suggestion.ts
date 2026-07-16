@@ -25,7 +25,7 @@ const LOWER_WINDOW_DAYS = 35;     // …all within this window (stale history ca
 // ── types ─────────────────────────────────────────────────────
 export type PowerOutcome =
   | 'suggested' | 'within_noise' | 'cooldown' | 'no_fresh_evidence'
-  | 'taper_freeze' | 'lower_pending_confirmation' | 'applied' | 'dismissed';
+  | 'taper_freeze' | 'lower_pending_confirmation' | 'applied' | 'dismissed' | 'held';
 
 export interface PowerEvidence { label: string; eftp: number; date: string; }
 
@@ -129,6 +129,22 @@ async function priorWeeklyChecks(weekStart: string, limit = LOWER_CONFIRM_CHECKS
   return ((data ?? []) as { gap_w: number | string | null; week_start: string; current_w: number | string }[]).map(r => ({
     gap_w: r.gap_w != null ? Number(r.gap_w) : null, week_start: r.week_start, current_w: Number(r.current_w),
   }));
+}
+
+// The most recently DISMISSED suggestion (still carries its suggested_/current_
+// values). Powers "hold until the number changes": a dismiss declines that exact
+// suggestion, and the weekly check stays quiet while the computed suggestion — and
+// the setting it was measured against — remain unchanged.
+async function lastDismissedPower(): Promise<{ suggestedW: number | null; currentW: number } | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('power_checks')
+    .select('suggested_w, current_w').eq('user_id', userId).eq('status', 'dismissed')
+    .order('checked_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data) return null;
+  return {
+    suggestedW: data.suggested_w != null ? Number(data.suggested_w) : null,
+    currentW: Number(data.current_w),
+  };
 }
 
 // Last FTP change (for cooldown) — an applied check, or a manual edit detected as a
@@ -238,6 +254,23 @@ export async function runPowerCheck(asOf?: string): Promise<void> {
     const stepW = Math.min(absGapW, STEP_CAP_W);
     const suggestedW = currentW + Math.sign(gapW) * stepW;
     const capped = absGapW > STEP_CAP_W;
+
+    // Held — the athlete already dismissed this exact suggestion. Stay quiet until the
+    // computed number changes (or they change the setting it was measured against),
+    // re-checked every week. Record a truthful, non-pending row so idempotency holds
+    // and Settings shows why it's silent, rather than re-opening the same prompt.
+    const dismissed = await lastDismissedPower();
+    if (dismissed?.suggestedW != null
+        && Math.abs(suggestedW - dismissed.suggestedW) <= 1
+        && Math.abs(currentW - dismissed.currentW) <= 0.5) {
+      await writeCheck({
+        weekStart, currentW, estimateW, gapW, outcome: 'held', status: 'none', suggestedW,
+        commentary: `${stamp} ${estText} — still points to ${suggestedW} W (${absGapW} W ${dirWord}), but you dismissed this. Holding until the number changes.`,
+        evidence,
+      });
+      return;
+    }
+
     await writeCheck({
       weekStart, currentW, estimateW, gapW, outcome: 'suggested', status: 'pending', suggestedW,
       commentary: `${stamp} ${estText} — ${absGapW} W ${dirWord} your setting.${lowerNote} → Suggested ${currentW} → ${suggestedW} W` +
