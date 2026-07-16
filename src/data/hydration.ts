@@ -13,6 +13,7 @@ import { sweatLossL, sweatRateLh, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
 
 export const DEFAULT_SWEAT_SODIUM_MG_L = 553;
 export const DEFAULT_GUT_CAP_ML = DEFAULT_FLUID_OPTS.gutCapMl;   // 800 ml/h
+export const DEFAULT_ACTIVITY_FACTOR = 1.3;                      // light daily-living activity
 
 export interface HydrationInput {
   weightBeforeKg: number | null;
@@ -75,6 +76,76 @@ export async function setGutCap(ml: number): Promise<void> {
   await supabaseAdmin
     .from('hydration_config')
     .upsert({ user_id: userId, gut_cap_ml: ml, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+}
+
+// The athlete's base metabolic rate (kcal/day), manually entered (e.g. the figure
+// Garmin/intervals.icu reports). Null when unset — the calorie tile then prompts
+// for it rather than guessing.
+export async function getBmrKcal(): Promise<number | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('hydration_config')
+    .select('bmr_kcal')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const v = data?.bmr_kcal;
+  return v != null ? Number(v) : null;
+}
+
+export async function setBmrKcal(kcal: number): Promise<void> {
+  if (!(kcal > 0)) return;
+  const userId = await currentUserId();
+  await supabaseAdmin
+    .from('hydration_config')
+    .upsert({ user_id: userId, bmr_kcal: Math.round(kcal), updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+}
+
+// The daily-living activity factor applied to BMR for the non-exercise part of the
+// day, defaulting to 1.3 (lightly active) when unset. Planned exercise is added on
+// top separately, so this stays a light, sedentary-to-light multiplier.
+export async function getActivityFactor(): Promise<number> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('hydration_config')
+    .select('activity_factor')
+    .eq('user_id', userId)
+    .maybeSingle();
+  const v = data?.activity_factor;
+  return v != null ? Number(v) : DEFAULT_ACTIVITY_FACTOR;
+}
+
+export async function setActivityFactor(factor: number): Promise<void> {
+  if (!(factor > 0)) return;
+  const userId = await currentUserId();
+  await supabaseAdmin
+    .from('hydration_config')
+    .upsert({ user_id: userId, activity_factor: factor, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+}
+
+// The athlete's most recent known bodyweight (kg), for the calorie estimate.
+// Prefers the daily wellness weight (intervals.icu-synced); falls back to the most
+// recent per-run weigh-in (weight_before_kg) when no daily weight exists — many
+// athletes weigh in before runs (the hydration feature) but don't sync a daily
+// weight. Null when neither is available.
+export async function getLatestBodyweightKg(): Promise<number | null> {
+  const userId = await currentUserId();
+  const { data: w } = await supabaseAdmin
+    .from('wellness_days')
+    .select('weight')
+    .eq('user_id', userId)
+    .not('weight', 'is', null)
+    .order('date', { ascending: false })
+    .limit(1).maybeSingle();
+  if (w?.weight != null) return Number(w.weight);
+
+  const { data: run } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('weight_before_kg')
+    .eq('user_id', userId)
+    .not('weight_before_kg', 'is', null)
+    .order('completed_date', { ascending: false })
+    .limit(1).maybeSingle();
+  return run?.weight_before_kg != null ? Number(run.weight_before_kg) : null;
 }
 
 // ── per-run write ─────────────────────────────────────────────

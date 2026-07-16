@@ -10,7 +10,7 @@ import {
 } from '@/data/zones';
 import { listPlanConstraints, getCoachingPrefs, coachUpdatesLockedForCurrentUser, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
-import { getSweatSodium, getGutCapMl } from '@/data/hydration';
+import { getSweatSodium, getGutCapMl, getBmrKcal, getActivityFactor } from '@/data/hydration';
 import { getGuestAccessStatus } from '@/data/guest-access';
 import GuestAccessClient from './GuestAccessClient';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
@@ -31,6 +31,7 @@ import ConstraintsClient from './ConstraintsClient';
 import CoachingClient from './CoachingClient';
 import TrainingLocationClient from './TrainingLocationClient';
 import HydrationConfigClient from './HydrationConfigClient';
+import EnergyConfigClient from './EnergyConfigClient';
 import IntegrationsClient from './IntegrationsClient';
 import ChangeLogClient from './ChangeLogClient';
 import SignOutClient from './SignOutClient';
@@ -61,6 +62,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
     pwrLatest, pwrPending, pwrHistory, pwrRevertable,
+    bmrKcal, activityFactor,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -92,6 +94,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getPendingPowerSuggestion(),
     listPowerChecks(10),
     getRevertablePowerChange(),
+    getBmrKcal(),
+    getActivityFactor(),
   ]);
 
   // "View as" is owner-only. getViewer reflects the REAL session identity (not the
@@ -287,8 +291,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </SettingsCard>
 
           <SettingsCard cat="Training" color="var(--color-hard)" title="Hydration"
-            subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans." last>
+            subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans.">
             <HydrationConfigClient initialSweatSodium={sweatSodium} initialGutCap={gutCapMl} />
+          </SettingsCard>
+
+          <SettingsCard cat="Training" color="var(--color-hard)" title="Calorie target"
+            subtitle="Your resting base rate + a daily-living activity factor — the dashboard's Today tile adds your planned training on top to show a daily calorie target." last>
+            <EnergyConfigClient initialBmr={bmrKcal} initialActivity={activityFactor} />
           </SettingsCard>
         </>
       ),

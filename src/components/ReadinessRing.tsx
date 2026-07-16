@@ -1,7 +1,7 @@
 import { READY } from '@/lib/colors';
 
 // Shared readiness ring (the dashboard's dark-tile gauge). 0–100 score → arc.
-// Used by the dashboard ReadinessTile and the race-detail predicted-readiness card.
+// Used by the dashboard Today tile and the race-detail predicted-readiness card.
 export function ReadinessRing({ score, size = 52 }: { score: number | null; size?: number }) {
   const C = 138; // 2π·22
   const off = Math.round(C * (1 - (score != null ? Math.max(0, Math.min(100, score)) / 100 : 0)));

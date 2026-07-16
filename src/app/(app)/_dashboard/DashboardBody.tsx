@@ -9,7 +9,7 @@ import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
 import PhaseCard from './PhaseCard';
 import NextRaceCard from './NextRaceCard';
-import ReadinessTile from './ReadinessTile';
+import TodayTile from './TodayTile';
 import CoachCard from './CoachCard';
 import DailyNoteCard from './DailyNoteCard';
 import WellnessSection, { WellnessSkeleton } from './wellness/WellnessSection';
@@ -84,8 +84,8 @@ export default async function DashboardBody() {
           ? <NextRaceCard {...d.nextRace} />
           : <NextRaceCard name="No race scheduled" daysTo={null} dateStr={null} priority={null} />}
 
-        <Suspense fallback={<CardSkeleton header="Readiness" bodyHeight={96} />}>
-          <ReadinessTile />
+        <Suspense fallback={<CardSkeleton header="Today" bodyHeight={148} />}>
+          <TodayTile calorieTarget={d.calorieTarget} canEdit={d.canEdit} />
         </Suspense>
       </div>
 
