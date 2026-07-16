@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { logRunNutrition, createFuelProduct } from '@/app/(app)/benchmarks/actions';
 import { sweatLossL, sweatRateLh } from '@/lib/hydration';
+import NutritionChips, { hasNutrition, type NutritionInput } from './NutritionChips';
 import type { FuelProduct, FuelItem } from '@/data/fuel';
 
 interface Row { key: string; name: string; carbs_g: number; qty: number; }
@@ -43,6 +44,10 @@ export default function FuelLogCell({
   initialRunTempC?: number | null;
 }) {
   const [carbsPerH, setCarbsPerH] = useState<number | null>(initialCarbsPerH);
+  // Saved weigh-in snapshot (drives the trigger chips); updated on save, not while editing.
+  const [savedBefore, setSavedBefore] = useState<number | null>(initialWeightBeforeKg);
+  const [savedAfter, setSavedAfter] = useState<number | null>(initialWeightAfterKg);
+  const [savedFluid, setSavedFluid] = useState<number | null>(initialFluidMl);
   const [open, setOpen] = useState(false);
 
   // Seed rows from the catalog, pre-filling quantities from any existing log.
@@ -91,16 +96,23 @@ export default function FuelLogCell({
       runTempC: num(temp),   // blank → server auto-fetches from the weather archive
     }, movingSecs);
     setCarbsPerH(res.carbsPerH);
+    setSavedBefore(num(wBefore)); setSavedAfter(num(wAfter)); setSavedFluid(num(fluid));
     setSaving(false);
     setOpen(false);
   }
 
   return (
     <>
-      <button onClick={() => setOpen(true)} className="font-mono text-[12.5px] font-semibold hover:underline"
-        style={{ color: carbsPerH != null ? 'var(--color-ink)' : 'var(--color-stone)' }}>
-        {carbsPerH != null ? `${carbsPerH} g/h` : 'log'}
-      </button>
+      {(() => {
+        const triggerNut: NutritionInput = { carbsPerH, weightBeforeKg: savedBefore, weightAfterKg: savedAfter, fluidMl: savedFluid, movingSecs };
+        const logged = hasNutrition(triggerNut);
+        return (
+          <button onClick={() => setOpen(true)}
+            className={logged ? 'inline-flex items-center gap-[6px] flex-wrap' : 'font-mono text-[12.5px] font-semibold text-stone underline hover:text-ink'}>
+            {logged ? <NutritionChips {...triggerNut} /> : 'log'}
+          </button>
+        );
+      })()}
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(23,21,15,.45)' }} onClick={() => setOpen(false)}>

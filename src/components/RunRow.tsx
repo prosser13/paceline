@@ -28,6 +28,7 @@ import LogNutritionRow from './LogNutritionRow';
 import { fuelTargetLabel, type FuelTarget } from '@/lib/fuel-progression';
 import type { FuelProduct } from '@/data/fuel';
 import { RunGlyph } from './glyphs';
+import NutritionChips, { hasNutrition, type NutritionInput } from './NutritionChips';
 
 export interface RunRowSession {
   id?: string;
@@ -248,24 +249,37 @@ export default function RunRow({
                   </span>
                 </div>
               )}
-              {(exec || (done && completed?.perceivedEffort != null)) && (
-                <div className="mt-[6px] flex items-center gap-[6px] flex-wrap">
-                  {exec && (
-                    <span
-                      className="inline-flex items-center gap-[5px] font-mono text-[11px] font-bold rounded-[5px] border px-[6px] py-[1px]"
-                      style={{ color: scoreColor(exec.score), borderColor: `color-mix(in srgb, ${scoreColor(exec.score)} 45%, transparent)` }}
-                      title={exec.note}
-                    >
-                      {exec.score}<span className="text-stone font-medium">execution</span>
-                    </span>
-                  )}
-                  {done && completed?.perceivedEffort != null && (
-                    <span className="inline-flex items-center gap-[4px] font-mono text-[11px] font-bold text-stone border border-fog rounded-[5px] px-[6px] py-[1px]" title="Effort you logged on your watch">
-                      RPE {completed.perceivedEffort}<span className="text-stone/60 font-medium">/10</span>
-                    </span>
-                  )}
-                </div>
-              )}
+              {(() => {
+                const nut: NutritionInput = {
+                  carbsPerH: completed?.fuelCarbsPerH ?? null,
+                  weightBeforeKg: completed?.weightBeforeKg ?? null,
+                  weightAfterKg: completed?.weightAfterKg ?? null,
+                  fluidMl: completed?.fluidMl ?? null,
+                  movingSecs: (completed?.durationMins ?? null) != null ? Math.round((completed!.durationMins as number) * 60) : null,
+                };
+                const cNut = done && hasNutrition(nut);
+                const cRpe = done && completed?.perceivedEffort != null;
+                if (!exec && !cRpe && !cNut) return null;
+                return (
+                  <div className="mt-[6px] flex items-center gap-[6px] flex-wrap">
+                    {exec && (
+                      <span
+                        className="inline-flex items-center gap-[5px] font-mono text-[11px] font-bold rounded-[5px] border px-[6px] py-[1px]"
+                        style={{ color: scoreColor(exec.score), borderColor: `color-mix(in srgb, ${scoreColor(exec.score)} 45%, transparent)` }}
+                        title={exec.note}
+                      >
+                        {exec.score}<span className="text-stone font-medium">execution</span>
+                      </span>
+                    )}
+                    {cRpe && (
+                      <span className="inline-flex items-center gap-[4px] font-mono text-[11px] font-bold text-stone border border-fog rounded-[5px] px-[6px] py-[1px]" title="Effort you logged on your watch">
+                        RPE {completed!.perceivedEffort}<span className="text-stone/60 font-medium">/10</span>
+                      </span>
+                    )}
+                    {cNut && <NutritionChips {...nut} />}
+                  </div>
+                );
+              })()}
               {session.race_slug && (
                 <Link href={`/races/${session.race_slug}`} onClick={e => e.stopPropagation()}
                   className="inline-block mt-[5px] font-mono text-[11px] tracking-[.08em] uppercase text-marine hover:text-marine-dark">

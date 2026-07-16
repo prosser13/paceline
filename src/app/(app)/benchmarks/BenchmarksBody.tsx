@@ -359,48 +359,51 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
       {/* Hydration — sweat-rate model + estimated fluid/sodium loss by condition */}
       <SecLabel>Hydration &amp; sweat rate</SecLabel>
       <Card>
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap">
           <div>
-            <Eyebrow>Sweat sodium</Eyebrow>
-            <div className="font-display font-bold text-[26px] leading-none mt-[4px]">
-              {Math.round(d.hydration.sweatSodiumMgL)}<span className="text-[12px] text-stone"> mg/L</span>
+            <Eyebrow>Sweat-rate model</Eyebrow>
+            <div className="font-display font-bold text-[20px] leading-tight mt-[3px]"
+              style={{ color: d.hydration.hasModel ? 'var(--color-ink)' : 'var(--color-stone)' }}>
+              {d.hydration.confidence.label}
             </div>
           </div>
-          <span className="text-[12px] font-bold" style={{ color: d.hydration.hasModel ? 'var(--color-ready)' : 'var(--color-stone)' }}>
-            {d.hydration.confidence.label}
-          </span>
+          <span className="text-[11.5px] text-stone">Sweat sodium <b className="text-ink">{Math.round(d.hydration.sweatSodiumMgL)}</b> mg/L</span>
         </div>
-        <p className="text-[11.5px] text-stone mt-[6px]">{d.hydration.confidence.detail}</p>
+        <p className="text-[11.5px] text-stone mt-[6px]">{d.hydration.confidence.detail} Fluid loss is measured from your before/after weigh-ins.</p>
 
+        {/* Log or edit a recent run — shows the fluid (weight) loss, the thing we're learning. */}
         {(() => {
-          const unlogged = d.hydration.recentRuns.filter(r => !r.weighed).slice(0, 6);
-          if (!unlogged.length) return null;
+          const recent = d.hydration.recentRuns.slice(0, 8);
+          if (!recent.length) return null;
           return (
             <div className="mt-[12px] border border-fog rounded-[10px] bg-bone/40 px-[12px] py-[10px]">
               <div className="text-[10.5px] uppercase font-bold text-stone tracking-[.05em] mb-[4px]">Log a recent run</div>
               <div className="flex flex-col">
-                {unlogged.map(r => (
+                {recent.map(r => (
                   <div key={r.id} className="flex items-center justify-between gap-3 border-b border-fog/50 last:border-0 py-[7px]">
-                    <div className="text-[12.5px]">
+                    <div className="text-[12.5px] min-w-0">
                       <span className="font-semibold">{shortDate(r.date)}</span>
                       <span className="text-stone"> · {r.name ?? 'Run'} · {r.km ? `${Math.round(r.km)} km` : '—'}</span>
                     </div>
-                    <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts}
-                      initialWeightBeforeKg={r.weightBeforeKg} initialWeightAfterKg={r.weightAfterKg} initialFluidMl={r.fluidMl} initialRunTempC={r.runTempC} />
+                    <div className="shrink-0">
+                      <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts}
+                        initialWeightBeforeKg={r.weightBeforeKg} initialWeightAfterKg={r.weightAfterKg} initialFluidMl={r.fluidMl} initialRunTempC={r.runTempC} />
+                    </div>
                   </div>
                 ))}
               </div>
-              <p className="text-[10.5px] text-stone/70 mt-[6px]">Enter weight before/after (+ any fluid) — sweat rate and temperature fill in automatically.</p>
+              <p className="text-[10.5px] text-stone/70 mt-[6px]">Sweat (−) is fluid lost per hour; the bottle is fluid drunk per hour. Enter weight before/after and the rate + temperature fill in automatically.</p>
             </div>
           );
         })()}
 
+        {/* Estimated sweat rate by temperature, with a confidence range. */}
         {d.hydration.buckets.length > 0 && (
           <div className="overflow-x-auto mt-[14px]">
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {[['Conditions', 'l'], ['Sweat rate', 'r'], ['Fluid loss', 'r'], ['Sodium loss', 'r']].map(([h, a]) => (
+                  {[['Conditions', 'l'], ['Est. sweat rate', 'r'], ['Confidence (95%)', 'r']].map(([h, a]) => (
                     <th key={h} className={`text-[10.5px] uppercase text-stone font-bold pb-[8px] border-b border-fog ${a === 'r' ? 'text-right' : 'text-left'}`} style={{ letterSpacing: '.05em' }}>{h}</th>
                   ))}
                 </tr>
@@ -411,14 +414,16 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                     <td className="py-[9px] border-b border-fog/60">
                       {b.tempC}°C{b.isRace && <span className="ml-[6px] text-[10.5px] font-bold" style={{ color: 'var(--color-oxblood)' }}>race day</span>}
                     </td>
-                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{b.sweatRateLh.toFixed(2)} L/h</td>
-                    <td className="py-[9px] border-b border-fog/60 text-right">{b.fluidLossMlPerH} ml/h</td>
-                    <td className="py-[9px] border-b border-fog/60 text-right">{b.sodiumMgPerH} mg/h</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold tabular-nums">{b.sweatRateLh.toFixed(2)} L/h</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right text-stone tabular-nums">
+                      {b.ci ? `${b.ci.lo.toFixed(2)}–${b.ci.hi.toFixed(2)}` : '—'}
+                      <span className="text-stone/60"> · {b.nNearby} near</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <p className="text-[11.5px] text-stone mt-[8px]">Estimated loss at marathon effort, from your weigh-ins. On race day aim to replace <b>60–80%</b> of fluid loss (capped at your <b>{d.hydration.gutCapMl} ml/h</b> gut tolerance) and match sodium to sweat.</p>
+            <p className="text-[11.5px] text-stone mt-[8px]">Estimated sweat rate at marathon effort, from your weigh-ins. The 95% range widens with fewer runs and further from the temperatures you’ve logged (“near” = runs within ±4 °C). Weigh runs across a range of conditions to tighten it.</p>
           </div>
         )}
 
@@ -455,7 +460,7 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
                       <td className="py-[9px] border-b border-fog/60 text-right">{r.weightAfterKg != null ? r.weightAfterKg.toFixed(1) : '—'}</td>
                       <td className="py-[9px] border-b border-fog/60 text-right">{r.fluidMl != null ? `${Math.round(r.fluidMl)} ml` : '—'}</td>
                       <td className="py-[9px] border-b border-fog/60 text-right">{loss != null ? `${loss.toFixed(2)} L` : '—'}</td>
-                      <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{r.sweatRateLh != null ? `${r.sweatRateLh.toFixed(2)}` : '—'}</td>
+                      <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{r.sweatRateLh != null ? `${r.sweatRateLh.toFixed(2)} L/h` : '—'}</td>
                     </tr>
                   );
                 })}

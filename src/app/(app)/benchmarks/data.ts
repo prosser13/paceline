@@ -240,7 +240,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
       gutCapMl,
       hasModel: sweatModel != null,
       confidence: modelConfidence(sweatModel),
-      buckets: sweatModel ? conditionBuckets(sweatModel, sweatSodiumMgL) : [],
+      buckets: sweatModel ? conditionBuckets(sweatModel) : [],
       sweatRateTrend,
       runs: [...hydrationRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
       recentRuns: recentNutritionRuns,

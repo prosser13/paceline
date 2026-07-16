@@ -152,14 +152,18 @@ export default function MobileMenu({
               Availability
             </Link>
 
-            {!isGuest && (
-              <div className="mt-auto">
+            <div className="mt-auto flex flex-col gap-1">
+              {!isGuest && (
                 <Link href="/settings" className={rowClass(pathname === '/settings')}>
                   <span className={dot(pathname === '/settings', 'bg-yoga')} />
                   Settings
                 </Link>
-              </div>
-            )}
+              )}
+              <Link href="/about" className={rowClass(pathname === '/about')}>
+                <span className={dot(pathname === '/about', 'bg-stone/50')} />
+                About
+              </Link>
+            </div>
           </div>
         </div>
       )}

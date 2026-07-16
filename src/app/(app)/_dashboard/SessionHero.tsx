@@ -13,6 +13,7 @@ import {
   INTENSITY, WorkoutDetail, CompareTable, syntheticStructure, sumSegmentSeconds, fmtHMMSS, wholeRunActuals, buildRunCompare, isMergedRun, collapseToWholeRun,
 } from '@/components/session-ui';
 import { RunGlyph } from '@/components/glyphs';
+import NutritionChips, { type NutritionInput } from '@/components/NutritionChips';
 import LongRunQuality from '@/components/LongRunQuality';
 import LogNutritionRow from '@/components/LogNutritionRow';
 import { fuelTargetLabel } from '@/lib/fuel-progression';
@@ -102,6 +103,16 @@ export default function SessionHero({
     isDone && completed?.perceivedEffort != null ? `RPE ${completed.perceivedEffort}/10` : null,
   ].filter(Boolean) as string[];
 
+  // Fuel + sweat + fluid-intake logged — surfaced as glyph chips so they read on the
+  // collapsed hero without opening the detail.
+  const heroNut: NutritionInput = {
+    carbsPerH: completed?.fuelCarbsPerH ?? null,
+    weightBeforeKg: completed?.weightBeforeKg ?? null,
+    weightAfterKg: completed?.weightAfterKg ?? null,
+    fluidMl: completed?.fluidMl ?? null,
+    movingSecs: completed?.mins != null ? Math.round(completed.mins * 60) : null,
+  };
+
   const stats = isDone
     ? [{ v: compare?.pace.actual ?? '—', l: 'pace' }, { v: tssActual != null ? `${tssActual}` : '—', l: 'TSS' }]
     : [{ v: displayDuration ?? '—', l: 'time' }, { v: displayTss != null ? `${displayTss}` : '—', l: 'TSS' }];
@@ -131,6 +142,7 @@ export default function SessionHero({
                 {chips.map(c => (
                   <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
                 ))}
+                {isDone && <NutritionChips {...heroNut} />}
               </div>
             )}
           </div>

@@ -11,6 +11,7 @@
 // target.
 
 import FuelLogCell from './FuelLogCell';
+import { sweatLossL, sweatRateLh } from '@/lib/hydration';
 import type { FuelProduct } from '@/data/fuel';
 
 function pct(v: number): string {
@@ -52,6 +53,10 @@ export default function LongRunQuality({
 }) {
   // Nothing to show without at least one metric.
   if (efficiencyFactor == null && decouplingPct == null && paceDecayPct == null) return null;
+
+  // Fluid loss (weigh-in) — shown separately from fuel so both read at a glance.
+  const fluidLoss = sweatLossL(log?.weightBeforeKg ?? null, log?.weightAfterKg ?? null, log?.fluidMl ?? null);
+  const fluidRate = sweatRateLh(fluidLoss, log?.movingSecs ?? null);
 
   const dk = paceDecayPct != null ? decayVerdict(paceDecayPct) : null;
   // A strong negative split inflates decoupling (it reads the intended surge, not
@@ -112,33 +117,46 @@ export default function LongRunQuality({
           </div>
         )}
       </div>
-      <div className="border-t border-fog px-[12px] py-[8px] flex items-center justify-between gap-2 flex-wrap">
-        <span className="text-[11px] text-stone">
-          Fuel practiced
-          {recommendedGph != null && fuelCarbsPerH != null && (
-            <span className="ml-[6px] font-bold" style={{ color: fuelCarbsPerH >= recommendedGph - 4 ? 'var(--color-ready)' : 'var(--color-strength)' }}>
-              · target was {recommendedGph}
-            </span>
-          )}
-          {recommendedGph != null && fuelCarbsPerH == null && (
-            <span className="ml-[6px] text-stone/70">· target {recommendedGph} g/h</span>
-          )}
-        </span>
-        {log ? (
-          <FuelLogCell
-            runId={log.workoutId}
-            movingSecs={log.movingSecs}
-            initialCarbsPerH={fuelCarbsPerH}
-            initialItems={log.fuelItems}
-            products={log.products}
-            initialWeightBeforeKg={log.weightBeforeKg ?? null}
-            initialWeightAfterKg={log.weightAfterKg ?? null}
-            initialFluidMl={log.fluidMl ?? null}
-            initialRunTempC={log.runTempC ?? null}
-          />
-        ) : fuelCarbsPerH != null
-          ? <span><span className="font-display font-bold text-[15px]">{Math.round(fuelCarbsPerH)}</span><span className="text-[12px] text-stone"> g/h</span></span>
-          : <span className="text-[11px] text-stone/60">not logged</span>}
+      <div className="border-t border-fog px-[12px] py-[8px]">
+        {/* Fuel (food) */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-[11px] text-stone">
+            Fuel practiced
+            {recommendedGph != null && fuelCarbsPerH != null && (
+              <span className="ml-[6px] font-bold" style={{ color: fuelCarbsPerH >= recommendedGph - 4 ? 'var(--color-ready)' : 'var(--color-strength)' }}>
+                · target was {recommendedGph}
+              </span>
+            )}
+            {recommendedGph != null && fuelCarbsPerH == null && (
+              <span className="ml-[6px] text-stone/70">· target {recommendedGph} g/h</span>
+            )}
+          </span>
+          {log ? (
+            <FuelLogCell
+              runId={log.workoutId}
+              movingSecs={log.movingSecs}
+              initialCarbsPerH={fuelCarbsPerH}
+              initialItems={log.fuelItems}
+              products={log.products}
+              initialWeightBeforeKg={log.weightBeforeKg ?? null}
+              initialWeightAfterKg={log.weightAfterKg ?? null}
+              initialFluidMl={log.fluidMl ?? null}
+              initialRunTempC={log.runTempC ?? null}
+            />
+          ) : fuelCarbsPerH != null
+            ? <span><span className="font-display font-bold text-[15px]">{Math.round(fuelCarbsPerH)}</span><span className="text-[12px] text-stone"> g/h</span></span>
+            : <span className="text-[11px] text-stone/60">not logged</span>}
+        </div>
+        {/* Fluid (weigh-in) */}
+        <div className="flex items-center justify-between gap-2 flex-wrap mt-[7px] pt-[7px] border-t border-fog/50">
+          <span className="text-[11px] text-stone">Fluid loss</span>
+          {fluidLoss != null
+            ? <span className="text-[12px] text-stone">
+                <span className="font-display font-bold text-[15px] text-ink">{fluidLoss.toFixed(2)}</span> L
+                {fluidRate != null && <> · {fluidRate.toFixed(2)} L/h</>}
+              </span>
+            : <span className="text-[11px] text-stone/60">{log ? 'weigh in to log' : 'not logged'}</span>}
+        </div>
       </div>
     </div>
   );

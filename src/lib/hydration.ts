@@ -35,6 +35,13 @@ export function sodiumLossMg(lossL: number, sweatSodiumMgL: number): number {
   return Math.round(lossL * sweatSodiumMgL);
 }
 
+// Fluid intake rate (L/h) — how fast fluid was drunk during the run. Null when no
+// fluid was logged or there's no moving time.
+export function fluidIntakeLh(fluidMl: number | null, movingSecs: number | null): number | null {
+  if (!fluidMl || fluidMl <= 0 || !movingSecs || movingSecs <= 0) return null;
+  return (fluidMl / 1000) / (movingSecs / 3600);
+}
+
 // ── intensity normalisation ───────────────────────────────────
 
 // How much harder (or easier) `paceMinKm` is than the reference effort, as a
@@ -61,6 +68,12 @@ export interface SweatModel {
   spread: number;            // °C range spanned by the data
   r2: number | null;         // fit quality (linear only)
   refPaceMinKm: number | null;
+  // For prediction intervals: residual standard error and the temperature spread
+  // stats, plus the temperatures of the points (to count runs near a condition).
+  s: number;                 // residual std of the adjusted rate (L/h); 0 when undeterminable
+  meanTemp: number;
+  sxx: number;               // Σ(temp − meanTemp)²
+  temps: number[];           // temperatures of the runs used
 }
 
 // Least-squares fit of y on x. Null if fewer than two points or x has no spread.
@@ -92,14 +105,51 @@ export function buildSweatModel(points: HydrationPoint[], refPaceMinKm: number |
   const temps = adj.map(p => p.x);
   const spread = Math.max(...temps) - Math.min(...temps);
   const mean = adj.reduce((s, p) => s + p.y, 0) / n;
+  const meanTemp = temps.reduce((s, t) => s + t, 0) / n;
+  const sxx = temps.reduce((s, t) => s + (t - meanTemp) ** 2, 0);
 
   if (n >= 3 && spread >= 6) {
     const fit = linreg(adj);
     if (fit && fit.b >= 0) {
-      return { kind: 'linear', a: fit.a, b: fit.b, n, spread, r2: fit.r2, refPaceMinKm };
+      // Residual standard error around the fitted line (df = n − 2).
+      const ssRes = adj.reduce((s, p) => s + (p.y - (fit.a + fit.b * p.x)) ** 2, 0);
+      const resStd = n > 2 ? Math.sqrt(ssRes / (n - 2)) : 0;
+      return { kind: 'linear', a: fit.a, b: fit.b, n, spread, r2: fit.r2, refPaceMinKm, s: resStd, meanTemp, sxx, temps };
     }
   }
-  return { kind: 'mean', a: mean, b: 0, n, spread, r2: null, refPaceMinKm };
+  // Mean model: spread of the adjusted rates (df = n − 1).
+  const sampleStd = n > 1 ? Math.sqrt(adj.reduce((s, p) => s + (p.y - mean) ** 2, 0) / (n - 1)) : 0;
+  return { kind: 'mean', a: mean, b: 0, n, spread, r2: null, refPaceMinKm, s: sampleStd, meanTemp, sxx, temps };
+}
+
+// Two-sided 95% t-multiplier by degrees of freedom (small-sample honest widths).
+function t95(df: number): number {
+  if (df < 1) return 0;
+  const table: Record<number, number> = { 1: 12.71, 2: 4.30, 3: 3.18, 4: 2.78, 5: 2.57, 6: 2.45, 7: 2.36, 8: 2.31, 9: 2.26, 10: 2.23, 12: 2.18, 15: 2.13, 20: 2.09, 30: 2.04 };
+  if (table[df]) return table[df];
+  const keys = Object.keys(table).map(Number).sort((a, b) => a - b);
+  for (const k of keys) if (df < k) return table[k];
+  return 1.96;
+}
+
+// A 95% prediction interval (L/h) for the sweat rate at `tempC`, at marathon effort —
+// widens with fewer runs and further from where you've logged data. Null when there
+// aren't enough points (or no residual spread) to estimate one.
+export function sweatRateCI(model: SweatModel, tempC: number): { lo: number; hi: number } | null {
+  const df = model.kind === 'linear' ? model.n - 2 : model.n - 1;
+  if (df < 1 || model.s <= 0) return null;
+  const rate = predictSweatRate(model, tempC);
+  const leverage = model.kind === 'linear' && model.sxx > 1e-9
+    ? 1 + 1 / model.n + (tempC - model.meanTemp) ** 2 / model.sxx
+    : 1 + 1 / model.n;
+  const half = Math.min(rate, t95(df) * model.s * Math.sqrt(leverage));   // cap at ±100% so it stays readable
+  return { lo: Math.max(0, round2(rate - half)), hi: round2(rate + half) };
+}
+
+// How many logged runs sit within ±`window` °C of a condition — the "how much data
+// near here" signal behind the confidence column.
+export function runsNearTemp(model: SweatModel, tempC: number, window = 4): number {
+  return model.temps.filter(t => Math.abs(t - tempC) <= window).length;
 }
 
 // Predicted sweat rate (L/h) at a temperature and effort. Base is the ref-effort
@@ -113,36 +163,32 @@ export function predictSweatRate(model: SweatModel, tempC: number, paceMinKm?: n
 
 export interface ConditionBucket {
   tempC: number;
-  sweatRateLh: number;   // at marathon effort
-  fluidLossMlPerH: number;
-  sodiumMgPerH: number;
-  isRace?: boolean;      // the live race-forecast bucket
+  sweatRateLh: number;                   // estimated sweat rate at marathon effort (L/h)
+  ci: { lo: number; hi: number } | null; // 95% prediction interval, or null if too little data
+  nNearby: number;                       // logged runs within ±4 °C of this temp
+  isRace?: boolean;                      // the live race-forecast bucket
 }
 
 export const DEFAULT_BUCKET_TEMPS = [10, 15, 20, 25, 30];
 
-// Estimated fluid + sodium loss per typical condition, at marathon effort. When a
-// race-forecast temp is given it's merged in (deduped, flagged) and sorted.
-export function conditionBuckets(
-  model: SweatModel,
-  sweatSodiumMgL: number,
-  raceTempC?: number | null,
-): ConditionBucket[] {
+// Estimated SWEAT RATE per typical condition (the key learned variable — fluid loss,
+// measured via weigh-ins), with a confidence interval and how many runs are logged
+// near each temperature. When a race-forecast temp is given it's merged in (deduped,
+// flagged) and sorted. Sodium is intentionally omitted — it's the static sweat-sodium
+// constant × the rate, so it adds no information here.
+export function conditionBuckets(model: SweatModel, raceTempC?: number | null): ConditionBucket[] {
   const temps = new Map<number, boolean>();       // temp → isRace
   for (const t of DEFAULT_BUCKET_TEMPS) temps.set(t, false);
   if (raceTempC != null && Number.isFinite(raceTempC)) temps.set(Math.round(raceTempC), true);
   return [...temps.entries()]
     .sort((x, y) => x[0] - y[0])
-    .map(([tempC, isRace]) => {
-      const rate = predictSweatRate(model, tempC);
-      return {
-        tempC,
-        sweatRateLh: round2(rate),
-        fluidLossMlPerH: round10(rate * 1000),
-        sodiumMgPerH: round10(rate * sweatSodiumMgL),
-        isRace,
-      };
-    });
+    .map(([tempC, isRace]) => ({
+      tempC,
+      sweatRateLh: round2(predictSweatRate(model, tempC)),
+      ci: sweatRateCI(model, tempC),
+      nNearby: runsNearTemp(model, tempC),
+      isRace,
+    }));
 }
 
 export interface FluidRecommendation {
