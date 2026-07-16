@@ -12,7 +12,7 @@ import { SWANSEA_703 } from '@/data/races/swansea-703';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import { getFuelProgressionAdherence } from '@/data/fuel-plan';
-import { listHydrationRunsSince, getSweatSodium, getGutCapMl, type HydrationRun } from '@/data/hydration';
+import { listHydrationRunsSince, listRecentRunsForNutrition, getSweatSodium, getGutCapMl, type HydrationRun, type NutritionRun } from '@/data/hydration';
 import { buildSweatModel, conditionBuckets, modelConfidence, type ConditionBucket } from '@/lib/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
@@ -90,6 +90,7 @@ export interface BenchmarksData {
     buckets: ConditionBucket[];      // estimated loss at typical temps (marathon effort)
     sweatRateTrend: Series[];        // one point per weighed run (oldest→newest), L/h
     runs: HydrationRun[];            // all weighed runs (most recent first) for the tracking table
+    recentRuns: NutritionRun[];      // recent runs (any distance) to log/backfill a weigh-in on
   };
 }
 
@@ -115,7 +116,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
   const asOf = todayISO();
   const since = addDays(asOf, -WINDOW_DAYS);
 
-  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, fuelAdherence, hydrationRuns, sweatSodiumMgL, gutCapMl, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
+  const [prediction, experimental, swimPredictions, predictedRaces, endurance, goal, thresholdStr, swimCfg, powerZones, snapshots, wellness, races, longRuns, fuelProducts, fuelAdherence, hydrationRuns, recentNutritionRuns, sweatSodiumMgL, gutCapMl, thrLatest, thrPending, thrHistory, thrRevertable] = await Promise.all([
     getCurrentPrediction(asOf),
     getExperimentalPredictions(asOf),
     getSwimPredictions(asOf),
@@ -132,6 +133,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     listFuelProducts(),
     getFuelProgressionAdherence(asOf),
     listHydrationRunsSince(since),
+    listRecentRunsForNutrition(addDays(asOf, -21)),
     getSweatSodium(),
     getGutCapMl(),
     getLatestThresholdCheck(),
@@ -241,6 +243,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
       buckets: sweatModel ? conditionBuckets(sweatModel, sweatSodiumMgL) : [],
       sweatRateTrend,
       runs: [...hydrationRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
+      recentRuns: recentNutritionRuns,
     },
   };
 }

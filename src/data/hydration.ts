@@ -177,3 +177,57 @@ export async function listHydrationRunsSince(since: string): Promise<HydrationRu
     }];
   }).sort((a, b) => a.date.localeCompare(b.date));
 }
+
+export interface NutritionRun {
+  id: string;
+  date: string;
+  name: string | null;
+  km: number;
+  movingSecs: number | null;
+  fuelCarbsPerH: number | null;
+  fuelItems: { name: string; carbs_g: number; qty: number }[] | null;
+  weightBeforeKg: number | null;
+  weightAfterKg: number | null;
+  fluidMl: number | null;
+  runTempC: number | null;
+  weighed: boolean;
+}
+
+// Recent completed runs (any distance) with their fuel/weigh-in state — powers the
+// benchmarks "log a recent run" surface so weigh-ins can be entered/backfilled from
+// one place, not just on a long run's row. Most recent first.
+export async function listRecentRunsForNutrition(since: string, limit = 12): Promise<NutritionRun[]> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, completed_date, actual_distance_km, actual_duration_secs, actual_duration_mins, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, run_temp_c, plan_sessions!inner(name, activity_type, distance_km)')
+    .eq('user_id', userId)
+    .eq('plan_sessions.activity_type', 'running')
+    .gte('completed_date', since)
+    .order('completed_date', { ascending: false })
+    .limit(limit);
+
+  return (data ?? []).flatMap(r => {
+    if (!r.completed_date) return [];
+    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+      { name: string | null; distance_km: number | null } | null;
+    const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
+      : ps?.distance_km != null ? Number(ps.distance_km) : 0;
+    const movingSecs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
+      : r.actual_duration_mins != null ? Math.round(Number(r.actual_duration_mins) * 60) : null;
+    return [{
+      id: r.id as string,
+      date: r.completed_date as string,
+      name: ps?.name ?? null,
+      km,
+      movingSecs,
+      fuelCarbsPerH: r.fuel_carbs_per_h != null ? Number(r.fuel_carbs_per_h) : null,
+      fuelItems: (r.fuel_items as { name: string; carbs_g: number; qty: number }[] | null) ?? null,
+      weightBeforeKg: r.weight_before_kg != null ? Number(r.weight_before_kg) : null,
+      weightAfterKg: r.weight_after_kg != null ? Number(r.weight_after_kg) : null,
+      fluidMl: r.fluid_ml != null ? Number(r.fluid_ml) : null,
+      runTempC: r.run_temp_c != null ? Number(r.run_temp_c) : null,
+      weighed: r.weight_before_kg != null,
+    }];
+  });
+}

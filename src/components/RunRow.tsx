@@ -24,6 +24,7 @@ import {
   isMergedRun, collapseToWholeRun, StatusTick, missedText, type CompareRow, type WindowCmp,
 } from './session-ui';
 import LongRunQuality from './LongRunQuality';
+import LogNutritionRow from './LogNutritionRow';
 import { fuelTargetLabel, type FuelTarget } from '@/lib/fuel-progression';
 import type { FuelProduct } from '@/data/fuel';
 import { RunGlyph } from './glyphs';
@@ -305,6 +306,23 @@ export default function RunRow({
                   fluidMl: completed.fluidMl ?? null,
                   runTempC: completed.runTempC ?? null,
                 } : null}
+              />
+            </div>
+          )}
+          {/* Non-long completed runs still get a fuel + fluid entry (weigh-ins feed
+              the sweat model from runs across all conditions). */}
+          {done && !showQuality && completed?.workoutId && (
+            <div className={`${DETAIL_WRAP} py-[8px]`}>
+              <LogNutritionRow
+                runId={completed.workoutId}
+                movingSecs={(completed.durationMins ?? null) != null ? Math.round((completed.durationMins as number) * 60) : null}
+                fuelCarbsPerH={completed.fuelCarbsPerH ?? null}
+                fuelItems={completed.fuelItems ?? null}
+                products={fuelProducts}
+                weightBeforeKg={completed.weightBeforeKg ?? null}
+                weightAfterKg={completed.weightAfterKg ?? null}
+                fluidMl={completed.fluidMl ?? null}
+                runTempC={completed.runTempC ?? null}
               />
             </div>
           )}

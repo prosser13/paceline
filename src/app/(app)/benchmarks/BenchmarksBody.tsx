@@ -372,6 +372,29 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
         </div>
         <p className="text-[11.5px] text-stone mt-[6px]">{d.hydration.confidence.detail}</p>
 
+        {(() => {
+          const unlogged = d.hydration.recentRuns.filter(r => !r.weighed).slice(0, 6);
+          if (!unlogged.length) return null;
+          return (
+            <div className="mt-[12px] border border-fog rounded-[10px] bg-bone/40 px-[12px] py-[10px]">
+              <div className="text-[10.5px] uppercase font-bold text-stone tracking-[.05em] mb-[4px]">Log a recent run</div>
+              <div className="flex flex-col">
+                {unlogged.map(r => (
+                  <div key={r.id} className="flex items-center justify-between gap-3 border-b border-fog/50 last:border-0 py-[7px]">
+                    <div className="text-[12.5px]">
+                      <span className="font-semibold">{shortDate(r.date)}</span>
+                      <span className="text-stone"> · {r.name ?? 'Run'} · {r.km ? `${Math.round(r.km)} km` : '—'}</span>
+                    </div>
+                    <FuelLogCell runId={r.id} movingSecs={r.movingSecs} initialCarbsPerH={r.fuelCarbsPerH} initialItems={r.fuelItems} products={d.fuelProducts}
+                      initialWeightBeforeKg={r.weightBeforeKg} initialWeightAfterKg={r.weightAfterKg} initialFluidMl={r.fluidMl} initialRunTempC={r.runTempC} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10.5px] text-stone/70 mt-[6px]">Enter weight before/after (+ any fluid) — sweat rate and temperature fill in automatically.</p>
+            </div>
+          );
+        })()}
+
         {d.hydration.buckets.length > 0 && (
           <div className="overflow-x-auto mt-[14px]">
             <table className="w-full text-[13px]" style={{ borderCollapse: 'collapse' }}>
