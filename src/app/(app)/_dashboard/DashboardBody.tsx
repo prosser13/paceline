@@ -4,6 +4,7 @@ import { CardSkeleton } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
+import SuggestionsCard from './SuggestionsCard';
 import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
 import PhaseCard from './PhaseCard';
@@ -90,6 +91,15 @@ export default async function DashboardBody() {
 
       {/* Week strip */}
       <WeekStrip days={d.windowDays} />
+
+      {/* Action needed — pending update-prompts (threshold / FTP). High up so it's
+          seen regardless of coach messages; only present when something's pending. */}
+      {(d.pendingThreshold || d.pendingPower) && (
+        <>
+          <SecLabel>Action needed</SecLabel>
+          <SuggestionsCard pendingThreshold={d.pendingThreshold} pendingPower={d.pendingPower} />
+        </>
+      )}
 
       {/* Bright spots — dismissible positive-standouts banner */}
       <Suspense fallback={null}>

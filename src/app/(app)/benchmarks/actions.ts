@@ -23,6 +23,7 @@ export async function dismissThreshold(checkId: string): Promise<{ ok: boolean }
   const res = await dismissThresholdSuggestion(checkId);
   revalidatePath('/benchmarks');
   revalidatePath('/settings');
+  revalidatePath('/');   // drop the dashboard "Action needed" card too
   return res;
 }
 
@@ -51,6 +52,7 @@ export async function dismissPower(checkId: string): Promise<{ ok: boolean }> {
   const res = await dismissPowerSuggestion(checkId);
   revalidatePath('/benchmarks');
   revalidatePath('/settings');
+  revalidatePath('/');   // drop the dashboard "Action needed" card too
   return res;
 }
 

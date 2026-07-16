@@ -28,7 +28,7 @@ const SLOWER_WINDOW_DAYS = 35;     // …all within this window (stale history c
 // ── types ─────────────────────────────────────────────────────
 export type ThresholdOutcome =
   | 'suggested' | 'within_noise' | 'capped_wait' | 'cooldown' | 'no_fresh_evidence'
-  | 'taper_freeze' | 'slower_pending_confirmation' | 'applied' | 'dismissed';
+  | 'taper_freeze' | 'slower_pending_confirmation' | 'applied' | 'dismissed' | 'held';
 
 export interface ThresholdEvidence { label: string; impliedThresholdMinKm: number; weight: number; }
 
@@ -199,6 +199,22 @@ async function priorWeeklyChecks(weekStart: string, limit = SLOWER_CONFIRM_CHECK
   }));
 }
 
+// The most recently DISMISSED suggestion (still carries its suggested_/current_
+// values). Powers "hold until the number changes": a dismiss declines that exact
+// suggestion, and the weekly check stays quiet while the computed suggestion — and
+// the setting it was measured against — remain unchanged.
+async function lastDismissedThreshold(): Promise<{ suggestedMinKm: number | null; currentMinKm: number } | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('threshold_checks')
+    .select('suggested_min_km, current_min_km').eq('user_id', userId).eq('status', 'dismissed')
+    .order('checked_at', { ascending: false }).limit(1).maybeSingle();
+  if (!data) return null;
+  return {
+    suggestedMinKm: data.suggested_min_km != null ? Number(data.suggested_min_km) : null,
+    currentMinKm: Number(data.current_min_km),
+  };
+}
+
 // ── last change (for cooldown) — applied checks + manual edits ─
 async function lastThresholdChangeAt(currentMinKm: number): Promise<string | null> {
   const userId = await currentUserId();
@@ -316,6 +332,23 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     const stepS = Math.min(absGapS, STEP_CAP_S);
     const suggestedMinKm = Math.round((currentMinKm - Math.sign(gapS) * stepS / 60) * 1000) / 1000;
     const capped = absGapS > STEP_CAP_S;
+
+    // Held — the athlete already dismissed this exact suggestion. Stay quiet until the
+    // computed number changes (or they change the setting it was measured against),
+    // re-checked every week. Record a truthful, non-pending row so idempotency holds
+    // and Settings shows why it's silent, rather than re-opening the same prompt.
+    const dismissed = await lastDismissedThreshold();
+    if (dismissed?.suggestedMinKm != null
+        && Math.abs(suggestedMinKm - dismissed.suggestedMinKm) * 60 < 1
+        && Math.abs(currentMinKm - dismissed.currentMinKm) * 60 < 1) {
+      await writeCheck({
+        weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'held', status: 'none', suggestedMinKm,
+        commentary: `${stamp} ${estText} — still points to ${fmtPace(suggestedMinKm)}/km (${Math.round(absGapS)}s ${dirWord}), but you dismissed this. Holding until the number changes.`,
+        evidence: signals,
+      });
+      return;
+    }
+
     await writeCheck({
       weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'suggested', status: 'pending', suggestedMinKm,
       commentary: `${stamp} ${evidenceText} ${estText} — ${Math.round(absGapS)}s ${dirWord} than your setting.${slowerNote} → Suggested ${fmtPace(suggestedMinKm)}` +

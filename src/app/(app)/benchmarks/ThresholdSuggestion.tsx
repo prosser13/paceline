@@ -32,7 +32,7 @@ export default function ThresholdSuggestion({ latest, pending, history, revertab
         <p className="text-[12.5px] text-fern">
           {done === 'applied' ? 'Applied — threshold updated, zones shifted, TSS recomputed.'
             : done === 'reverted' ? `Reverted to ${revertable?.beforeThreshold}/km — threshold + zones restored.`
-            : 'Dismissed — won’t re-suggest until the evidence strengthens.'}
+            : 'Dismissed — won’t re-suggest until the number changes.'}
         </p>
       ) : (
         <>
