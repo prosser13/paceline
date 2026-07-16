@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+import { redirect } from 'next/navigation';
 import { getStravaConnectionSummary } from '@/data/strava-connection';
 import { getUserIntegrations } from '@/data/user-integrations';
 import { listRacePlans } from '@/data/plans';
@@ -10,6 +11,8 @@ import {
 import { listPlanConstraints, getCoachingPrefs, coachUpdatesLockedForCurrentUser, type Autonomy } from '@/data/coaching';
 import { getWeatherConfig } from '@/data/weather-config';
 import { getSweatSodium, getGutCapMl } from '@/data/hydration';
+import { getGuestAccessStatus } from '@/data/guest-access';
+import GuestAccessClient from './GuestAccessClient';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange } from '@/data/threshold-suggestion';
 import { getLatestPowerCheck, getPendingPowerSuggestion, listPowerChecks, getRevertablePowerChange } from '@/data/power-suggestion';
 import PowerSuggestion from '../benchmarks/PowerSuggestion';
@@ -42,10 +45,14 @@ import {
 } from './actions';
 
 export default async function SettingsPage() {
+  // Temporary read-only guests never see Settings (it exposes owner identifiers and
+  // config). Bounce them before any data loads. getViewer() is request-cached.
+  if ((await getViewer())?.role === 'guest') redirect('/');
+
   const [
     strava, thresholdPace, paceZones, hrConfig, hrZones,
     powerConfig, powerZones, bikeHrConfig, bikeHrZones, racePlans,
-    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig, sweatSodium, gutCapMl,
+    constraints, coachingPrefs, planPrefs, adjustments, progressionMode, weatherConfig, sweatSodium, gutCapMl, guestAccess,
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
     pwrLatest, pwrPending, pwrHistory, pwrRevertable,
@@ -68,6 +75,7 @@ export default async function SettingsPage() {
     getWeatherConfig(),
     getSweatSodium(),
     getGutCapMl(),
+    getGuestAccessStatus(),
     getLatestThresholdCheck(),
     getPendingThresholdSuggestion(),
     listThresholdChecks(10),
@@ -198,6 +206,18 @@ export default async function SettingsPage() {
           subtitle="Your sweat-sodium concentration from a sweat test — sets the sodium side of the fluid-loss estimates on your benchmarks and race plans.">
           <HydrationConfigClient initialSweatSodium={sweatSodium} initialGutCap={gutCapMl} />
         </SettingsCard>
+
+        {viewer?.role === 'owner' && (
+          <SettingsCard cat="Account" color="var(--color-stone)" title="Guest access"
+            subtitle="Give someone temporary read-only access to view your data. They can see everything except Settings and Admin, and can’t change anything. Share the password or the link; rotate or turn it off here to revoke everyone instantly.">
+            <GuestAccessClient
+              initialEnabled={guestAccess.enabled}
+              initialHasPassword={guestAccess.hasPassword}
+              initialLinkToken={guestAccess.linkToken}
+              initialSessionHours={guestAccess.sessionHours}
+            />
+          </SettingsCard>
+        )}
 
         <SettingsCard cat="Coaching" color="var(--color-strength)" title="Change log"
           subtitle="Every change the coach (or you) makes to the plan, newest first — what changed, when, and why. Revert to undo one.">

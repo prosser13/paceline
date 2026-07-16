@@ -43,7 +43,10 @@ export function coachUpdatesLocked(email: string | null | undefined): boolean {
   return COACH_DISABLED_EMAILS.has((email ?? '').trim().toLowerCase());
 }
 
-export type Role = 'owner' | 'viewer';
+// 'guest' is a temporary read-only session that is NOT email-driven — roleFor()
+// never returns it; it's minted only by getViewer() (auth.ts) from a valid guest
+// cookie. Listed here so the union is the single source of truth for a viewer role.
+export type Role = 'owner' | 'viewer' | 'guest';
 
 // The single source of truth mapping an email → access tier (or null for neither).
 // When OWNER_EMAILS is unset we keep the legacy "any authed account is the owner"

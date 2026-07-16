@@ -10,9 +10,24 @@ import { timingSafeEqual } from 'node:crypto';
 import { createClient, getCurrentUser as getSessionUser } from './supabase-server';
 import { roleFor, type Role } from './roles';
 import { isImpersonating } from './impersonation';
+import { isGuest } from './guest';
 import type { User } from '@supabase/supabase-js';
 
 export type { Role };
+
+// A read-only guest holds no Supabase account, so getViewer() has no real User to
+// return. This placeholder satisfies the type and admits the guest past the read gate.
+// It carries a NON-identifying email so the owner's address never leaks through the
+// read gate; no guest-reachable caller dereferences it beyond truthiness (owner-only
+// controls gate on role === 'owner').
+const GUEST_VIEWER_USER = {
+  id: 'guest',
+  email: 'guest@paceline.local',
+  aud: 'guest',
+  app_metadata: {},
+  user_metadata: {},
+  created_at: '',
+} as unknown as User;
 
 // Constant-time comparison that also guards the length mismatch timingSafeEqual
 // would otherwise throw on. Use for every bearer-secret check so token comparison
@@ -61,9 +76,15 @@ export async function requireUserId(): Promise<string> {
 // lookup, so it adds no extra auth round-trip during a page render.
 export async function getViewer(): Promise<{ user: User; role: Role } | null> {
   const user = await getSessionUser();
-  if (!user) return null;
-  const role = roleFor(user.email);
-  return role ? { user, role } : null;
+  if (user) {
+    const role = roleFor(user.email);
+    if (role) return { user, role };
+  }
+  // No real session (or a non-allowlisted one) → admit a valid temporary guest as a
+  // read-only viewer. getCurrentUser() (the write gate) is untouched and still returns
+  // null for a guest, so this only ever opens the READ path.
+  if (await isGuest()) return { user: GUEST_VIEWER_USER, role: 'guest' };
+  return null;
 }
 
 // True when the request carries the cron bearer secret (Authorization: Bearer

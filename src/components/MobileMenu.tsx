@@ -14,9 +14,11 @@ type NavPlan = { slug: string; label: string };
 export default function MobileMenu({
   plans = [],
   hasArchive = false,
+  isGuest = false,
 }: {
   plans?: NavPlan[];
   hasArchive?: boolean;
+  isGuest?: boolean;
 }) {
   const pathname = usePathname();
   const planParam = useSearchParams().get('plan');
@@ -150,12 +152,14 @@ export default function MobileMenu({
               Availability
             </Link>
 
-            <div className="mt-auto">
-              <Link href="/settings" className={rowClass(pathname === '/settings')}>
-                <span className={dot(pathname === '/settings', 'bg-yoga')} />
-                Settings
-              </Link>
-            </div>
+            {!isGuest && (
+              <div className="mt-auto">
+                <Link href="/settings" className={rowClass(pathname === '/settings')}>
+                  <span className={dot(pathname === '/settings', 'bg-yoga')} />
+                  Settings
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       )}

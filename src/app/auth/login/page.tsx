@@ -1,6 +1,19 @@
 'use client';
 
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase';
+
+// Friendly message when a guest login was rejected (redirected back with a ?guest=
+// flag). In its own Suspense-wrapped child so useSearchParams doesn't opt the whole
+// page out of static generation.
+function GuestError() {
+  const flag = useSearchParams().get('guest');
+  const msg = flag === 'denied' ? 'That guest password isn’t valid, or guest access is turned off.'
+    : flag === 'unavailable' ? 'Guest access isn’t available right now.'
+    : null;
+  return msg ? <p className="text-[#EA4335] text-xs mt-2 text-center">{msg}</p> : null;
+}
 
 export default function LoginPage() {
   async function signInWithGoogle() {
@@ -28,6 +41,28 @@ export default function LoginPage() {
           </svg>
           Sign in with Google
         </button>
+
+        {/* Read-only guest access — a shared password set by the owner. */}
+        <div className="mt-6 pt-6 border-t border-gray-800 text-left">
+          <p className="text-gray-400 text-xs mb-2 text-center">Have a guest password?</p>
+          <form method="post" action="/api/guest-login" className="flex flex-col gap-2">
+            <input
+              type="password"
+              name="password"
+              required
+              placeholder="Guest password"
+              autoComplete="off"
+              className="w-full rounded-lg bg-gray-950 border border-gray-800 px-3 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-gray-600"
+            />
+            <button
+              type="submit"
+              className="w-full rounded-lg border border-gray-700 text-gray-200 font-medium px-4 py-2.5 text-sm hover:bg-gray-800 transition-colors"
+            >
+              View as guest (read-only)
+            </button>
+          </form>
+          <Suspense fallback={null}><GuestError /></Suspense>
+        </div>
       </div>
     </div>
   );

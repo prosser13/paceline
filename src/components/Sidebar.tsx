@@ -9,9 +9,11 @@ import PacelineMark from './PacelineMark';
 export default function Sidebar({
   plans = [],
   hasArchive = false,
+  isGuest = false,
 }: {
   plans?: { slug: string; label: string }[];
   hasArchive?: boolean;
+  isGuest?: boolean;
 }) {
   const pathname = usePathname();
   const planParam = useSearchParams().get('plan');
@@ -113,12 +115,14 @@ export default function Sidebar({
         Availability
       </Link>
 
-      <div className="mt-auto">
-        <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
-          <span className={dot(active('/settings'), 'bg-yoga')} />
-          Settings
-        </Link>
-      </div>
+      {!isGuest && (
+        <div className="mt-auto">
+          <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
+            <span className={dot(active('/settings'), 'bg-yoga')} />
+            Settings
+          </Link>
+        </div>
+      )}
     </aside>
   );
 }

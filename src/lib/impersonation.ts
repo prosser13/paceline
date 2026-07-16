@@ -18,6 +18,7 @@ import { cache } from 'react';
 import { getCurrentUser as getSessionUser } from './supabase-server';
 import { supabaseAdmin } from './supabase-admin';
 import { roleFor } from './roles';
+import { guestTargetUserId } from './guest';
 import type { User } from '@supabase/supabase-js';
 
 export const VIEW_AS_COOKIE = 'paceline_view_as';
@@ -79,7 +80,16 @@ export const getViewedUser = cache(async (): Promise<User | null> => {
     const { data } = await supabaseAdmin.auth.admin.getUserById(id);
     return data?.user ?? null;
   }
-  return getSessionUser();
+  const session = await getSessionUser();
+  if (session) return session;
+  // A read-only guest has no session; surface the OWNER's identity so the greeting /
+  // "is this mine?" checks follow the data they're viewing (they see everything).
+  const guestId = await guestTargetUserId();
+  if (guestId) {
+    const { data } = await supabaseAdmin.auth.admin.getUserById(guestId);
+    return data?.user ?? null;
+  }
+  return null;
 });
 
 // Whether `targetUserId` is a valid impersonation target for the owner `ownerId`:
