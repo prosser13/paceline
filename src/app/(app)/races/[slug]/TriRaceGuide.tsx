@@ -38,6 +38,7 @@ function rowColor(kind: TriRow['kind']): string {
 
 export default function TriRaceGuide({
   guide, raceDate, daysToGo, estimate, owned, legTracks = [], forecast = null,
+  fluidRange = null, fluidNote = null, sodiumOverrideMg = null,
 }: {
   guide: RaceGuide;
   raceDate: string | null;
@@ -46,6 +47,9 @@ export default function TriRaceGuide({
   owned: boolean;
   legTracks?: (ParsedGpx | null)[];   // parsed GPX per discipline, aligned to guide.disciplines
   forecast?: RaceForecast | null;
+  fluidRange?: [number, number] | null;   // forecast/sweat-adjusted; falls back to the guide base
+  fluidNote?: string | null;
+  sodiumOverrideMg?: number | null;
 }) {
   const raceDateLong = raceDate
     ? new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
@@ -233,8 +237,9 @@ export default function TriRaceGuide({
         <FuelPlan
           fuel={guide.fuel}
           schedule={fuelSchedule}
-          fluidRange={guide.fuel.fluidPerHourMl}
-          fluidNote={null}
+          fluidRange={fluidRange ?? guide.fuel.fluidPerHourMl}
+          fluidNote={fluidNote}
+          sodiumOverrideMg={sodiumOverrideMg}
           locked={!owned}
         />
       </div>

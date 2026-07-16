@@ -19,13 +19,14 @@ import { listPlannedTssBetween, listRunningDoneForPlan, listSessionDistancesForP
 import { weekRunKm } from '@/lib/weekly-volume';
 import { parseGpx, type ParsedGpx } from '@/lib/gpx';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
-import { getRaceForecast } from '@/lib/weather';
+import { getRaceForecast, type RaceForecast } from '@/lib/weather';
 import { getWellnessCached } from '@/lib/intervals';
 import { projectFitness, readinessFromProjection } from '@/lib/fitness-projection';
 import { predictableDistanceM } from '@/lib/prediction';
 import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
-import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
-import { listCompletedForSessions } from '@/data/plan-sessions';
+import { getFuelProgressionAdherence } from '@/data/fuel-plan';
+import { listHydrationRunsSince, getSweatSodium, getGutCapMl } from '@/data/hydration';
+import { buildSweatModel, raceFluidRecommendation, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
 import { todayISO } from '@/lib/dates';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
@@ -78,6 +79,46 @@ async function loadGpx(gpxPath: string | null): Promise<ParsedGpx | null> {
   }
 }
 
+// Race-day fluid + sodium: the forecast-high ladder, then — for the athlete's own
+// race — personalised from their logged sweat rate at the race temp + goal effort
+// (falls back to the ladder when there's no sweat data). Returns nulls when there's
+// no forecast yet (>16 days out). Shared by the marathon and triathlon paths.
+async function resolveFluidPlan(
+  forecast: RaceForecast | null,
+  owned: boolean,
+  refPaceMinKm: number | null,
+  baseFluid: [number, number],
+  todayStr: string,
+): Promise<{ fluidRange: [number, number]; fluidNote: string | null; sodiumOverrideMg: number | null }> {
+  let fluidRange: [number, number] = baseFluid;
+  let fluidNote: string | null = null;
+  let sodiumOverrideMg: number | null = null;
+  if (!forecast) return { fluidRange, fluidNote, sodiumOverrideMg };
+
+  const high = forecast.high;
+  if (high >= 22) { fluidRange = [600, 800]; fluidNote = `Raised for a warm forecast (${high}°C high) — drink to thirst and keep sodium up.`; }
+  else if (high >= 18) { fluidRange = [500, 700]; fluidNote = `Nudged up for the ${high}°C forecast.`; }
+  else if (high <= 12) { fluidRange = [350, 500]; fluidNote = `Cool forecast (${high}°C) — the lower end is plenty.`; }
+  else { fluidNote = `Forecast ${high}°C — base intake is about right.`; }
+
+  if (owned) {
+    const hydSince = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 180 * 86400000).toISOString().slice(0, 10);
+    const [hydrationRuns, sweatSodium, gutCapMl] = await Promise.all([listHydrationRunsSince(hydSince), getSweatSodium(), getGutCapMl()]);
+    const model = buildSweatModel(
+      hydrationRuns.flatMap(r => r.sweatRateLh != null && r.runTempC != null
+        ? [{ tempC: r.runTempC, sweatRateLh: r.sweatRateLh, ngpMinKm: r.ngpMinKm }] : []),
+      refPaceMinKm,
+    );
+    const rec = raceFluidRecommendation(model, high, sweatSodium, refPaceMinKm, { ...DEFAULT_FLUID_OPTS, gutCapMl });
+    if (rec) {
+      fluidRange = rec.fluidMlPerH;
+      sodiumOverrideMg = rec.sodiumMgPerH;
+      fluidNote = `Personalised from your sweat rate (~${rec.rateLh} L/h at ${high}°C) — replacing 60–80% of losses.`;
+    }
+  }
+  return { fluidRange, fluidNote, sodiumOverrideMg };
+}
+
 export default async function RaceHeroPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const guide = getRaceGuide(slug);
@@ -117,11 +158,13 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
       raceDate ? getRaceForecast(guide.start.lat, guide.start.lng, raceDate) : Promise.resolve(null),
     ]);
     const ftp = (powerZonesRows.find(z => z.zone_key === 'Z4')?.power_max as number | undefined) ?? null;
+    const runThresholdMinKm = thresholdStr ? parseThresholdPace(thresholdStr) : null;
     const estimate = buildTriEstimate(guide, {
       swimCssSec: swimCfg?.css_sec_per_100 ?? null,
       ftpW: ftp,
-      runThresholdMinKm: thresholdStr ? parseThresholdPace(thresholdStr) : null,
+      runThresholdMinKm,
     });
+    const triFluid = await resolveFluidPlan(triForecast, owned, runThresholdMinKm, guide.fuel.fluidPerHourMl, todayStr);
     return (
       <TriRaceGuide
         guide={guide}
@@ -131,6 +174,9 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
         owned={owned}
         legTracks={legTracks}
         forecast={triForecast}
+        fluidRange={triFluid.fluidRange}
+        fluidNote={triFluid.fluidNote}
+        sodiumOverrideMg={triFluid.sodiumOverrideMg}
       />
     );
   }
@@ -278,35 +324,20 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     const fuelTarget = guide.fuel.carbsPerHourG?.[1] ?? null;
     if (fuelTarget != null && fuelTarget > 0) {
       const since = new Date(new Date(todayStr + 'T00:00:00Z').getTime() - 112 * 86400000).toISOString().slice(0, 10);
-      const [longRuns, fuelMap] = await Promise.all([
+      const [longRuns, adherence] = await Promise.all([
         listLongRunsSince(since),
-        getFuelPlanForGoalBlock(todayStr),
+        getFuelProgressionAdherence(todayStr),
       ]);
       if (longRuns.length > 0) {
         const logged = longRuns.filter(r => r.fuelCarbsPerH != null).map(r => r.fuelCarbsPerH as number);
-        // Progression adherence: past gut-training reps, completed + logged within
-        // 8 g/h of that rep's target.
-        const pastReps = [...fuelMap.entries()].filter(([, t]) => t.kind === 'progression');
-        let repsCompleted = 0, repsOnPlan = 0;
-        if (pastReps.length) {
-          const completions = await listCompletedForSessions(pastReps.map(([id]) => id));
-          const byId = new Map(completions.map(c => [c.plan_session_id as string, c]));
-          for (const [id, t] of pastReps) {
-            const c = byId.get(id);
-            if (!c) continue;
-            repsCompleted++;
-            const g = c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null;
-            if (g != null && t.gph != null && g >= t.gph - 8) repsOnPlan++;
-          }
-        }
         fuelReadiness = {
           targetGPerH: fuelTarget,
           avgGPerH: logged.length ? Math.round(logged.reduce((a, b) => a + b, 0) / logged.length) : null,
           bestGPerH: logged.length ? Math.round(Math.max(...logged)) : null,
           practiced: logged.length,
           totalLongRuns: longRuns.length,
-          repsCompleted,
-          repsOnPlan,
+          repsCompleted: adherence.repsCompleted,
+          repsOnPlan: adherence.repsOnPlan,
         };
       }
     }
@@ -325,16 +356,11 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     }))
     .filter(s => s.between || s.atStop);
 
-  // Fluid target flexes with the race-day forecast (null until ~16 days out).
-  let fluidRange: [number, number] = guide.fuel.fluidPerHourMl;
-  let fluidNote: string | null = null;
-  if (forecast) {
-    const high = forecast.high;
-    if (high >= 22) { fluidRange = [600, 800]; fluidNote = `Raised for a warm forecast (${high}°C high) — drink to thirst and keep sodium up.`; }
-    else if (high >= 18) { fluidRange = [500, 700]; fluidNote = `Nudged up for the ${high}°C forecast.`; }
-    else if (high <= 12) { fluidRange = [350, 500]; fluidNote = `Cool forecast (${high}°C) — the lower end is plenty.`; }
-    else { fluidNote = `Forecast ${high}°C — base intake is about right.`; }
-  }
+  // Fluid + sodium: forecast ladder, personalised from the athlete's sweat rate at
+  // the goal marathon effort when they've logged weigh-ins (null forecast until ~16 days out).
+  const { fluidRange, fluidNote, sodiumOverrideMg } = await resolveFluidPlan(
+    forecast, owned, targetPace ? parseThresholdPace(targetPace) : null, guide.fuel.fluidPerHourMl, todayStr,
+  );
 
   const raceDateLong = raceDate
     ? new Date(raceDate + 'T00:00:00').toLocaleDateString('en-GB', {
@@ -533,7 +559,7 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
           />
         </div>
         <div className="mt-[24px]">
-          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} readiness={owned ? fuelReadiness : null} locked={!owned} />
+          <FuelPlan fuel={guide.fuel} schedule={fuelSchedule} fluidRange={fluidRange} fluidNote={fluidNote} sodiumOverrideMg={sodiumOverrideMg} readiness={owned ? fuelReadiness : null} locked={!owned} />
         </div>
         <div className="mt-[24px]">
           <KitChecklist

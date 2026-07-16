@@ -31,6 +31,7 @@ export default function FuelPlan({
   schedule,
   fluidRange,
   fluidNote,
+  sodiumOverrideMg = null,
   readiness = null,
   locked = false,
 }: {
@@ -38,6 +39,9 @@ export default function FuelPlan({
   schedule: FuelStop[];
   fluidRange: [number, number];
   fluidNote: string | null;
+  // Personalised sodium target (mg/hr) from the athlete's sweat rate; overrides the
+  // curated value when present.
+  sodiumOverrideMg?: number | null;
   readiness?: FuelReadiness | null;
   // When true, this race isn't the viewer's — show the table structure but blank
   // the athlete-specific values (targets, pre-start, per-checkpoint fuelling).
@@ -51,7 +55,7 @@ export default function FuelPlan({
         <div className="grid grid-cols-3 gap-[10px]">
           <Target label="Carbs" value={locked ? DASH : `${fuel.carbsPerHourG[0]}–${fuel.carbsPerHourG[1]}`} unit="g/hr" />
           <Target label="Fluid" value={locked ? DASH : `${fluidRange[0]}–${fluidRange[1]}`} unit="ml/hr" />
-          <Target label="Sodium" value={locked ? DASH : (fuel.sodiumPerHourMg ? `~${fuel.sodiumPerHourMg}` : '—')} unit="mg/hr" />
+          <Target label="Sodium" value={locked ? DASH : ((sodiumOverrideMg ?? fuel.sodiumPerHourMg) ? `~${sodiumOverrideMg ?? fuel.sodiumPerHourMg}` : '—')} unit="mg/hr" />
         </div>
         <p className="font-mono text-[10px] text-stone mt-[8px] mb-[16px]">
           {locked ? 'Nutrition plan is set per athlete — this race isn’t assigned to you.'

@@ -14,6 +14,7 @@ import {
 } from '@/components/session-ui';
 import { RunGlyph } from '@/components/glyphs';
 import LongRunQuality from '@/components/LongRunQuality';
+import LogNutritionRow from '@/components/LogNutritionRow';
 import { fuelTargetLabel } from '@/lib/fuel-progression';
 import type { FuelProduct } from '@/data/fuel';
 import { RUN, RUN_B, READY } from '@/lib/colors';
@@ -170,7 +171,28 @@ export default function SessionHero({
                 movingSecs: completed.mins != null ? Math.round(completed.mins * 60) : null,
                 fuelItems: completed.fuelItems,
                 products: fuelProducts,
+                weightBeforeKg: completed.weightBeforeKg,
+                weightAfterKg: completed.weightAfterKg,
+                fluidMl: completed.fluidMl,
+                runTempC: completed.runTempC,
               } : null}
+            />
+          </div>
+        )}
+        {/* Any completed run that isn't a long run still gets a fuel + fluid entry
+            (weigh-ins feed the sweat model from runs across all conditions). */}
+        {isDone && !showQuality && completed?.workoutId && fuelProducts && (
+          <div className="mb-[12px]">
+            <LogNutritionRow
+              runId={completed.workoutId}
+              movingSecs={completed.mins != null ? Math.round(completed.mins * 60) : null}
+              fuelCarbsPerH={completed.fuelCarbsPerH}
+              fuelItems={completed.fuelItems}
+              products={fuelProducts}
+              weightBeforeKg={completed.weightBeforeKg}
+              weightAfterKg={completed.weightAfterKg}
+              fluidMl={completed.fluidMl}
+              runTempC={completed.runTempC}
             />
           </div>
         )}
