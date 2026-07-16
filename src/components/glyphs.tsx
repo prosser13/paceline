@@ -80,12 +80,24 @@ export function FuelGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }
   );
 }
 
-// Droplet — for "fluid / weigh-in logged".
+// Droplet — for sweat (fluid lost).
 export function DropletGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
          strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <path d="M12 3.5c3 3.8 5.5 6.9 5.5 9.8a5.5 5.5 0 0 1 -11 0c0 -2.9 2.5 -6 5.5 -9.8z" />
+    </svg>
+  );
+}
+
+// Bottle — for fluid drunk (intake).
+export function BottleGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M10 2h4" />
+      <path d="M10.5 4.5c0 1.2 -.7 1.8 -1.6 2.7c-.9 .9 -1.4 1.7 -1.4 3v9a1.8 1.8 0 0 0 1.8 1.8h5.4a1.8 1.8 0 0 0 1.8 -1.8v-9c0 -1.3 -.5 -2.1 -1.4 -3c-.9 -.9 -1.6 -1.5 -1.6 -2.7v-2h-3z" />
+      <path d="M7.5 12.5h9" />
     </svg>
   );
 }

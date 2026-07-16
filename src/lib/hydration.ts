@@ -35,6 +35,13 @@ export function sodiumLossMg(lossL: number, sweatSodiumMgL: number): number {
   return Math.round(lossL * sweatSodiumMgL);
 }
 
+// Fluid intake rate (L/h) — how fast fluid was drunk during the run. Null when no
+// fluid was logged or there's no moving time.
+export function fluidIntakeLh(fluidMl: number | null, movingSecs: number | null): number | null {
+  if (!fluidMl || fluidMl <= 0 || !movingSecs || movingSecs <= 0) return null;
+  return (fluidMl / 1000) / (movingSecs / 3600);
+}
+
 // ── intensity normalisation ───────────────────────────────────
 
 // How much harder (or easier) `paceMinKm` is than the reference effort, as a
