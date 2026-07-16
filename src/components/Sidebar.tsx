@@ -115,14 +115,18 @@ export default function Sidebar({
         Availability
       </Link>
 
-      {!isGuest && (
-        <div className="mt-auto">
+      <div className="mt-auto flex flex-col gap-1.5">
+        {!isGuest && (
           <Link href="/settings" onClick={go('/settings')} className={topClass(active('/settings'))}>
             <span className={dot(active('/settings'), 'bg-yoga')} />
             Settings
           </Link>
-        </div>
-      )}
+        )}
+        <Link href="/about" onClick={go('/about')} className={topClass(active('/about'))}>
+          <span className={dot(active('/about'), 'bg-stone/50')} />
+          About
+        </Link>
+      </div>
     </aside>
   );
 }
