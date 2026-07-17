@@ -197,20 +197,21 @@ export function sleepSummary(days: WellnessDay[], target = SLEEP.targetSecs): Sl
   const lastIsRecent = last != null && asOfDate != null &&
     (Date.parse(asOfDate) - Date.parse(last.date)) / 86_400_000 <= 1.5;
 
-  let tone: Flag = 'neutral'; let nudge = 'Not enough nights logged yet.';
+  let tone: Flag = 'neutral'; let nudge = 'Lack of recent data — wear your watch.';
   if (avgSecs != null && last?.sleep_secs != null) {
     const shortLast = lastIsRecent && last.sleep_secs < SLEEP.shortNight;
     const weakAvg = avgSecs < SLEEP.weakAvg;
     if (shortLast || weakAvg) {
       tone = 'watch';
       const deficitH = balanceSecs != null && balanceSecs < 0 ? Math.round((-balanceSecs / 3600) * 10) / 10 : null;
-      nudge = deficitH
-        ? `Down ~${deficitH}h against target this week — bank an early night.`
-        : 'A short night — try to get to bed earlier tonight.';
+      const lastH = Math.round((last.sleep_secs / 3600) * 10) / 10;
+      nudge = shortLast
+        ? `Short night (${lastH}h) — early night.`
+        : deficitH != null ? `Down ~${deficitH}h this week — early night.` : 'Down on sleep this week — early night.';
     } else {
       tone = 'good';
       const avgH = Math.round((avgSecs / 3600) * 10) / 10;
-      nudge = `On point — averaging ${avgH}h a night.`;
+      nudge = `Well rested — averaging ${avgH}h`;
     }
   }
 
@@ -218,6 +219,40 @@ export function sleepSummary(days: WellnessDay[], target = SLEEP.targetSecs): Sl
     lastSecs: last?.sleep_secs ?? null, lastScore: last?.sleep_score ?? null, lastDate: last?.date ?? null,
     nights, avgSecs, balanceSecs, target, tone, nudge,
   };
+}
+
+// ── Sleep cue: one-line, race-aware steer for the dashboard console ──
+// Reuses sleepSummary's tone/debt read and layers a race-week nudge on top. The
+// athlete knows which race is coming, so it says "race day", not the name. First
+// match wins. Kept terse to fit the console tile.
+export const RACE_SLEEP_DAYS = 5;   // within this many nights of a race → race-week cues
+
+export function sleepCue(sleep: SleepSummary, ctx: { daysToRace: number | null; hrvTone?: Flag }): string {
+  const ready = sleep.avgSecs != null && sleep.lastSecs != null;
+  if (!ready) return 'Lack of recent data — wear your watch.';                                   // 8
+
+  const n = ctx.daysToRace;
+  const racingSoon = n != null && n >= 0 && n <= RACE_SLEEP_DAYS;
+  const deficitH = sleep.balanceSecs != null && sleep.balanceSecs < 0
+    ? Math.round((-sleep.balanceSecs / 3600) * 10) / 10 : null;
+  const lastH = sleep.lastSecs != null ? Math.round((sleep.lastSecs / 3600) * 10) / 10 : null;
+  const avgH = sleep.avgSecs != null ? Math.round((sleep.avgSecs / 3600) * 10) / 10 : null;
+  const behind = sleep.tone === 'watch';
+  const shortLast = sleep.lastSecs != null && sleep.lastSecs < SLEEP.shortNight;
+
+  if (racingSoon) {
+    if (n! <= 1) return 'Race tomorrow — early night, aim 8h+.';                                 // 1
+    if (behind && deficitH != null) return `~${deficitH}h down with race day in ${n} nights — early night.`; // 2
+    return `Bank sleep — ${n} nights to race day. Hold 8h+.`;                                    // 3
+  }
+
+  if (behind) {
+    if (shortLast && lastH != null) return `Short night (${lastH}h) — early night.`;             // 4
+    if (deficitH != null) return `Down ~${deficitH}h this week — early night.`;                  // 5
+    return lastH != null ? `Short night (${lastH}h) — early night.` : 'Down on sleep this week — early night.';
+  }
+  if (ctx.hrvTone === 'watch' || ctx.hrvTone === 'alert') return 'HRV is low — early night to recover.'; // 7
+  return `Well rested — averaging ${avgH}h`;                                                     // 6
 }
 
 // ── Standouts: genuinely notable, RECENT (last 3 days), positive things ──

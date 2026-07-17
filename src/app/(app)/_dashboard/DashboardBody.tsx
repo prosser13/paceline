@@ -1,15 +1,12 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { CardSkeleton } from '@/components/dashboard-graphics';
 import { loadDashboardData } from './data';
 import AgendaA from './AgendaA';
 import WeekStrip from './WeekStrip';
 import SuggestionsCard from './SuggestionsCard';
 import DashboardExtras from './DashboardExtras';
 import ActivityHero from './ActivityHero';
-import PhaseCard from './PhaseCard';
-import NextRaceCard from './NextRaceCard';
-import TodayTile from './TodayTile';
+import MetricConsole from './MetricConsole';
 import CoachCard from './CoachCard';
 import DailyNoteCard from './DailyNoteCard';
 import WellnessSection, { WellnessSkeleton } from './wellness/WellnessSection';
@@ -57,37 +54,8 @@ export default async function DashboardBody() {
         </Link>
       </div>
 
-      {/* Metric strip — phase · next race · readiness. 1-col on mobile, 3-up md+. */}
-      <div className="grid grid-cols-1 md:grid-cols-[1.25fr_1fr_1.2fr] gap-[12px]" style={{ marginBottom: '12px' }}>
-        {d.hasPlanWeek
-          ? <PhaseCard phase={d.weekPhase} weekNumber={d.weekNumber} weeksTotal={d.weeksTotal}
-              purpose={d.weekPurpose} segments={d.phaseSegments} todayPct={d.todayPct} />
-          : d.upcomingBlock
-            ? (
-              <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '15px 17px' }}>
-                <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>Upcoming block</div>
-                <div className="font-display font-semibold text-[19px] text-ink leading-tight mt-[3px]">{d.upcomingBlock.name}</div>
-                <p className="text-[14px] text-stone mt-[4px] mb-auto">
-                  Starts {d.upcomingBlock.startDateStr}
-                  {d.upcomingBlock.daysToStart > 0 && ` · in ${d.upcomingBlock.daysToStart} day${d.upcomingBlock.daysToStart === 1 ? '' : 's'}`}
-                </p>
-              </div>
-            )
-            : (
-              <div className="border border-fog rounded-[16px] bg-paper flex flex-col" style={{ padding: '15px 17px' }}>
-                <div className="text-[11px] uppercase font-bold text-stone" style={{ letterSpacing: '.06em' }}>Plan</div>
-                <p className="text-[15px] text-stone mt-2 mb-auto">No active training block.</p>
-              </div>
-            )}
-
-        {d.nextRace
-          ? <NextRaceCard {...d.nextRace} />
-          : <NextRaceCard name="No race scheduled" daysTo={null} dateStr={null} priority={null} />}
-
-        <Suspense fallback={<CardSkeleton header="Today" bodyHeight={148} />}>
-          <TodayTile calorieTarget={d.calorieTarget} canEdit={d.canEdit} />
-        </Suspense>
-      </div>
+      {/* Status console — Plan · Readiness · Vitals */}
+      <MetricConsole d={d} />
 
       {/* Week strip */}
       <WeekStrip days={d.windowDays} />
