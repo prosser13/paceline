@@ -11,22 +11,17 @@ import type { DashboardData } from './data';
 const RACE_WEEK_DAYS = 7;
 const PAD = { padding: '14px 15px' } as const;
 
+// The Base/Build/Taper progress bar with a "today" marker. The current phase is
+// named (and colour-matched) in the field's eyebrow, so no separate legend.
 function PhaseBottom({ segments, todayPct }: { segments: DashboardData['phaseSegments']; todayPct: number | null }) {
-  const legend: { phase: string; color: string }[] = [];
-  for (const s of segments) if (!legend.some(l => l.phase === s.phase)) legend.push({ phase: s.phase, color: PHASE_COLOR[s.phase] ?? '#8a857a' });
   return (
-    <div style={{ marginTop: 'auto', paddingTop: '14px' }}>
-      <div className="relative" style={{ marginBottom: '9px' }}>
-        <div className="flex overflow-hidden" style={{ height: '9px', borderRadius: '5px' }}>
-          {segments.length > 0
-            ? segments.map((s, i) => <div key={i} style={{ flex: s.pct, background: PHASE_COLOR[s.phase] ?? '#8a857a' }} />)
-            : <div style={{ flex: 1, background: '#cfc9bd' }} />}
-        </div>
-        {todayPct != null && <div style={{ position: 'absolute', top: '-4px', bottom: '-4px', left: `${todayPct}%`, width: '2px', background: 'var(--color-ink)' }} />}
+    <div className="relative" style={{ marginTop: 'auto', paddingTop: '14px' }}>
+      <div className="flex overflow-hidden" style={{ height: '9px', borderRadius: '5px' }}>
+        {segments.length > 0
+          ? segments.map((s, i) => <div key={i} style={{ flex: s.pct, background: PHASE_COLOR[s.phase] ?? '#8a857a' }} />)
+          : <div style={{ flex: 1, background: '#cfc9bd' }} />}
       </div>
-      <div className="flex text-[11px] font-semibold" style={{ gap: '13px' }}>
-        {legend.map(l => <span key={l.phase}><span style={{ color: l.color }}>●</span> {l.phase}</span>)}
-      </div>
+      {todayPct != null && <div style={{ position: 'absolute', top: '10px', bottom: '-4px', left: `${todayPct}%`, width: '2px', background: 'var(--color-ink)' }} />}
     </div>
   );
 }
@@ -38,9 +33,10 @@ export default function PlanField({ d }: { d: DashboardData }) {
   // Race week — count down to the start line.
   if (isRaceWeek && nr && nr.daysTo != null) {
     const days = nr.daysTo;
+    const raceAccent = (d.weekPhase && PHASE_COLOR[d.weekPhase]) || 'var(--color-race)';
     return (
       <div className="flex flex-col h-full" style={PAD}>
-        <div className="text-[11px] uppercase font-bold text-race" style={{ letterSpacing: '.06em' }}>
+        <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: raceAccent }}>
           Race week{d.weekPhase ? ` · ${d.weekPhase}` : ''}
         </div>
         <div className="font-display font-bold text-[18px] leading-[1.12]" style={{ marginTop: '5px' }}>{nr.name}</div>
