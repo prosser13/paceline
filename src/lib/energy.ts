@@ -18,6 +18,10 @@ export interface EnergySession {
   estimated_duration?: string | null;   // "H:MM"
   distance_km?: number | null;
   status?: string | null;
+  // Logged actuals — present once the session is completed. They override the plan
+  // so the target reflects what was actually done (ran longer/shorter than planned).
+  actualDurationMins?: number | null;
+  actualDistanceKm?: number | null;
 }
 
 export interface CalorieTarget {
@@ -80,11 +84,14 @@ export function sessionKcal(session: EnergySession, weightKg: number | null): nu
   const sport = resolveSport(session);
   const band = bandOf(session.intensity);
 
-  let hours = durationToHours(session.estimated_duration);
+  // Prefer the logged actual duration once the session is done; else the plan.
+  let hours = session.actualDurationMins != null && session.actualDurationMins > 0
+    ? session.actualDurationMins / 60
+    : durationToHours(session.estimated_duration);
   if (hours == null) {
-    // Fallback: derive from planned distance for run/ride; a small default for
-    // strength/yoga; otherwise no contribution.
-    const km = session.distance_km != null ? Number(session.distance_km) : null;
+    // Fallback: derive from distance (actual if logged, else planned) for run/ride;
+    // a small default for strength/yoga; otherwise no contribution.
+    const km = session.actualDistanceKm ?? (session.distance_km != null ? Number(session.distance_km) : null);
     if ((sport === 'run' || sport === 'cycling') && km && km > 0) {
       hours = km / (sport === 'run' ? RUN_KMH[band] : RIDE_KMH[band]);
     } else if (sport === 'strength' || sport === 'yoga') {
