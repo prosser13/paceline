@@ -12,6 +12,7 @@ import DailyNoteCard from './DailyNoteCard';
 import WellnessSection, { WellnessSkeleton } from './wellness/WellnessSection';
 import StandoutsBannerAsync from './wellness/StandoutsBannerAsync';
 import LifestyleInsightAsync from './wellness/LifestyleInsightAsync';
+import CalorieCheckAsync from './CalorieCheckAsync';
 import { fmtDate } from '@/lib/dates';
 
 // Shared section label — the mockup's `.seclab` (13px, uppercase, 700).
@@ -72,6 +73,12 @@ export default async function DashboardBody() {
       {/* Bright spots — dismissible positive-standouts banner */}
       <Suspense fallback={null}>
         <StandoutsBannerAsync />
+      </Suspense>
+
+      {/* Calorie-model calibration — dismissible flag when a to-plan session's
+          predicted vs actual calories diverge a lot (early-weeks sanity check). */}
+      <Suspense fallback={null}>
+        <CalorieCheckAsync />
       </Suspense>
 
       {/* From your coach */}

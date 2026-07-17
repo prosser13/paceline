@@ -67,6 +67,12 @@ function metFor(sport: SportKey, band: Band): number {
   return typeof table === 'number' ? table : (table[band] ?? DEFAULT_MET);
 }
 
+// The gross MET for a session's sport × intensity — used by the calorie-calibration
+// check to compare a plan prediction against a ground-truth actual.
+export function sessionMet(session: EnergySession): number {
+  return metFor(resolveSport(session), bandOf(session.intensity));
+}
+
 // "H:MM" (or "MM") → hours. Returns null when unparseable/empty.
 export function durationToHours(d: string | null | undefined): number | null {
   if (!d) return null;
