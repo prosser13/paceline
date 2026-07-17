@@ -34,10 +34,11 @@ export default function PlanField({ d }: { d: DashboardData }) {
   if (isRaceWeek && nr && nr.daysTo != null) {
     const days = nr.daysTo;
     const raceAccent = (d.weekPhase && PHASE_COLOR[d.weekPhase]) || 'var(--color-race)';
+    const wk = d.weekNumber != null && d.weeksTotal != null ? `${d.weekNumber}/${d.weeksTotal}` : null;
     return (
       <div className="flex flex-col h-full" style={PAD}>
         <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: raceAccent }}>
-          Race week{d.weekPhase ? ` · ${d.weekPhase}` : ''}
+          Race week{d.weekPhase ? ` · ${d.weekPhase}` : ''}{wk ? ` · ${wk}` : ''}
         </div>
         <div className="font-display font-bold text-[18px] leading-[1.12]" style={{ marginTop: '5px' }}>{nr.name}</div>
         <div className="flex items-center gap-2 flex-wrap text-[12.5px] text-stone" style={{ marginTop: '7px' }}>
