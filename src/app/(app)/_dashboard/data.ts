@@ -6,6 +6,8 @@ import { getViewedUser } from '@/lib/impersonation';
 import { getCurrentUser } from '@/lib/auth';
 import { getPendingThresholdSuggestion, type ThresholdCheck } from '@/data/threshold-suggestion';
 import { getPendingPowerSuggestion, type PowerCheck } from '@/data/power-suggestion';
+import { getBmrKcal, getActivityFactor, getLatestBodyweightKg } from '@/data/hydration';
+import { dailyCalorieTarget, type CalorieTarget } from '@/lib/energy';
 import { getWellnessCached } from '@/lib/intervals';
 import {
   getCurrentWeek, getNextRace, getPlanStrengthPriority, listPlanPhaseWeeks, getUpcomingPlan,
@@ -154,6 +156,12 @@ export interface DashboardData {
   // button that would just error.
   pendingThreshold: ThresholdCheck | null;
   pendingPower: PowerCheck | null;
+
+  // Daily calorie target (maintenance base + planned exercise) for the Today tile.
+  calorieTarget: CalorieTarget;
+  // Whether the current viewer can act (owner, not a read-only guest/impersonation).
+  // Reused by the suggestions card and the Today tile's "set base rate" prompt.
+  canEdit: boolean;
 }
 
 function addDays(date: Date, n: number): Date {
@@ -233,6 +241,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     writerUser,
     pendingThresholdRaw,
     pendingPowerRaw,
+    bmrKcal,
+    activityFactor,
+    bodyweightKg,
   ] = await Promise.all([
     getViewedUser(),
     listSessionsBetween(todayStr, weekEndStr),
@@ -255,11 +266,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
     getCurrentUser(),   // the write gate — null for a read-only guest / while impersonating
     getPendingThresholdSuggestion(),
     getPendingPowerSuggestion(),
+    getBmrKcal(),
+    getActivityFactor(),
+    getLatestBodyweightKg(),
   ]);
-  // Only surface the update-prompts to a viewer who can actually Apply/Dismiss them.
-  const canManageSuggestions = !!writerUser;
-  const pendingThreshold = canManageSuggestions ? pendingThresholdRaw : null;
-  const pendingPower = canManageSuggestions ? pendingPowerRaw : null;
+  // Only surface owner-only affordances (Apply/Dismiss, "set base rate") to a viewer
+  // who can actually write. Same gate as the write path (getCurrentUser()).
+  const canEdit = !!writerUser;
+  const pendingThreshold = canEdit ? pendingThresholdRaw : null;
+  const pendingPower = canEdit ? pendingPowerRaw : null;
   // Attach gut-training fuel guidance to any goal-block session in the window.
   for (const s of (windowSessions ?? []) as PlanSession[]) {
     const t = fuelMap.get(s.id);
@@ -581,6 +596,15 @@ export async function loadDashboardData(): Promise<DashboardData> {
     }
   }
 
+  // Daily calorie target — maintenance base (BMR × activity factor) + today's
+  // planned exercise. Pure compute over already-loaded sessions + latest weight.
+  const calorieTarget = dailyCalorieTarget({
+    bmr: bmrKcal,
+    activityFactor,
+    weightKg: bodyweightKg,
+    sessions: todaySessions,
+  });
+
   return {
     firstName, greeting: greet(), todayFull, todayStr,
     todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted, todayCompletedById,
@@ -603,6 +627,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     coachMessages,
     dailyNote,
     pendingThreshold, pendingPower,
+    calorieTarget, canEdit,
   };
 }
 

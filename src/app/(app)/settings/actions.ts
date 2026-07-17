@@ -16,7 +16,7 @@ import {
 import { setProgressionMode } from '@/data/strength-progression';
 import type { ProgressionMode } from '@/data/strength-progression-rules';
 import { setHomeLocation, setOverrideLocation, clearOverrideLocation } from '@/data/weather-config';
-import { setSweatSodium, setGutCap } from '@/data/hydration';
+import { setSweatSodium, setGutCap, setBmrKcal, setActivityFactor } from '@/data/hydration';
 import {
   enableGuestAccess, disableGuestAccess, rotatePassword as rotateGuestPasswordData,
   rotateLinkToken, setSessionHours as setGuestSessionHoursData,
@@ -78,6 +78,29 @@ export async function saveGutCap(ml: string): Promise<{ ok: boolean; error?: str
   await setGutCap(n);
   revalidatePath('/settings');
   revalidatePath('/races', 'layout');
+  return { ok: true };
+}
+
+// Save the athlete's base metabolic rate (kcal/day) — the base of the dashboard's
+// daily calorie target. Revalidates the dashboard so the Today tile refreshes.
+export async function saveBmr(kcal: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const n = Number(kcal);
+  if (!Number.isFinite(n) || n <= 0) return { ok: false, error: 'Enter a positive value' };
+  await setBmrKcal(n);
+  revalidatePath('/settings');
+  revalidatePath('/');
+  return { ok: true };
+}
+
+// Save the daily-living activity factor (BMR multiplier for non-exercise activity).
+export async function saveActivity(factor: string): Promise<{ ok: boolean; error?: string }> {
+  await requireUser();
+  const n = Number(factor);
+  if (!Number.isFinite(n) || n < 1 || n > 2.5) return { ok: false, error: 'Enter 1.0–2.5' };
+  await setActivityFactor(n);
+  revalidatePath('/settings');
+  revalidatePath('/');
   return { ok: true };
 }
 

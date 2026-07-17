@@ -2,7 +2,7 @@ import { loadWellness } from './data';
 
 // Load balance (ACWR) trend card — acute:chronic load ratio from intervals.icu
 // (ATL ÷ CTL). Sweet spot 0.8–1.3; above ≈ ramping fast. Its own <Suspense> via
-// the cached wellness read, like ReadinessTile.
+// the cached wellness read, like TodayTile.
 export default async function AcwrTile() {
   const { fitnessForm } = await loadWellness();
   const ctl = fitnessForm?.fitness ?? null; // chronic (fitness)
