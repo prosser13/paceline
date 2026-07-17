@@ -39,10 +39,11 @@ export function YogaDetailTable({ poses }: { poses: YogaPose[] }) {
 // in EMBER and expands to the flow's poses. Yoga has no active-session flow, so
 // it is display-only (completion comes from a matched Strava activity).
 export default function YogaRow({
-  short, date, focus, duration, today, done, missed = false, note, poses = [], compact = false, emphasis = false, next = false,
+  short, date, focus, duration, today, done, missed = false, note, poses = [], compact = false, emphasis = false, next = false, kcal = null,
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
   today?: boolean; done?: boolean; missed?: boolean; note?: string | null; poses?: YogaPose[]; compact?: boolean; emphasis?: boolean; next?: boolean;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = poses.length > 0;
@@ -88,6 +89,7 @@ export default function YogaRow({
         <div className="shrink-0 text-right w-[78px]">
           <div className="font-display font-semibold text-[19px] leading-none text-ink">{durStr ?? '—'}</div>
           {hasDetail && <div className="font-mono text-[12px] text-stone mt-[3px]">{poses.length} poses</div>}
+          {kcal && <div className="font-mono text-[12px] text-stone mt-[1px]">{kcal}</div>}
         </div>
       </div>
 

@@ -159,6 +159,8 @@ export interface DashboardData {
 
   // Daily calorie target (maintenance base + planned exercise) for the Today tile.
   calorieTarget: CalorieTarget;
+  // Latest bodyweight (kg) — for per-session calorie labels on the agenda/heroes.
+  bodyweightKg: number | null;
   // Whether the current viewer can act (owner, not a read-only guest/impersonation).
   // Reused by the suggestions card and the Today tile's "set base rate" prompt.
   canEdit: boolean;
@@ -633,7 +635,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     coachMessages,
     dailyNote,
     pendingThreshold, pendingPower,
-    calorieTarget, canEdit,
+    calorieTarget, canEdit, bodyweightKg,
   };
 }
 

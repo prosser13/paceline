@@ -105,6 +105,23 @@ export function sessionKcal(session: EnergySession, weightKg: number | null): nu
   return netMet * weightKg * hours;
 }
 
+// A per-session calorie label for the activity rows/heroes: the actual burn once
+// the session is completed (a real duration/distance is logged), otherwise the
+// estimate off the plan (prefixed "≈"). Null when there's no weight or the estimate
+// is zero. `completed` carries the logged actuals (mins / distanceKm) when done.
+export function kcalLabel(
+  session: EnergySession,
+  completed: { mins?: number | null; distanceKm?: number | null } | null | undefined,
+  weightKg: number | null,
+): string | null {
+  if (!weightKg || weightKg <= 0) return null;
+  const done = !!completed && (completed.mins != null || completed.distanceKm != null);
+  const s = done ? { ...session, actualDurationMins: completed!.mins ?? null, actualDistanceKm: completed!.distanceKm ?? null } : session;
+  const k = Math.round(sessionKcal(s, weightKg));
+  if (!(k > 0)) return null;
+  return `${done ? '' : '≈ '}${k.toLocaleString('en-GB')} kcal`;
+}
+
 // The day's calorie target. `sessions` should be today's non-rest sessions; rest
 // rows are filtered here defensively too.
 export function dailyCalorieTarget(opts: {

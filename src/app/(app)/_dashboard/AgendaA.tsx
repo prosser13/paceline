@@ -7,6 +7,7 @@
 
 import { Fragment, Suspense } from 'react';
 import { intraDayOrder } from '@/lib/session-order';
+import { kcalLabel } from '@/lib/energy';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import ActivityHero from './ActivityHero';
 import RunWeatherAsync from './RunWeatherAsync';
@@ -27,17 +28,22 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export default function AgendaA({ d }: { d: DashboardData }) {
   const todayDone = !!d.todayCompleted;
+  // Per-session calorie label — actual once done, else estimated off the plan.
+  const kcalFor = (s: PlanSession, done: boolean) => {
+    const c = done ? d.todayCompletedById[s.id] : null;
+    return kcalLabel(s, c ? { mins: c.mins, distanceKm: c.distanceKm } : null, d.bodyweightKg);
+  };
   const strengthBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <StrengthHero label={label} planSessionId={s.id} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
       exercises={(s.structure as unknown as StrengthEx[] | null) ?? []} done={done}
-      perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} />
+      perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} kcal={kcalFor(s, done)} />
   ) : null;
   const yogaBlock = (s: PlanSession | null, label: string, done = false) => s ? (
     <YogaHero label={label} focus={s.description ?? null}
       duration={s.estimated_duration ?? null} note={s.rationale ?? null}
       poses={(s.structure as unknown as YogaPose[] | null) ?? []} done={done}
-      planSessionId={s.id} perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} />
+      planSessionId={s.id} perceivedEffort={d.todayCompletedById[s.id]?.perceivedEffort ?? null} kcal={kcalFor(s, done)} />
   ) : null;
 
   // The day's activity hero — a ride or a run (shared ActivityHero). The run
@@ -121,7 +127,7 @@ export default function AgendaA({ d }: { d: DashboardData }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mb-[18px]">
               {tmrw.map(s => (
                 <TomorrowCard key={s.id} session={s}
-                  zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} swimZones={d.swimZones} />
+                  zones={d.zones} hrZones={d.hrZones} powerZones={d.powerZones} bikeHrZones={d.bikeHrZones} swimZones={d.swimZones} bodyweightKg={d.bodyweightKg} />
               ))}
             </div>
           );

@@ -15,6 +15,7 @@ import { sessionTss } from '@/lib/run-tss';
 import { todayISO } from '@/lib/dates';
 import { getFuelPlanForGoalBlock, type FuelTarget } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
+import { getLatestBodyweightKg } from '@/data/hydration';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
 import type { SwimPaceZoneMap } from '@/lib/swim';
@@ -96,6 +97,7 @@ export interface PlanData {
     bikeHrZones: BikeHrZoneMap;
     swimZones: SwimPaceZoneMap;
     fuelProducts: FuelProduct[];
+    bodyweightKg: number | null;
   };
 }
 
@@ -144,7 +146,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
 
   // Wave 1: everything not scoped to a single plan (plans list resolves which plan
   // the page views). Weeks are tiny (~1 row/week) so we keep the full read.
-  const [weeks, thresholdPaceRaw, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, swimZoneRows, plans, manualMatches, fuelMap, fuelProducts] = await Promise.all([
+  const [weeks, thresholdPaceRaw, paceZones, hrZonesRows, powerZoneRows, bikeHrZoneRows, swimZoneRows, plans, manualMatches, fuelMap, fuelProducts, bodyweightKg] = await Promise.all([
     listWeeksByNumber(),
     getThresholdPace(),
     listPaceZones(),
@@ -156,6 +158,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
     listUserMatches(),
     getFuelPlanForGoalBlock(todayStr),
     listFuelProducts(),
+    getLatestBodyweightKg(),
   ]);
 
   // Resolve the viewed plan up front so wave 2 only fetches its sessions +
@@ -359,6 +362,7 @@ export async function loadPlanData(planParam: string | undefined): Promise<PlanD
       bikeHrZones,
       swimZones,
       fuelProducts,
+      bodyweightKg,
     },
   };
 }

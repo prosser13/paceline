@@ -25,7 +25,7 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default function SessionHero({
   label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false, defaultOpen,
-  fuelProducts = [],
+  fuelProducts = [], kcal = null,
 }: {
   label: string;
   session: PlanSession;
@@ -38,6 +38,7 @@ export default function SessionHero({
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
   defaultOpen?: boolean;  // override the open state (post-race lead: show splits up front)
   fuelProducts?: FuelProduct[];   // for the inline long-run fuel log
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   // A merged run (two separate activities stitched into one session) has no valid
@@ -98,6 +99,7 @@ export default function SessionHero({
   const chips = [
     cap(intensity),
     paceLabel,
+    kcal,
     // Gut-training fuel guidance on the planned hero (7B).
     !isDone && session.fuel_target ? fuelTargetLabel(session.fuel_target) : null,
     isDone && completed?.perceivedEffort != null ? `RPE ${completed.perceivedEffort}/10` : null,

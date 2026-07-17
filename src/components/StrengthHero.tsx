@@ -14,11 +14,12 @@ import { startPlannedSession } from '@/app/(app)/strength/actions';
 // headline, a Start pill, and an expandable exercise table. Done sessions show a
 // ✓ and drop the Start button.
 export default function StrengthHero({
-  planSessionId, focus, duration, note, exercises, done = false, perceivedEffort = null,
+  planSessionId, focus, duration, note, exercises, done = false, perceivedEffort = null, kcal = null,
 }: {
   label?: string; planSessionId: string; focus: string | null; duration: string | null;
   note: string | null; exercises: StrengthEx[]; done?: boolean;
   perceivedEffort?: number | null;   // manual RPE (7B) — scale shows when done
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -46,6 +47,7 @@ export default function StrengthHero({
                 {done ? 'Strength · done ✓' : `Strength${shortFocus ? ` · ${shortFocus}` : ''}`}
               </div>
               <div className="font-display font-bold text-[24px] leading-tight" style={{ marginTop: '3px' }}>{headline}</div>
+              {kcal && <div className="text-[12px] font-semibold text-stone" style={{ marginTop: '2px' }}>{kcal}</div>}
             </div>
             <svg className="shrink-0 text-stone" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>

@@ -92,7 +92,7 @@ export default function RunRow({
   today = false, next = false, done = false, missed = false,
   emphasis = false,
   isExpanded, onToggle,
-  fuelProducts = [],
+  fuelProducts = [], kcal = null,
 }: {
   session: RunRowSession;
   zones: ZoneMap;
@@ -107,6 +107,7 @@ export default function RunRow({
   isExpanded?: boolean;
   onToggle?: () => void;
   fuelProducts?: FuelProduct[];
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [openLocal, setOpenLocal] = useState(false);
   const open = isExpanded ?? openLocal;
@@ -294,7 +295,7 @@ export default function RunRow({
           {/* Desktop: graph / vs-plan in its own column, vertically centred. */}
           <div className="hidden sm:flex items-center self-stretch shrink-0">{renderSlot('sm')}</div>
 
-          <MetricBlock duration={displayDuration} distanceKm={null} tss={displayTss} estimated={!done} />
+          <MetricBlock duration={displayDuration} distanceKm={null} tss={displayTss} estimated={!done} kcal={kcal} />
         </div>
       </div>
 

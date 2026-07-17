@@ -32,7 +32,7 @@ function parseDurMins(str: string | null | undefined): number | null {
 // with the colour-coded profile graph, plan-vs-actual table and segment targets.
 export default function CyclingHero({
   session, powerZones, bikeHrZones, completed = null, light = false,
-  planSessionId = null, perceivedEffort = null,
+  planSessionId = null, perceivedEffort = null, kcal = null,
 }: {
   label?: string;   // accepted for a uniform hero interface; unused here
   session: {
@@ -47,6 +47,7 @@ export default function CyclingHero({
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
   planSessionId?: string | null;      // enables the manual RPE scale when done (7B)
   perceivedEffort?: number | null;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const isDone = !!completed;
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -70,7 +71,7 @@ export default function CyclingHero({
 
   const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
   const big = isDone ? (completed!.durationStr || duration || '—') : (duration ?? '—');
-  const chips = [session.description].filter(Boolean) as string[];
+  const chips = [session.description, kcal].filter(Boolean) as string[];
   const stats = isDone
     ? [{ v: completed!.avgPower != null ? `${completed!.avgPower} W` : '—', l: 'power' }, { v: completed!.tss != null ? `${completed!.tss}` : '—', l: 'TSS' }]
     : [

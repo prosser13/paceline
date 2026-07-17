@@ -88,7 +88,7 @@ export function CyclingSegmentDetail({ segments, actual = null, variant = 'row' 
 // Used on the plan page (with a day column) and, via the compact variant, on the
 // dashboard.
 export default function CyclingRow({
-  session, powerZones, bikeHrZones, today, done, missed = false, completed = null, emphasis = false, next = false,
+  session, powerZones, bikeHrZones, today, done, missed = false, completed = null, emphasis = false, next = false, kcal = null,
 }: {
   short?: string;          // accepted for back-compat; the row no longer uses a day column
   date?: string;
@@ -104,6 +104,7 @@ export default function CyclingRow({
   compact?: boolean;
   centeredGlyph?: boolean;   // glyph as a vertically-centred left column (dashboard) vs inline (plan)
   emphasis?: boolean;        // roomier row (tomorrow card on the dashboard)
+  kcal?: string | null;      // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -194,6 +195,7 @@ export default function CyclingRow({
             {dispTss != null && (
               <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
             )}
+            {kcal && <div className="font-mono font-medium text-[13px] text-stone mt-[2px]">{kcal}</div>}
           </div>
         </div>
       </div>

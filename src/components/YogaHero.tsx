@@ -15,12 +15,13 @@ import { startPlannedSession } from '@/app/(app)/strength/actions';
 // player. When done it shows the ✓ + a manual RPE scale (completion still comes
 // from a matched Strava activity).
 export default function YogaHero({
-  label, focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null,
+  label, focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null, kcal = null,
 }: {
   label: string; focus: string | null; duration: string | null;
   note: string | null; poses: YogaPose[]; done?: boolean;
   planSessionId?: string | null;      // enables Start (when planned) + the RPE scale (when done)
   perceivedEffort?: number | null;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -74,6 +75,7 @@ export default function YogaHero({
           <div className="shrink-0 text-right">
             <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
             <div className="font-mono text-[14px] text-stone mt-[3px]">{poses.length} poses</div>
+            {kcal && <div className="font-mono text-[13px] text-stone mt-[1px]">{kcal}</div>}
           </div>
         </div>
 

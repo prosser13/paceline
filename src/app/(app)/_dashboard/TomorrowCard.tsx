@@ -14,6 +14,7 @@ import { SwimSegmentDetail } from '@/components/SwimRow';
 import { StrengthDetailTable, type StrengthEx } from '@/components/StrengthRow';
 import { RunGlyph, BikeGlyph, SwimGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
 import { RUN, RIDE, SWIM, STRENGTH, YOGA } from '@/lib/colors';
+import { kcalLabel } from '@/lib/energy';
 import type { PlanSession } from './data';
 
 const SPORT = {
@@ -27,7 +28,7 @@ const SPORT = {
 const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
 
 export default function TomorrowCard({
-  session, zones, hrZones, powerZones, bikeHrZones, swimZones,
+  session, zones, hrZones, powerZones, bikeHrZones, swimZones, bodyweightKg = null,
 }: {
   session: PlanSession;
   zones: ZoneMap;
@@ -35,6 +36,7 @@ export default function TomorrowCard({
   powerZones: PowerZoneMap;
   bikeHrZones: BikeHrZoneMap;
   swimZones: SwimPaceZoneMap;
+  bodyweightKg?: number | null;
 }) {
   const sport = resolveSport(session);
   const spec = SPORT[sport as keyof typeof SPORT] ?? SPORT.run;
@@ -94,6 +96,10 @@ export default function TomorrowCard({
       );
     }
   }
+
+  // Upcoming → estimated calories, appended to the descriptor line.
+  const kcal = kcalLabel(session, null, bodyweightKg);
+  if (kcal) sub = sub ? `${sub} · ${kcal}` : kcal;
 
   return (
     <details className="group border border-fog rounded-[16px] bg-paper [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden" style={{ padding: '18px 22px', borderLeft: `6px solid ${spec.color}` }}>
