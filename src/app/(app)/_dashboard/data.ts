@@ -597,12 +597,18 @@ export async function loadDashboardData(): Promise<DashboardData> {
   }
 
   // Daily calorie target — maintenance base (BMR × activity factor) + today's
-  // planned exercise. Pure compute over already-loaded sessions + latest weight.
+  // exercise. Uses each session's LOGGED actuals once it's completed (so running
+  // longer/shorter than planned moves the number), falling back to the plan for
+  // sessions not yet done. Pure compute over already-loaded data + latest weight.
+  const calorieSessions = todaySessions.map(s => {
+    const c = todayCompletedById[s.id];
+    return c ? { ...s, actualDurationMins: c.mins, actualDistanceKm: c.distanceKm } : s;
+  });
   const calorieTarget = dailyCalorieTarget({
     bmr: bmrKcal,
     activityFactor,
     weightKg: bodyweightKg,
-    sessions: todaySessions,
+    sessions: calorieSessions,
   });
 
   return {
