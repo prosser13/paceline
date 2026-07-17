@@ -18,25 +18,21 @@ function FuelTarget({ target, canEdit }: { target: CalorieTarget; canEdit: boole
   const muted = 'rgba(243,241,234,.7)';
   return (
     <div style={{ marginTop: 11, paddingTop: 10, borderTop: '1px solid rgba(243,241,234,.14)' }}>
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: muted }}>Fuel target</span>
-        {target.hasBmr ? (
-          <span className="font-display font-bold text-[20px] leading-none tabular-nums">
+      {target.hasBmr ? (
+        <>
+          <div className="font-display font-bold text-[20px] leading-none tabular-nums">
             {kcal(target.total)}<span className="text-[11px] font-semibold" style={{ color: muted }}> kcal</span>
-          </span>
-        ) : canEdit ? (
-          <a href="/settings?tab=training" className="text-[11.5px] font-semibold underline" style={{ color: '#8fb3e0' }}>Set base rate →</a>
-        ) : (
-          <span className="text-[16px]" style={{ color: muted }}>—</span>
-        )}
-      </div>
-      {target.hasBmr && (
-        <div className="text-[11px] mt-[6px] leading-[1.4]" style={{ color: 'rgba(243,241,234,.72)' }}>
-          Base {kcal(target.base)}
-          {target.exercise > 0 ? ` · +${kcal(target.exercise)} training`
-            : !target.hasWeight ? ' · training needs a weight'
-            : ' · rest day'}
-        </div>
+          </div>
+          <div className="text-[11px] mt-[5px] leading-[1.4]" style={{ color: 'rgba(243,241,234,.72)' }}>
+            Base{target.exercise > 0 ? ` + ${kcal(target.exercise)} training`
+              : !target.hasWeight ? ' · training needs a weight'
+              : ' · rest day'}
+          </div>
+        </>
+      ) : canEdit ? (
+        <a href="/settings?tab=training" className="text-[11.5px] font-semibold underline" style={{ color: '#8fb3e0' }}>Set base rate →</a>
+      ) : (
+        <span className="text-[16px]" style={{ color: muted }}>—</span>
       )}
     </div>
   );
@@ -65,11 +61,11 @@ export default async function TodayTile({ calorieTarget, canEdit }: { calorieTar
   return (
     <div className="rounded-[16px] h-full flex flex-col bg-hero text-onhero" style={{ padding: '14px 16px' }}>
       <div className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-[8px]">
-          <span className="font-display font-bold text-[30px] leading-none tabular-nums">{adj}</span>
-          <span className="font-display font-bold text-[16px]" style={{ color: '#43bd9e' }}>{band}</span>
-        </div>
         <span className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: 'rgba(243,241,234,.7)' }}>Today</span>
+        <div className="flex items-baseline gap-[8px]">
+          <span className="font-display font-bold text-[16px]" style={{ color: '#43bd9e' }}>{band}</span>
+          <span className="font-display font-bold text-[30px] leading-none tabular-nums">{adj}</span>
+        </div>
       </div>
 
       <div className="relative rounded-[5px] overflow-hidden" style={{ height: 8, marginTop: 11, background: '#3a382f' }}>
