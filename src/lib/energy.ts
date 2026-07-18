@@ -34,15 +34,23 @@ export interface CalorieTarget {
 
 export const DEFAULT_ACTIVITY_FACTOR = 1.3;
 
+// Gross energy cost of running per kg per km (~pace-independent). Used by the
+// calorie-calibration check as the ground-truth "actual" for runs.
+export const RUN_GROSS_KCAL_PER_KG_KM = 1.036;
+
 // METs by sport × intensity band. Approximate Compendium-of-Physical-Activities
 // values; the intensity keys are the real values stored on plan_sessions
 // (recovery/easy/steady/tempo/hard/race/mobility/null). Strength & yoga are flat
 // (intensity doesn't map to them meaningfully).
 type Band = 'recovery' | 'easy' | 'steady' | 'tempo' | 'hard' | 'race';
+// Recalibrated 2026-07 against ground truth (power for rides, distance-cost for
+// runs), which showed the previous run values ~45% low and cycling ~30% low for a
+// trained athlete. The calorie_samples table records predicted-vs-actual for each
+// to-plan session so these can be tuned further from data over time.
 const MET: Record<SportKey, Record<Band, number> | number> = {
-  run:      { recovery: 7.0, easy: 8.5, steady: 9.8, tempo: 11.0, hard: 12.8, race: 13.3 },
-  cycling:  { recovery: 4.5, easy: 6.0, steady: 8.0, tempo: 10.0, hard: 11.5, race: 12.0 },
-  swimming: { recovery: 5.5, easy: 7.0, steady: 8.3, tempo: 9.5,  hard: 10.5, race: 11.0 },
+  run:      { recovery: 9.0, easy: 11.0, steady: 12.5, tempo: 13.8, hard: 15.0, race: 16.0 },
+  cycling:  { recovery: 5.5, easy: 7.5,  steady: 9.0,  tempo: 10.5, hard: 12.0, race: 13.0 },
+  swimming: { recovery: 5.5, easy: 7.0,  steady: 8.3,  tempo: 9.5,  hard: 10.5, race: 11.0 },
   strength: 4.5,
   yoga:     2.6,
 };
@@ -65,6 +73,12 @@ function bandOf(intensity: string | null | undefined): Band {
 function metFor(sport: SportKey, band: Band): number {
   const table = MET[sport];
   return typeof table === 'number' ? table : (table[band] ?? DEFAULT_MET);
+}
+
+// The gross MET for a session's sport × intensity — used by the calorie-calibration
+// check to compare a plan prediction against a ground-truth actual.
+export function sessionMet(session: EnergySession): number {
+  return metFor(resolveSport(session), bandOf(session.intensity));
 }
 
 // "H:MM" (or "MM") → hours. Returns null when unparseable/empty.
@@ -103,6 +117,23 @@ export function sessionKcal(session: EnergySession, weightKg: number | null): nu
 
   const netMet = Math.max(0, metFor(sport, band) - 1);   // net of resting
   return netMet * weightKg * hours;
+}
+
+// A per-session calorie label for the activity rows/heroes: the actual burn once
+// the session is completed (a real duration/distance is logged), otherwise the
+// estimate off the plan (prefixed "≈"). Null when there's no weight or the estimate
+// is zero. `completed` carries the logged actuals (mins / distanceKm) when done.
+export function kcalLabel(
+  session: EnergySession,
+  completed: { mins?: number | null; distanceKm?: number | null } | null | undefined,
+  weightKg: number | null,
+): string | null {
+  if (!weightKg || weightKg <= 0) return null;
+  const done = !!completed && (completed.mins != null || completed.distanceKm != null);
+  const s = done ? { ...session, actualDurationMins: completed!.mins ?? null, actualDistanceKm: completed!.distanceKm ?? null } : session;
+  const k = Math.round(sessionKcal(s, weightKg));
+  if (!(k > 0)) return null;
+  return `${done ? '' : '≈ '}${k.toLocaleString('en-GB')} kcal`;
 }
 
 // The day's calorie target. `sessions` should be today's non-rest sessions; rest

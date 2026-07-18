@@ -40,7 +40,7 @@ export function SwimSegmentDetail({ segments, variant = 'row' }: {
 // (e.g. 5×100m drills / 4×100m Z2). Used on the plan page and, via the compact
 // variant, on the dashboard.
 export default function SwimRow({
-  session, swimZones, today, done, missed = false, completed = null, emphasis = false, next = false,
+  session, swimZones, today, done, missed = false, completed = null, emphasis = false, next = false, kcal = null,
 }: {
   next?: boolean;
   missed?: boolean;
@@ -52,6 +52,7 @@ export default function SwimRow({
   completed?: { durationMins?: number | null; distanceKm?: number | null; tss?: number | null; avgHr?: number | null } | null;
   compact?: boolean;
   emphasis?: boolean;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const segments = normalizeSwimStructure(session.structure, swimZones);
@@ -110,6 +111,7 @@ export default function SwimRow({
             {dispTss != null && (
               <div className="font-mono font-medium text-[13px] text-ink mt-[2px]">{isDone ? '' : '~'}{dispTss} TSS</div>
             )}
+            {kcal && <div className="font-mono font-medium text-[13px] text-stone mt-[2px]">{kcal}</div>}
           </div>
         </div>
       </div>

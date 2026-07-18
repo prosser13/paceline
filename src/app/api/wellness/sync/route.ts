@@ -19,6 +19,7 @@ import { listUsersWithIntegrations, getTelegramChatId } from '@/data/user-integr
 import { writeBenchmarkSnapshot } from '@/data/benchmarks';
 import { runThresholdCheck } from '@/data/threshold-suggestion';
 import { runPowerCheck } from '@/data/power-suggestion';
+import { recordCalorieSamples } from '@/data/calorie-check';
 import { claimDailyAlert } from '@/data/sync-alerts';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 import { todayISO } from '@/lib/dates';
@@ -47,6 +48,7 @@ async function syncOneUser(): Promise<{ ok: boolean; days: number; latest: strin
   await writeBenchmarkSnapshot(today);
   await runThresholdCheck(today);
   await runPowerCheck(today);
+  await recordCalorieSamples(today);
   return { ...result, rpe_updated: rpe.updated };
 }
 

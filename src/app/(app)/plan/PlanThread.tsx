@@ -200,11 +200,12 @@ interface Props {
   bikeHrZones: BikeHrZoneMap;
   swimZones: SwimPaceZoneMap;
   fuelProducts?: import('@/data/fuel').FuelProduct[];
+  bodyweightKg?: number | null;
 }
 
 export default function PlanThread({
   weeks, byWeek, offPlanByDate = {}, manualMatches = [], mergedBySession = {}, todayStr, completedMap, nextSessionId,
-  thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts = [],
+  thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts = [], bodyweightKg = null,
 }: Props) {
   const [showPast, setShowPast] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -288,7 +289,7 @@ export default function PlanThread({
       <SessionRow
         session={session}
         ctx={{
-          thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts,
+          thresholdPace, zones, hrZones, powerZones, bikeHrZones, swimZones, fuelProducts, bodyweightKg,
           completed: completed ?? null,
           today: isFocus,
           next: isNext && !isToday,

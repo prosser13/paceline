@@ -6,6 +6,7 @@
 // TomorrowCard, not through this component.)
 
 import { resolveSport } from '@/lib/sports/registry';
+import { kcalLabel } from '@/lib/energy';
 import StrengthRow, { type StrengthEx } from './StrengthRow';
 import YogaRow, { type YogaPose } from './YogaRow';
 import CyclingRow from './CyclingRow';
@@ -44,6 +45,7 @@ export interface SessionRowContext {
   bikeHrZones: BikeHrZoneMap;
   swimZones: SwimPaceZoneMap;
   fuelProducts?: import('@/data/fuel').FuelProduct[];
+  bodyweightKg?: number | null;
   completed?: RunRowCompleted | null;
   today?: boolean;
   next?: boolean;
@@ -56,6 +58,9 @@ export interface SessionRowContext {
 
 export default function SessionRow({ session, ctx }: { session: SessionRowSession; ctx: SessionRowContext }) {
   const sport = resolveSport(session);
+  // Per-session calorie label — actual once done, else estimated off the plan.
+  const c = ctx.done ? ctx.completed : null;
+  const kcal = kcalLabel(session, c ? { mins: c.durationMins ?? null, distanceKm: c.distanceKm ?? null } : null, ctx.bodyweightKg ?? null);
 
   // Manual RPE lives on completed NON-run rows (runs pull it from Garmin). Appended
   // below the row so it reads as part of the completion, indented to the detail rail.
@@ -77,6 +82,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           note={null}
           exercises={(session.structure as unknown as StrengthEx[] | null) ?? []}
+          kcal={kcal}
         />
       );
     case 'yoga':
@@ -88,6 +94,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           note={session.rationale ?? null}
           poses={(session.structure as unknown as YogaPose[] | null) ?? []}
+          kcal={kcal}
         />
       );
     case 'cycling':
@@ -99,6 +106,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           bikeHrZones={ctx.bikeHrZones}
           today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           completed={ctx.done ? (ctx.completed ?? null) : null}
+          kcal={kcal}
         />
       );
     case 'swimming':
@@ -109,6 +117,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           swimZones={ctx.swimZones}
           today={ctx.today} next={ctx.next} done={ctx.done} missed={ctx.missed}
           completed={ctx.done ? (ctx.completed ?? null) : null}
+          kcal={kcal}
         />
       );
     default:   // run / race
@@ -124,6 +133,7 @@ export default function SessionRow({ session, ctx }: { session: SessionRowSessio
           isExpanded={ctx.isExpanded}
           onToggle={ctx.onToggle}
           fuelProducts={ctx.fuelProducts}
+          kcal={kcal}
         />
       );
   }

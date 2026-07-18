@@ -23,7 +23,7 @@ export interface SwimCompleted {
 // with the per-segment targets. No power/HR profile — swim is distance + pace.
 export default function SwimHero({
   session, swimZones, completed = null, light = false,
-  planSessionId = null, perceivedEffort = null,
+  planSessionId = null, perceivedEffort = null, kcal = null,
 }: {
   label?: string;   // accepted for a uniform hero interface; unused here
   session: {
@@ -37,6 +37,7 @@ export default function SwimHero({
   light?: boolean;
   planSessionId?: string | null;
   perceivedEffort?: number | null;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const isDone = !!completed;
   const segments = normalizeSwimStructure(session.structure, swimZones);
@@ -48,7 +49,7 @@ export default function SwimHero({
   const tssPlanned = session.estimated_tss ?? null;
 
   const big = isDone ? (completed!.durationStr || duration || '—') : (duration ?? '—');
-  const chips = [session.description].filter(Boolean) as string[];
+  const chips = [session.description, kcal].filter(Boolean) as string[];
   const stats = isDone
     ? [
         { v: completed!.avgPaceSec != null ? `${fmtPacePer100(completed!.avgPaceSec)}` : '—', l: '/100m' },

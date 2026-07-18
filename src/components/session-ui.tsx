@@ -453,13 +453,14 @@ const METRIC_SIZE = {
 } as const;
 
 export function MetricBlock({
-  duration, distanceKm, tss, estimated, size = 'sm',
+  duration, distanceKm, tss, estimated, size = 'sm', kcal = null,
 }: {
   duration: string | null;
   distanceKm?: number | null;
   tss: number | null;
   estimated: boolean;
   size?: 'sm' | 'lg';
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const s = METRIC_SIZE[size];
   return (
@@ -475,6 +476,7 @@ export function MetricBlock({
       <div className={`font-mono font-medium text-ink mt-[2px] ${s.tss}`}>
         {tss != null ? `${estimated ? '~' : ''}${tss} TSS` : '— TSS'}
       </div>
+      {kcal && <div className={`font-mono font-medium text-stone mt-[2px] ${s.tss}`}>{kcal}</div>}
     </div>
   );
 }

@@ -64,10 +64,11 @@ export function StrengthDetailTable({ exercises, weightCol = false }: { exercise
 // A strength session row — compact (duration + focus), expandable to the
 // prescribed exercises + an optional note.
 export default function StrengthRow({
-  short, date, focus, duration, today, done, missed = false, note, exercises = [], compact = false, title = 'Strength', next = false, emphasis = false,
+  short, date, focus, duration, today, done, missed = false, note, exercises = [], compact = false, title = 'Strength', next = false, emphasis = false, kcal = null,
 }: {
   short?: string; date?: string; focus: string | null; duration: string | null;
   today?: boolean; done?: boolean; missed?: boolean; note?: string | null; exercises?: StrengthEx[]; compact?: boolean; title?: string; next?: boolean; emphasis?: boolean;
+  kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
   const [open, setOpen] = useState(false);
   const hasDetail = exercises.length > 0;
@@ -108,6 +109,7 @@ export default function StrengthRow({
         </div>
         <div className="shrink-0 text-right w-[78px]">
           <div className={`font-display font-semibold ${emphasis ? 'text-[20px]' : 'text-[19px]'} leading-none text-ink`}>{humanHMM(duration) ?? '—'}</div>
+          {kcal && <div className="font-mono font-medium text-[12.5px] text-stone mt-[2px]">{kcal}</div>}
         </div>
       </div>
 
