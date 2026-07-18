@@ -4,7 +4,7 @@ import { CyclingSegmentDetail } from './CyclingRow';
 import EffortScale from './EffortScale';
 import { BikeGlyph } from './glyphs';
 import { RIDE, RIDE_B, READY } from '@/lib/colors';
-import { CompareTable, buildRideCompare, humanHMM, fmtClock } from './session-ui';
+import { CompareTable, HeroAccordion, heroDeltaColor, signedKcal, buildRideCompare, humanHMM, fmtClock } from './session-ui';
 import {
   normalizeCyclingStructure, sumCyclingMinutes,
   type PowerZoneMap, type BikeHrZoneMap,
@@ -28,11 +28,12 @@ function parseDurMins(str: string | null | undefined): number | null {
 }
 
 // Dashboard hero for a ride — the cycling twin of SessionHero. Dark hero summary
-// (duration headline, descriptor chip, power/TSS stats); light expandable detail
-// with the colour-coded profile graph, plan-vs-actual table and segment targets.
+// (duration headline, power/TSS/kcal stats with plan-vs-actual deltas once done);
+// light expandable detail with the colour-coded profile graph and the plan-vs-actual
+// breakdown collapsed into a "Session breakdown" accordion.
 export default function CyclingHero({
   session, powerZones, bikeHrZones, completed = null, light = false,
-  planSessionId = null, perceivedEffort = null, kcal = null,
+  planSessionId = null, perceivedEffort = null, kcalValue = null, kcalDelta = null,
 }: {
   label?: string;   // accepted for a uniform hero interface; unused here
   session: {
@@ -47,7 +48,8 @@ export default function CyclingHero({
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
   planSessionId?: string | null;      // enables the manual RPE scale when done (7B)
   perceivedEffort?: number | null;
-  kcal?: string | null;   // per-session calorie label (est/actual)
+  kcalValue?: number | null;   // numeric kcal (actual once done, else estimate)
+  kcalDelta?: number | null;   // signed actual−plan kcal, once done
 }) {
   const isDone = !!completed;
   const segments = normalizeCyclingStructure(session.structure, powerZones, bikeHrZones);
@@ -71,16 +73,26 @@ export default function CyclingHero({
 
   const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
   const big = isDone ? (completed!.durationStr || duration || '—') : (duration ?? '—');
-  const chips = [session.description, kcal].filter(Boolean) as string[];
-  const stats = isDone
-    ? [{ v: completed!.avgPower != null ? `${completed!.avgPower} W` : '—', l: 'power' }, { v: completed!.tss != null ? `${completed!.tss}` : '—', l: 'TSS' }]
+  const powerRow = compare?.rows.find(r => r.metric === 'Avg power') ?? null;
+
+  const kcalStat = kcalValue != null
+    ? { v: `${isDone ? '' : '≈ '}${kcalValue.toLocaleString('en-GB')}`, l: 'kcal', delta: isDone && kcalDelta != null ? signedKcal(kcalDelta) : null, tone: 'flat' }
+    : null;
+  const stats: { v: string; l: string; delta?: string | null; tone?: string }[] = isDone
+    ? [
+        { v: completed!.avgPower != null ? `${completed!.avgPower} W` : '—', l: 'power', delta: powerRow?.delta ?? null, tone: powerRow?.tone },
+        { v: completed!.tss != null ? `${completed!.tss}` : '—', l: 'TSS', delta: compare?.overview.tss?.delta ?? null, tone: compare?.overview.tss?.tone },
+        ...(kcalStat ? [kcalStat] : []),
+      ]
     : [
         { v: tssPlanned != null ? `${tssPlanned}` : '—', l: 'TSS' },
         ...(distPlanned != null ? [{ v: kmStr(distPlanned), l: 'km' }] : []),
+        ...(kcalStat ? [kcalStat] : []),
       ];
 
   // Today's hero is the dark focal tile; Recently-completed renders on a light card.
   const accent = light ? RIDE : RIDE_B;
+  const breakdownIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: RIDE }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
 
   return (
     <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
@@ -99,19 +111,21 @@ export default function CyclingHero({
             {/* Scales down on narrow screens so a wide value can't overlap the
                 stats, and stays on one line; caps at 54px on wider viewports. */}
             <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
-            {chips.length > 0 && (
-              <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
-                {chips.map(c => (
-                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
-                ))}
+            {session.description && (
+              <div className="text-[12.5px] mt-[7px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
+            )}
+            {isDone && compare?.overview.dur && (
+              <div className="text-[11.5px] font-bold mt-[6px] tabular-nums" style={{ color: heroDeltaColor(compare.overview.dur.tone, light) }}>
+                {compare.overview.dur.delta === '✓' ? 'on plan' : <>{compare.overview.dur.delta}<span className="font-medium" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.5)' }}> vs plan</span></>}
               </div>
             )}
           </div>
-          <div className="flex shrink-0" style={{ gap: '22px', textAlign: 'right' }}>
+          <div className="flex shrink-0 items-start" style={{ gap: '20px', textAlign: 'right' }}>
             {stats.map((s, i) => (
               <div key={i}>
                 <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
                 <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
+                {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
               </div>
             ))}
           </div>
@@ -121,9 +135,6 @@ export default function CyclingHero({
       <div className={`bg-paper text-ink ${light ? 'border-t border-fog' : ''}`} style={{ padding: '16px 24px 20px' }}>
         {isDone && planSessionId && (
           <div className="mb-[12px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>
-        )}
-        {compare && compare.rows.length > 0 && (
-          <div className="mb-[12px]"><CompareTable rows={compare.rows} bare /></div>
         )}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-[12px] sm:gap-6">
           {session.rationale && (
@@ -139,11 +150,16 @@ export default function CyclingHero({
         </div>
         {segments.length > 0 && (
           <div className="mt-[14px]">
-            <CyclingSegmentDetail
-              segments={segments}
-              actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
-              variant="card"
-            />
+            <HeroAccordion title="Session breakdown" meta={isDone ? 'plan vs actual' : null} icon={breakdownIcon} defaultOpen>
+              {compare && compare.rows.length > 0 && (
+                <div className="mb-[10px]"><CompareTable rows={compare.rows} bare /></div>
+              )}
+              <CyclingSegmentDetail
+                segments={segments}
+                actual={isDone ? { avgPower: completed!.avgPower, avgHr: completed!.avgHr, durationMins: completed!.mins } : null}
+                variant="card"
+              />
+            </HeroAccordion>
           </div>
         )}
       </div>
