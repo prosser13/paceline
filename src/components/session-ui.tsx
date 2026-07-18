@@ -2,10 +2,47 @@
 // segments and metrics. Pure components (no hooks) so they can be used by both
 // the plan page (client) and the dashboard (server) — keeping styling in sync.
 
+import type { ReactNode } from 'react';
 import { segmentPerformance, PERF_COLOR, paceToSeconds, secondsToPace } from '@/lib/plan-structure';
 import type { NormSegment, NormStep, SegmentPerf } from '@/lib/plan-structure';
 import { fmtPower, type CyclingSegment } from '@/lib/cycling';
 import RepeatBlock from './RepeatBlock';
+
+// A window-delta tone → brand text colour. Shared by rows + heroes so plan-vs-actual
+// deltas read the same everywhere (pos = on plan, neg = off, fast = faster in a race).
+export const toneClass = (t?: string) =>
+  (t === 'pos' ? 'text-fern' : t === 'fast' ? 'text-marine' : t === 'neg' ? 'text-ember' : 'text-stone');
+
+// Delta colours for the hero SUMMARY, which sits on the dark Today tile as well as
+// the light Recently-completed card — lighter than the body's fern/ember so they stay
+// legible on the dark surface. `light` picks the muted neutral for each background.
+export const heroDeltaColor = (tone: string | undefined, light: boolean) =>
+  tone === 'pos' ? '#66b878' : tone === 'fast' ? '#5aa0c4' : tone === 'neg' ? '#e0895c'
+    : (light ? '#7d776b' : 'rgba(240,238,230,.6)');
+
+// Signed kcal delta for a hero stat — "+120", "−120", or a ✓ when unchanged.
+export const signedKcal = (d: number) => (d === 0 ? '✓' : `${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('en-GB')}`);
+
+// A collapsible section inside a hero's light detail panel — the "Session breakdown"
+// and "Adjust today" groups. The title fills the row so the chevron and any meta sit
+// flush right, and every accordion's chevron lines up down the card edge.
+export function HeroAccordion({
+  title, meta = null, icon = null, defaultOpen = false, children,
+}: {
+  title: string; meta?: string | null; icon?: ReactNode; defaultOpen?: boolean; children: ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group/acc border-t border-fog">
+      <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer select-none flex items-center gap-[9px] py-[13px] text-[12.5px] font-bold text-ink">
+        {icon}
+        <span className="flex-1 min-w-0">{title}</span>
+        {meta && <span className="text-[11.5px] font-medium text-stone tabular-nums shrink-0">{meta}</span>}
+        <svg className="group-open/acc:rotate-180 transition-transform shrink-0 text-stone" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </summary>
+      <div className="pb-[14px]">{children}</div>
+    </details>
+  );
+}
 
 // Intensity → on-brand colour (drives the profile chart) + nominal zone
 export const INTENSITY: Record<string, { label: string; hex: string; zone: string }> = {

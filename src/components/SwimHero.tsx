@@ -2,7 +2,7 @@ import { SwimSegmentDetail } from './SwimRow';
 import EffortScale from './EffortScale';
 import { SwimGlyph } from './glyphs';
 import { SWIM, SWIM_B, READY } from '@/lib/colors';
-import { humanHMM, fmtClock } from './session-ui';
+import { HeroAccordion, heroDeltaColor, signedKcal, humanHMM, fmtClock } from './session-ui';
 import {
   normalizeSwimStructure, sumSwimMetres, estimateSwimSeconds, fmtSwimDistance, fmtPacePer100,
   type SwimPaceZoneMap,
@@ -19,11 +19,12 @@ export interface SwimCompleted {
 }
 
 // Dashboard hero for a swim — the swimming twin of CyclingHero. Dark hero summary
-// (duration headline, descriptor chip, distance/TSS stats); light expandable detail
-// with the per-segment targets. No power/HR profile — swim is distance + pace.
+// (duration headline, pace/TSS/kcal stats); light expandable detail with the
+// per-segment targets collapsed into a "Session breakdown" accordion. No power/HR
+// profile — swim is distance + pace, so there's no plan-vs-actual comparison table.
 export default function SwimHero({
   session, swimZones, completed = null, light = false,
-  planSessionId = null, perceivedEffort = null, kcal = null,
+  planSessionId = null, perceivedEffort = null, kcalValue = null, kcalDelta = null,
 }: {
   label?: string;   // accepted for a uniform hero interface; unused here
   session: {
@@ -37,7 +38,8 @@ export default function SwimHero({
   light?: boolean;
   planSessionId?: string | null;
   perceivedEffort?: number | null;
-  kcal?: string | null;   // per-session calorie label (est/actual)
+  kcalValue?: number | null;   // numeric kcal (actual once done, else estimate)
+  kcalDelta?: number | null;   // signed actual−plan kcal, once done
 }) {
   const isDone = !!completed;
   const segments = normalizeSwimStructure(session.structure, swimZones);
@@ -49,18 +51,24 @@ export default function SwimHero({
   const tssPlanned = session.estimated_tss ?? null;
 
   const big = isDone ? (completed!.durationStr || duration || '—') : (duration ?? '—');
-  const chips = [session.description, kcal].filter(Boolean) as string[];
-  const stats = isDone
+
+  const kcalStat = kcalValue != null
+    ? { v: `${isDone ? '' : '≈ '}${kcalValue.toLocaleString('en-GB')}`, l: 'kcal', delta: isDone && kcalDelta != null ? signedKcal(kcalDelta) : null, tone: 'flat' }
+    : null;
+  const stats: { v: string; l: string; delta?: string | null; tone?: string }[] = isDone
     ? [
         { v: completed!.avgPaceSec != null ? `${fmtPacePer100(completed!.avgPaceSec)}` : '—', l: '/100m' },
         { v: completed!.tss != null ? `${completed!.tss}` : '—', l: 'TSS' },
+        ...(kcalStat ? [kcalStat] : []),
       ]
     : [
         { v: tssPlanned != null ? `${tssPlanned}` : '—', l: 'TSS' },
         ...(distM > 0 ? [{ v: fmtSwimDistance(distM), l: '' }] : []),
+        ...(kcalStat ? [kcalStat] : []),
       ];
 
   const accent = light ? SWIM : SWIM_B;
+  const breakdownIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: SWIM }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
 
   return (
     <details open={!isDone} className={`group rounded-[18px] overflow-hidden mb-[18px] ${light ? 'border border-fog bg-paper text-ink' : 'bg-hero text-onhero'}`}>
@@ -77,19 +85,16 @@ export default function SwimHero({
         <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
           <div className="min-w-0">
             <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
-            {chips.length > 0 && (
-              <div className="flex flex-wrap" style={{ gap: '7px', marginTop: '12px' }}>
-                {chips.map(c => (
-                  <span key={c} className="text-[12px] font-semibold" style={{ border: `1px solid ${accent}`, color: accent, padding: '4px 12px', borderRadius: '20px' }}>{c}</span>
-                ))}
-              </div>
+            {session.description && (
+              <div className="text-[12.5px] mt-[7px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
             )}
           </div>
-          <div className="flex shrink-0" style={{ gap: '22px', textAlign: 'right' }}>
+          <div className="flex shrink-0 items-start" style={{ gap: '20px', textAlign: 'right' }}>
             {stats.map((s, i) => (
               <div key={i}>
                 <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
                 <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
+                {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
               </div>
             ))}
           </div>
@@ -107,7 +112,9 @@ export default function SwimHero({
         )}
         {segments.length > 0 && (
           <div className="mt-[14px]">
-            <SwimSegmentDetail segments={segments} variant="card" />
+            <HeroAccordion title="Session breakdown" icon={breakdownIcon} defaultOpen>
+              <SwimSegmentDetail segments={segments} variant="card" />
+            </HeroAccordion>
           </div>
         )}
       </div>

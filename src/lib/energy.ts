@@ -136,6 +136,37 @@ export function kcalLabel(
   return `${done ? '' : '≈ '}${k.toLocaleString('en-GB')} kcal`;
 }
 
+// Numeric per-session kcal — the actual burn once completed (real duration/distance
+// logged), otherwise the plan estimate. Null when there's no weight or it's zero.
+// The label sibling of `kcalLabel`, for callers that need the raw number (hero stats).
+export function sessionKcalValue(
+  session: EnergySession,
+  completed: { mins?: number | null; distanceKm?: number | null } | null | undefined,
+  weightKg: number | null,
+): number | null {
+  if (!weightKg || weightKg <= 0) return null;
+  const done = !!completed && (completed.mins != null || completed.distanceKm != null);
+  const s = done ? { ...session, actualDurationMins: completed!.mins ?? null, actualDistanceKm: completed!.distanceKm ?? null } : session;
+  const k = Math.round(sessionKcal(s, weightKg));
+  return k > 0 ? k : null;
+}
+
+// Signed actual−plan kcal delta for a COMPLETED session (positive = burned more than
+// the plan estimated). Null unless the session is done and both sides are positive.
+export function kcalDeltaValue(
+  session: EnergySession,
+  completed: { mins?: number | null; distanceKm?: number | null } | null | undefined,
+  weightKg: number | null,
+): number | null {
+  if (!weightKg || weightKg <= 0 || !completed) return null;
+  const done = completed.mins != null || completed.distanceKm != null;
+  if (!done) return null;
+  const planned = Math.round(sessionKcal(session, weightKg));
+  const actual = Math.round(sessionKcal({ ...session, actualDurationMins: completed.mins ?? null, actualDistanceKm: completed.distanceKm ?? null }, weightKg));
+  if (!(planned > 0) || !(actual > 0)) return null;
+  return actual - planned;
+}
+
 // The day's calorie target. `sessions` should be today's non-rest sessions; rest
 // rows are filtered here defensively too.
 export function dailyCalorieTarget(opts: {
