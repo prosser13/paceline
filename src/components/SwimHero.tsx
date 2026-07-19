@@ -82,22 +82,21 @@ export default function SwimHero({
             <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>
         </div>
-        <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
-          <div className="min-w-0">
-            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
-            {session.description && (
-              <div className="text-[12.5px] mt-[7px] truncate max-w-full" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-start" style={{ gap: '20px', textAlign: 'right' }}>
-            {stats.map((s, i) => (
-              <div key={i}>
-                <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
-                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
-                {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
-              </div>
-            ))}
-          </div>
+        <div style={{ marginTop: '6px' }}>
+          <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
+          {session.description && (
+            <div className="text-[13px] leading-snug mt-[8px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.68)' }}>{session.description}</div>
+          )}
+        </div>
+        {/* Key metrics — below the headline so the description gets full width. */}
+        <div className="flex items-end flex-wrap" style={{ gap: '26px', marginTop: '16px' }}>
+          {stats.map((s, i) => (
+            <div key={i}>
+              <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
+              <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
+              {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
+            </div>
+          ))}
         </div>
       </summary>
 
