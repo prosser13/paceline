@@ -167,37 +167,35 @@ export default function SessionHero({
             <svg className="group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
           </div>
         </div>
-        <div className="flex items-end justify-between gap-4" style={{ marginTop: '6px' }}>
-          <div className="min-w-0">
-            {/* Scales down on narrow screens so a wide value ("10.0 km", "42.2 km")
-                can't overlap the stats; caps at 54px on wider viewports. */}
-            <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
-            {session.description && (
-              <div className="text-[12.5px] mt-[7px] truncate max-w-full" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
-            )}
-            {isDone && distDelta && (
-              <div className="text-[11.5px] font-bold mt-[6px] tabular-nums" style={{ color: heroDeltaColor(distDelta.tone, light) }}>
-                {distDelta.delta === '✓' ? 'on plan' : <>{distDelta.delta} km<span className="font-medium" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.5)' }}> vs plan</span></>}
+        <div style={{ marginTop: '6px' }}>
+          {/* Scales down on narrow screens; caps at 54px on wider viewports. */}
+          <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
+          {session.description && (
+            <div className="text-[13px] leading-snug mt-[8px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.68)' }}>{session.description}</div>
+          )}
+          {isDone && distDelta && (
+            <div className="text-[11.5px] font-bold mt-[6px] tabular-nums" style={{ color: heroDeltaColor(distDelta.tone, light) }}>
+              {distDelta.delta === '✓' ? 'on plan' : <>{distDelta.delta} km<span className="font-medium" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.5)' }}> vs plan</span></>}
+            </div>
+          )}
+        </div>
+        {/* Key metrics — sit BELOW the headline so the description gets full width. */}
+        <div className="flex items-end flex-wrap" style={{ gap: '26px', marginTop: '16px' }}>
+          {exec && (
+            <div className="flex flex-col items-center" title={exec.note}>
+              <div className="rounded-full grid place-items-center" style={{ width: '52px', height: '52px', background: `conic-gradient(${scoreColor(exec.score)} ${exec.score}%, ${light ? 'var(--color-fog)' : 'rgba(255,255,255,.16)'} 0)` }}>
+                <div className="rounded-full grid place-items-center font-display font-bold" style={{ width: '40px', height: '40px', background: light ? 'var(--color-paper)' : 'var(--color-hero)', fontSize: '16px' }}>{exec.score}</div>
               </div>
-            )}
-          </div>
-          <div className="flex shrink-0 items-start" style={{ gap: '20px', textAlign: 'right' }}>
-            {exec && (
-              <div className="flex flex-col items-center" title={exec.note}>
-                <div className="rounded-full grid place-items-center" style={{ width: '52px', height: '52px', background: `conic-gradient(${scoreColor(exec.score)} ${exec.score}%, ${light ? 'var(--color-fog)' : 'rgba(255,255,255,.16)'} 0)` }}>
-                  <div className="rounded-full grid place-items-center font-display font-bold" style={{ width: '40px', height: '40px', background: light ? 'var(--color-paper)' : 'var(--color-hero)', fontSize: '16px' }}>{exec.score}</div>
-                </div>
-                <div className="text-[10px] uppercase font-bold mt-[3px]" style={{ letterSpacing: '.04em', color: accent }}>exec</div>
-              </div>
-            )}
-            {stats.map((s, i) => (
-              <div key={i}>
-                <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
-                <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
-                {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
-              </div>
-            ))}
-          </div>
+              <div className="text-[10px] uppercase font-bold mt-[3px]" style={{ letterSpacing: '.04em', color: accent }}>exec</div>
+            </div>
+          )}
+          {stats.map((s, i) => (
+            <div key={i}>
+              <div className="font-display font-bold" style={{ fontSize: '28px' }}>{s.v}</div>
+              <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{s.l}</div>
+              {s.delta && <div className="text-[10.5px] font-bold mt-[2px] tabular-nums" style={{ color: heroDeltaColor(s.tone, light) }}>{s.delta}</div>}
+            </div>
+          ))}
         </div>
       </summary>
 
