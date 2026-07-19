@@ -86,7 +86,7 @@ export default function SwimHero({
           <div className="min-w-0">
             <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
             {session.description && (
-              <div className="text-[12.5px] mt-[7px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
+              <div className="text-[12.5px] mt-[7px] truncate max-w-full" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
             )}
           </div>
           <div className="flex shrink-0 items-start" style={{ gap: '20px', textAlign: 'right' }}>
