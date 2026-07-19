@@ -27,10 +27,11 @@ import { getPlanContext, type PlanContext } from '@/data/plan-context';
 import { getCoachContext, getCoachMessage, insertCoachMessage, markCoachDelivered, listRecentCoachMessages } from '@/data/coach';
 import { getCoachingPrefs } from '@/data/coaching';
 import { markAvailabilityReviewed } from '@/data/availability';
-import { getLatestWellnessDay, listRecentWellnessDays, type WellnessDay } from '@/data/wellness-days';
+import { getLatestWellnessDay, listRecentWellnessDays } from '@/data/wellness-days';
 import { syncWellnessDays } from '@/lib/intervals';
 import { syncUpcomingRunWorkouts } from '@/lib/intervals-sync';
 import { generateMorningBriefing } from '@/lib/coach-generate';
+import { buildReadiness } from '@/lib/coach-dispatch';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
@@ -63,51 +64,6 @@ async function deliverWithRetry(chatId: string | null, text: string, attempts = 
 
 function messageText(headline: string, bodyMd: string): string {
   return `<b>${mdToTelegramHtml(headline)}</b>\n\n${mdToTelegramHtml(bodyMd)}`;
-}
-
-// ── readiness snapshot: today's biometrics vs recent baseline ──
-
-function median(xs: number[]): number | null {
-  if (!xs.length) return null;
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-
-function pct(now: number, base: number): number | null {
-  return base ? Math.round(((now - base) / base) * 1000) / 10 : null;
-}
-
-// A compact, grounded readiness object for the briefing — raw values plus deltas
-// against the trailing baseline, so the coach doesn't have to (and mustn't) invent them.
-function buildReadiness(today: WellnessDay | null, recent: WellnessDay[]): Record<string, unknown> {
-  const hist = recent.filter(d => d.date !== today?.date);
-  const base = (pick: (d: WellnessDay) => number | null) =>
-    median(hist.map(pick).filter((v): v is number => v != null));
-
-  const hrvBase = base(d => d.hrv);
-  const rhrBase = base(d => d.resting_hr);
-  const sleepBaseSecs = base(d => d.sleep_secs);
-
-  const sleepHours = (s: number | null | undefined) => (s != null ? Math.round((s / 3600) * 10) / 10 : null);
-  const tsb = today?.ctl != null && today?.atl != null ? Math.round((today.ctl - today.atl) * 10) / 10 : null;
-
-  return {
-    date: today?.date ?? null,
-    wellness_landed: !!today && (today.sleep_secs != null || today.hrv != null),
-    sleep_hours: sleepHours(today?.sleep_secs),
-    sleep_hours_baseline: sleepHours(sleepBaseSecs),
-    sleep_score: today?.sleep_score ?? null,
-    hrv: today?.hrv ?? null,
-    hrv_baseline: hrvBase,
-    hrv_delta_pct: today?.hrv != null && hrvBase != null ? pct(today.hrv, hrvBase) : null,
-    resting_hr: today?.resting_hr ?? null,
-    resting_hr_baseline: rhrBase,
-    resting_hr_delta: today?.resting_hr != null && rhrBase != null ? Math.round((today.resting_hr - rhrBase) * 10) / 10 : null,
-    ctl_fitness: today?.ctl ?? null,
-    atl_fatigue: today?.atl ?? null,
-    tsb_form: tsb,
-  };
 }
 
 // Whether today has any non-rest training planned (for the optional skip-on-rest pref).

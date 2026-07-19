@@ -107,6 +107,13 @@ export async function markCoachDelivered(id: string): Promise<void> {
   await supabaseAdmin.from('coach_messages').update({ delivered_at: new Date().toISOString() }).eq('user_id', userId).eq('id', id);
 }
 
+// Remove the message for a London day + kind — used by the manual regenerate path
+// so a fresh review replaces the day's existing one (the table is one-per-day-per-kind).
+export async function deleteCoachMessage(forDate: string, kind: CoachMessageKind): Promise<void> {
+  const userId = await currentUserId();
+  await supabaseAdmin.from('coach_messages').delete().eq('user_id', userId).eq('for_date', forDate).eq('kind', kind);
+}
+
 // The coach's rolling "athlete context" memory — a single-row table the evening
 // coach distils and rewrites each night, then reads on every future generation
 // (evening review + morning briefing) for trailing context.
