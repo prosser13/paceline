@@ -176,7 +176,18 @@ export interface RecentSession {
   priority: string | null;
   status: string;
   adherence: 'done' | 'missed' | 'rest';
-  planned: { distance_km: number | null; target_pace: string | null; estimated_tss: number | null; estimated_duration: string | null };
+  // The plan's stated intent — injected only for the sessions where grading the day
+  // against the hypothesis matters (an A-priority / race session, or one whose
+  // structure prescribes distinct phases). "Where a plan states a hypothesis, the
+  // review must grade the day against it." Absent (undefined) on routine sessions.
+  rationale?: string | null;
+  planned: {
+    distance_km: number | null; target_pace: string | null; estimated_tss: number | null; estimated_duration: string | null;
+    // The prescribed phases (pace/distance per phase) for a multi-phase / race
+    // session, so the review compares phase-by-phase instead of against a whole-run
+    // average. Present only on the same qualifying sessions as `rationale`.
+    structure?: unknown;
+  };
   actual: {
     distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null;
     ngp_min_km: number | null; avg_hr: number | null; avg_power: number | null;
@@ -184,6 +195,11 @@ export interface RecentSession {
     decoupling_pct: number | null;   // aerobic decoupling (cardiac drift); >0 = worse
     pace_decay_pct: number | null;   // final-third pace vs first two-thirds; >0 = faded, <0 = negative split
     durability: string | null;       // interpreted long-run durability read (long runs only)
+    // Per-phase actual pace ("m:ss/km") and avg HR, aligned to planned.structure, when
+    // the sync stored per-segment splits. Lets the review read each phase's actual
+    // against its planned target rather than only the whole-run average.
+    segment_paces?: (string | null)[] | null;
+    segment_hr?: (number | null)[] | null;
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
     // When the athlete stitched two+ Strava activities into this one session, the
     // individual activities that make it up (primary first). Null for a normal
@@ -644,7 +660,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const userId = await currentUserId();
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, structure')
+    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, rationale, structure')
     .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
@@ -657,7 +673,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, segment_actuals, segment_hr, perceived_effort, fuel_carbs_per_h, source')
         .eq('user_id', userId)
         .in('plan_session_id', ids)
     : null;
@@ -708,6 +724,18 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
     const distanceKm = c && c.actual_distance_km != null ? Number(c.actual_distance_km) : null;
     const decouplingPct = c && c.decoupling_pct != null ? Number(c.decoupling_pct) : null;
     const paceDecayPct = c && c.pace_decay_pct != null ? Number(c.pace_decay_pct) : null;
+    // Per-phase actuals (s/km, aligned to the planned structure) → "m:ss/km" strings.
+    const segmentActuals = c ? ((c.segment_actuals as (number | null)[] | null) ?? null) : null;
+    const segmentHr = c ? ((c.segment_hr as (number | null)[] | null) ?? null) : null;
+    const segmentPaces = Array.isArray(segmentActuals)
+      ? segmentActuals.map(v => (v != null ? `${secondsToPace(Math.round(v))}/km` : null))
+      : null;
+    // Sessions where the plan states a hypothesis worth grading against: an
+    // A-priority / race session, or a run whose structure prescribes distinct phases.
+    const isRunSession = ((s.activity_type as string | null) === 'running' || s.activity_type == null)
+      && !NON_RUN_TYPES.includes(s.session_type as string);
+    const qualifying = s.priority === 'A' || s.intensity === 'race'
+      || (isRunSession && Array.isArray(s.structure) && (s.structure as unknown[]).length > 1);
     return {
       id: s.id as string,
       scheduled_date: s.scheduled_date as string,
@@ -716,11 +744,13 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
       priority: (s.priority as string | null) ?? null,
       status: s.status as string,
       adherence: isRest ? 'rest' : c ? 'done' : 'missed',
+      ...(qualifying ? { rationale: (s.rationale as string | null) ?? null } : {}),
       planned: {
         distance_km: s.distance_km != null ? Number(s.distance_km) : null,
         target_pace: (s.target_pace as string | null) ?? null,
         estimated_tss: (s.estimated_tss as number | null) ?? null,
         estimated_duration: (s.estimated_duration as string | null) ?? null,
+        ...(qualifying && Array.isArray(s.structure) ? { structure: s.structure } : {}),
       },
       actual: c ? {
         distance_km: c.actual_distance_km != null ? Number(c.actual_distance_km) : null,
@@ -733,6 +763,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         decoupling_pct: decouplingPct,
         pace_decay_pct: paceDecayPct,
         durability: durabilityNote(s.session_type as string, distanceKm, decouplingPct, paceDecayPct),
+        ...(segmentPaces ? { segment_paces: segmentPaces, segment_hr: segmentHr } : {}),
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
