@@ -12,6 +12,7 @@ import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, setThresh
 import { applyPlanChange } from '@/data/plan-mutations';
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
+import { regenerateCoachReview } from '@/lib/coach-dispatch';
 import { secondsToPace } from '@/lib/plan-structure';
 import { todayISO } from '@/lib/dates';
 
@@ -165,6 +166,18 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
       required: ['threshold'],
     },
   },
+  {
+    name: 'regenerate_coach_review',
+    description:
+      "Regenerate the athlete's coach message for a day and re-send it to their Telegram, replacing any existing message for that day. Use after changing the plan, a session result, a daily note or availability so the review reflects it. kind 'evening' (default) is the nightly review that looks back on the day; 'morning' is the forward-looking briefing that factors in overnight wellness. Returns the new headline/body.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['evening', 'morning'], description: "Which message to regenerate — 'evening' (default) or 'morning'." },
+        date: { type: 'string', description: 'London day YYYY-MM-DD (default: today).' },
+      },
+    },
+  },
 ];
 
 export const WRITE_TOOL_NAMES = new Set(WRITE_TOOL_DEFS.map(t => t.name));
@@ -280,6 +293,13 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       if (!threshold || clockToSeconds(threshold) == null) bad('threshold must be "M:SS" per km');
       await setThresholdPace(threshold);
       return { ok: true };
+    }
+    case 'regenerate_coach_review': {
+      const kind = (args.kind as string | undefined) ?? 'evening';
+      if (kind !== 'evening' && kind !== 'morning') bad("kind must be 'evening' or 'morning'");
+      const date = (args.date as string | undefined) ?? todayISO();
+      if (!ISO_DATE.test(date)) bad('date must be YYYY-MM-DD');
+      return regenerateCoachReview(kind, date);
     }
 
     default:
