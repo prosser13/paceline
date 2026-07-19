@@ -173,7 +173,7 @@ export default function SessionHero({
                 can't overlap the stats; caps at 54px on wider viewports. */}
             <div className="font-display font-bold whitespace-nowrap" style={{ fontSize: 'clamp(34px, 9vw, 54px)', lineHeight: .96 }}>{big}</div>
             {session.description && (
-              <div className="text-[12.5px] mt-[7px]" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
+              <div className="text-[12.5px] mt-[7px] truncate max-w-full" style={{ color: light ? 'var(--color-stone)' : 'rgba(240,238,230,.62)' }}>{session.description}</div>
             )}
             {isDone && distDelta && (
               <div className="text-[11.5px] font-bold mt-[6px] tabular-nums" style={{ color: heroDeltaColor(distDelta.tone, light) }}>

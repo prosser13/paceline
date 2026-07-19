@@ -3,9 +3,12 @@
 // factor) PLUS the calories from the day's PLANNED exercise, so the athlete has a
 // number to eat toward.
 //
-// Exercise energy uses METs (metabolic equivalents): a session burns roughly
-// MET × bodyweight(kg) × hours. We take the NET cost (MET − 1) so we don't
-// double-count the resting calories the base already covers during that hour.
+// Exercise energy: RUNS use the distance-based cost (~1.036 kcal/kg/km, pace-
+// independent) since a run's energy tracks distance, not the intensity band — a MET
+// over the duration would overcount a long slow run tagged 'race'. Rides, strength &
+// yoga use METs (metabolic equivalents): roughly MET × bodyweight(kg) × hours. Both
+// take the NET cost (subtract the resting the base already covers over that time) so
+// the base's resting calories aren't double-counted.
 
 import { resolveSport, type SportKey } from '@/lib/sports/registry';
 
@@ -102,12 +105,24 @@ export function sessionKcal(session: EnergySession, weightKg: number | null): nu
   let hours = session.actualDurationMins != null && session.actualDurationMins > 0
     ? session.actualDurationMins / 60
     : durationToHours(session.estimated_duration);
+  const km = session.actualDistanceKm ?? (session.distance_km != null ? Number(session.distance_km) : null);
+
+  // Running energy is ~pace-independent per km, so use the distance-based cost rather
+  // than a pace-banded MET over the duration. The MET path badly overcounts a long,
+  // slow run tagged at a fast band — e.g. an 80 km ultra at the 'race' band (MET 16)
+  // over ~8 h reads ~9,800 kcal, vs the ~6,200 the distance model gives. Netted of the
+  // resting (~1 MET) the daily base already covers over the run's time.
+  if (sport === 'run' && km && km > 0) {
+    const runHours = hours ?? km / RUN_KMH[band];
+    const gross = RUN_GROSS_KCAL_PER_KG_KM * km * weightKg;
+    return Math.max(0, gross - weightKg * runHours);
+  }
+
   if (hours == null) {
-    // Fallback: derive from distance (actual if logged, else planned) for run/ride;
-    // a small default for strength/yoga; otherwise no contribution.
-    const km = session.actualDistanceKm ?? (session.distance_km != null ? Number(session.distance_km) : null);
-    if ((sport === 'run' || sport === 'cycling') && km && km > 0) {
-      hours = km / (sport === 'run' ? RUN_KMH[band] : RIDE_KMH[band]);
+    // Fallback: derive from distance (actual if logged, else planned) for a ride; a
+    // small default for strength/yoga; otherwise no contribution.
+    if (sport === 'cycling' && km && km > 0) {
+      hours = km / RIDE_KMH[band];
     } else if (sport === 'strength' || sport === 'yoga') {
       hours = 0.75;
     } else {

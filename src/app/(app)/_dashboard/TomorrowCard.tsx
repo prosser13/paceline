@@ -110,7 +110,7 @@ export default function TomorrowCard({
               <Glyph size={14} /> {spec.label}
             </div>
             <div className="font-display font-bold text-[30px]" style={{ margin: '4px 0 5px', lineHeight: 1.05 }}>{big}</div>
-            {sub && <div className="text-[13px] font-semibold">{sub}</div>}
+            {sub && <div className="text-[13px] font-semibold truncate max-w-full">{sub}</div>}
           </div>
           {detail && (
             <svg className="shrink-0 mt-[2px] text-stone group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
