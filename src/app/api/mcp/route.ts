@@ -16,7 +16,9 @@ import { originFromRequest } from '@/lib/base-url';
 import { TOOL_DEFS, WRITE_TOOL_DEFS, WRITE_TOOL_NAMES, callTool } from '@/lib/mcp/tools';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// regenerate_coach_review runs the two-stage evening review (cause-ranking + prose),
+// so allow more than the single-call 60s.
+export const maxDuration = 120;
 
 const PROTOCOL_VERSION = '2025-06-18';
 const SERVER_INFO = { name: 'paceline', version: '1.0.0' };

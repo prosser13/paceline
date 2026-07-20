@@ -31,6 +31,7 @@ Standing analytical caveats — apply these to every read; they override a tidy-
 - Always subtract stopped time (elapsed − moving) before characterising slow splits — a slow split can be aid-station/stopped time, not a fade in running effort. When stopped time exceeds ~5% of elapsed, report it explicitly rather than reading the elapsed pace as run effort.
 - A fuel rate (g/h) "explaining" a fade is CORRELATIONAL, never measured. When a MEASURED pacing deviation against the plan exists (an actual opening/phase pace outside its planned target), that is the stronger evidence — lead with it. Never lead with fuelling when a measured pacing miss against plan is present.
 - Where a planned session states a hypothesis (its rationale — e.g. "pacing discipline in the opening 20km is everything") and its planned phases, grade the day against THAT: compare each phase's actual pace/HR to its planned target, and say plainly whether the stated plan was executed.
+- When the briefing includes a "Ranked causes" block (the candidate causes of today's key outcome, ALREADY RANKED for you strongest-evidence-first — measured evidence outranks inferred/correlational), your headline and opening sentence MUST lead with cause [0]. You may mention lower-ranked causes as contributing, but never lead with one or imply a lower cause is the main story. Then set "lead_cause_index" to the index of the cause your headline leads with — it must be 0.
 
 What to cover — pick the ONE or TWO things that actually matter tonight and skip the rest. You do NOT need to touch every item below every night:
 - Reflect on today: what was planned, what was actually done (or missed), and what it means.
@@ -60,6 +61,9 @@ const SCHEMA = {
     headline: { type: 'string' },
     body_md: { type: 'string' },
     updated_context: { type: 'string' },
+    // Phase 3: when the briefing supplies ranked causes, the index of the one the
+    // headline leads with. Code enforces it is 0 (the strongest-evidence cause).
+    lead_cause_index: { type: 'number' },
   },
   required: ['headline', 'body_md', 'updated_context'],
 } as const;
@@ -77,6 +81,7 @@ async function callClaudeJson(
   userContent: string,
   maxTokens: number,
   label: string,
+  opts?: { effort?: 'low' | 'medium' | 'high'; timeoutMs?: number },
 ): Promise<Record<string, unknown>> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set');
@@ -88,11 +93,11 @@ async function callClaudeJson(
       model: MODEL,
       max_tokens: maxTokens,
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema } },
+      output_config: { effort: opts?.effort ?? 'medium', format: { type: 'json_schema', schema } },
       system,
       messages: [{ role: 'user', content: userContent }],
     }),
-  }, { label: 'claude', timeoutMs: 55_000, maxRetries: 0 });
+  }, { label: 'claude', timeoutMs: opts?.timeoutMs ?? 55_000, maxRetries: 0 });
 
   if (!res) throw new Error(`Claude API unreachable (timeout) for ${label}`);
   if (!res.ok) {
@@ -121,24 +126,154 @@ function formatRecentMessages(msgs: PriorMessage[]): string {
     .join('\n\n───\n\n');
 }
 
-export async function generateEveningReview(
-  ctx: PlanContext, memory: string, recentMessages: PriorMessage[] = [],
-): Promise<CoachReview> {
+// ── Two-stage cause ranking (Phase 3) ────────────────────────
+//
+// Stage 1: the model lists the candidate causes of today's key outcome as structured
+// data — it does NOT rank or write prose. Stage 2 writes the review, but the ORDER of
+// causes is decided in code (rankCauses), not by the model: a "rank by evidence
+// strength" prompt instruction degrades on novel data; a deterministic sort does not.
+
+export interface Cause {
+  factor: string;
+  evidence_type: 'measured' | 'inferred';
+  magnitude: string;
+  supporting_data: string;
+  confidence: number;
+}
+
+const CAUSES_SYSTEM = `You are the athlete's coach, but in THIS step you only identify the candidate CAUSES of today's key outcome — you write no prose and you do not rank them.
+
+Today's key outcome is the notable thing about a session completed today: a race/run result, a fade or blow-up, a missed or smashed pace target, an unusual HR/effort read. Read it from the briefing — today's completed session, its pace_check (incl. plan_deviation), its split_profile (quartile + first-20%-vs-target pacing, stopped time, split outliers), durability/decoupling, fuel, and wellness.
+
+List EVERY plausible cause. For each:
+- factor: the cause in a few words (e.g. "went out faster than the plan asked", "eccentric leg damage from the descents", "under-fuelled").
+- evidence_type: "measured" if it is DIRECTLY in the data — a plan_deviation, a split_profile figure, a first-20%-vs-target number, decoupling %, an HR-vs-pace divergence. "inferred" if it is correlational or hypothesised — a fuel rate "explaining" a fade, weather, a sleep-debt read on a run's quality.
+- magnitude: how big the effect is, WITH the number (e.g. "+72 s/km over the final 32 km", "HR fell 7 bpm as pace collapsed", "41 g/h vs a typical 60–90").
+- supporting_data: the exact figures you are citing.
+- confidence: 0–1.
+
+Do NOT order them and do NOT decide which matters most — the app ranks by evidence strength. If today has no notable outcome to explain (a rest day, an unremarkable easy run), return an empty array.`;
+
+const CAUSES_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    causes: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          factor: { type: 'string' },
+          evidence_type: { type: 'string', enum: ['measured', 'inferred'] },
+          magnitude: { type: 'string' },
+          supporting_data: { type: 'string' },
+          confidence: { type: 'number' },
+        },
+        required: ['factor', 'evidence_type', 'magnitude', 'supporting_data', 'confidence'],
+      },
+    },
+  },
+  required: ['causes'],
+} as const;
+
+async function generateCauses(ctx: PlanContext, memory: string): Promise<Cause[]> {
+  const userContent =
+    `Today is ${ctx.as_of}. List the candidate causes of today's key outcome.\n\n` +
+    `── Your rolling memory ──\n${memory || '(none yet)'}\n\n` +
+    `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
+  // Low effort + a tight timeout: this is a focused extraction, and it's the first of
+  // two sequential calls inside the route's time budget.
+  const parsed = await callClaudeJson(CAUSES_SYSTEM, CAUSES_SCHEMA, userContent, 2000, 'evening causes', { effort: 'low', timeoutMs: 30_000 });
+  const raw = Array.isArray(parsed.causes) ? (parsed.causes as unknown[]) : [];
+  return raw
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object')
+    .map(c => ({
+      factor: String(c.factor ?? '').trim(),
+      evidence_type: c.evidence_type === 'measured' ? 'measured' as const : 'inferred' as const,
+      magnitude: String(c.magnitude ?? '').trim(),
+      supporting_data: String(c.supporting_data ?? '').trim(),
+      confidence: typeof c.confidence === 'number' ? c.confidence : 0.5,
+    }))
+    .filter(c => c.factor);
+}
+
+// Largest absolute number in a magnitude string — a rough within-group tiebreak so a
+// bigger effect ranks first. Unitless, so only a secondary signal.
+function magnitudeWeight(m: string): number {
+  const nums = (m.match(/\d+(\.\d+)?/g) ?? []).map(Number);
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+// Rank causes by evidence strength — measured before inferred, then by magnitude,
+// then confidence. The ordering lives HERE, in code, not in the prompt.
+//
+// TODO(cause-ranking): hard-sorting measured above inferred is occasionally wrong — a
+// measured-but-trivial deviation can outrank a large inferred one. Once this has run
+// against several races, gate on magnitude thresholds rather than evidence type alone
+// (e.g. only float a measured cause above an inferred one when its magnitude clears a
+// bar), instead of the current unconditional evidence-type primary sort.
+export function rankCauses(causes: Cause[]): Cause[] {
+  const evRank = (e: string) => (e === 'measured' ? 0 : 1);
+  return [...causes].sort((a, b) =>
+    evRank(a.evidence_type) - evRank(b.evidence_type)
+    || magnitudeWeight(b.magnitude) - magnitudeWeight(a.magnitude)
+    || b.confidence - a.confidence);
+}
+
+// Cause-ranking is only worth a call when today actually has a completed run/race to
+// explain (pace_check is set only for completed runs). Other nights stay single-stage.
+function hasAnalysableSessionToday(ctx: PlanContext): boolean {
+  return ctx.recent.some(s => s.scheduled_date === ctx.as_of && s.adherence === 'done' && s.pace_check != null);
+}
+
+interface ProseResult { headline: string; bodyMd: string; updatedContext: string; leadCauseIndex: number }
+
+// Stage 2 — write the review. `ranked` (may be empty) is passed in pre-sorted; the
+// prompt requires the headline to lead with ranked[0]. `strict` re-asserts that after
+// a first draft that led with the wrong cause.
+async function generateReviewProse(
+  ctx: PlanContext, memory: string, recentMessages: PriorMessage[], ranked: Cause[], strict = false,
+): Promise<ProseResult> {
+  const causeBlock = ranked.length
+    ? `── Ranked causes of today's key outcome (ALREADY RANKED strongest-evidence-first — your headline MUST lead with [0]${strict ? '; your previous draft did NOT lead with [0] — rewrite so the headline leads with [0]' : ''}) ──\n` +
+      ranked.map((c, i) => `[${i}] ${c.factor} — ${c.evidence_type}, magnitude ${c.magnitude} (confidence ${c.confidence}); ${c.supporting_data}`).join('\n') + '\n\n'
+    : '';
   const userContent =
     `Today is ${ctx.as_of}. Write tonight's evening review.\n\n` +
+    causeBlock +
     `── Your rolling memory (from prior nights) ──\n${memory || '(none yet — this is an early run)'}\n\n` +
     `── Your recent messages (do NOT repeat what you've already said here) ──\n${formatRecentMessages(recentMessages)}\n\n` +
     `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
 
   const parsed = await callClaudeJson(SYSTEM, SCHEMA, userContent, 4000, 'evening review');
+  return {
+    headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
+    bodyMd: typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '',
+    updatedContext: typeof parsed.updated_context === 'string' ? parsed.updated_context.trim() : '',
+    leadCauseIndex: typeof parsed.lead_cause_index === 'number' ? parsed.lead_cause_index : (ranked.length ? -1 : 0),
+  };
+}
 
-  const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
-  const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
-  const updatedContext = typeof parsed.updated_context === 'string' ? parsed.updated_context.trim() : '';
-  if (!headline || !bodyMd) throw new Error('Coach returned an empty headline or body');
+export async function generateEveningReview(
+  ctx: PlanContext, memory: string, recentMessages: PriorMessage[] = [],
+): Promise<CoachReview> {
+  // Stage 1 — candidate causes (only when today has a completed run/race to explain),
+  // ranked in code by evidence strength.
+  const ranked = hasAnalysableSessionToday(ctx)
+    ? rankCauses(await generateCauses(ctx, memory).catch(() => []))
+    : [];
 
+  // Stage 2 — write the review leading with the top-ranked cause.
+  let review = await generateReviewProse(ctx, memory, recentMessages, ranked);
+  // 3c — the headline must lead with ranked[0]; regenerate once if the model didn't.
+  if (ranked.length && review.leadCauseIndex !== 0) {
+    review = await generateReviewProse(ctx, memory, recentMessages, ranked, true);
+  }
+
+  if (!review.headline || !review.bodyMd) throw new Error('Coach returned an empty headline or body');
   // Never wipe memory on a thin response — fall back to the prior summary.
-  return { headline, bodyMd, updatedContext: updatedContext || memory };
+  return { headline: review.headline, bodyMd: review.bodyMd, updatedContext: review.updatedContext || memory };
 }
 
 // ── Morning briefing (PB-campaign wave 1) ─────────────────────
