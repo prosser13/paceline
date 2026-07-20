@@ -50,7 +50,7 @@ function FuelPill({ kind, value, sub }: { kind: 'fuel' | 'fluid'; value: string;
 
 export default function SessionHero({
   label, session, thresholdPace, zones, hrZones, completed, showAdjust = true, light = false, defaultOpen,
-  fuelProducts = [], kcalValue = null, kcalDelta = null,
+  fuelProducts = [], kcalValue = null, kcalDelta = null, collapseSplits = false,
 }: {
   label: string;
   session: PlanSession;
@@ -65,6 +65,7 @@ export default function SessionHero({
   fuelProducts?: FuelProduct[];   // for the inline long-run fuel log
   kcalValue?: number | null;   // numeric kcal (actual once done, else estimate)
   kcalDelta?: number | null;   // signed actual−plan kcal, once done
+  collapseSplits?: boolean;   // tuck the per-km splits behind a nested accordion (dashboard "Recently completed"); keep the summary table visible
 }) {
   const intensity = (session.intensity as string | null) ?? 'easy';
   // A merged run (two separate activities stitched into one session) has no valid
@@ -276,7 +277,13 @@ export default function SessionHero({
               {isDone && compare && compare.rows.length > 0 && (
                 <div className="mb-[10px]"><CompareTable rows={compare.rows} bare /></div>
               )}
-              <WorkoutDetail steps={steps} variant="card" isRace={isRace} />
+              {collapseSplits ? (
+                <HeroAccordion title="Splits" meta="per km" defaultOpen={false}>
+                  <WorkoutDetail steps={steps} variant="card" isRace={isRace} />
+                </HeroAccordion>
+              ) : (
+                <WorkoutDetail steps={steps} variant="card" isRace={isRace} />
+              )}
             </HeroAccordion>
           )}
           {!isDone && showAdjust && label === 'Today' && (
