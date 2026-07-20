@@ -22,14 +22,6 @@ function renderBody(md: string) {
   ));
 }
 
-function timeOf(msg: CoachMessage): string | null {
-  try {
-    return new Date(msg.created_at)
-      .toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'Europe/London' })
-      .toLowerCase().replace(' ', '');
-  } catch { return null; }
-}
-
 type Kind = 'morning' | 'evening';
 const LABEL: Record<Kind, string> = { morning: 'Morning briefing', evening: 'Evening review' };
 
@@ -45,7 +37,6 @@ export default function CoachCard({ morning, evening }: { morning: CoachMessage 
   const active = (tab === 'morning' ? morning : evening) ?? morning ?? evening;
   if (!active) return null;
   const activeKind: Kind = active === morning ? 'morning' : 'evening';
-  const time = timeOf(active);
 
   return (
     <div className="border border-fog rounded-[16px] bg-paper" style={{ padding: '16px 19px', marginBottom: '4px' }}>
@@ -73,14 +64,14 @@ export default function CoachCard({ morning, evening }: { morning: CoachMessage 
                         on ? 'bg-hero text-onhero' : 'border border-fog text-stone hover:text-ink'
                       }`}
                     >
-                      {k === 'morning' ? 'Morning' : 'Evening'}{timeOf(msg) ? ` · ${timeOf(msg)}` : ''}
+                      {k === 'morning' ? 'Morning' : 'Evening'}
                     </button>
                   );
                 })}
               </div>
             ) : (
               <div className="text-[11px] uppercase font-bold text-ride" style={{ letterSpacing: '.06em' }}>
-                {LABEL[activeKind]}{time ? ` · ${time}` : ''}
+                {LABEL[activeKind]}
               </div>
             )}
             <div className="font-display font-bold text-[16px] mt-[2px] leading-snug">{active.headline}</div>

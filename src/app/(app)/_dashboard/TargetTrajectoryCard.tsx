@@ -91,13 +91,19 @@ export default function TargetTrajectoryCard({ t }: { t: Trajectory }) {
           {t.signals.map((s, i) => {
             const age = daysSince(s.date, t.asOf);
             const stale = age != null && age > STALE_DAYS;
+            const outlier = !!s.isOutlier;   // ultra-distance race — shown for context, excluded from the blend
             return (
               <span key={i}
                 className="inline-flex items-center gap-[6px] text-[11.5px] font-semibold border border-fog rounded-[8px] bg-bone text-stone"
-                style={{ padding: '4px 9px', opacity: stale ? 0.5 : 1 }}
-                title={stale && age != null ? `${age} days old — down-weighted in the blend` : undefined}>
+                style={{ padding: '4px 9px', opacity: outlier || stale ? 0.5 : 1 }}
+                title={outlier ? 'Ultra distance — excluded from the prediction as an outlier'
+                  : stale && age != null ? `${age} days old — down-weighted in the blend` : undefined}>
                 <span className="w-[6px] h-[6px] rounded-full" style={{ background: SIGNAL_LABEL[s.source].dot }} />
-                {s.label} → {fmtHms(s.impliedMarathonSeconds)}{stale && <span className="text-stone/70"> · stale</span>}
+                {s.label} → {outlier
+                  ? <span className="line-through text-stone/50 font-normal">{fmtHms(s.impliedMarathonSeconds)}</span>
+                  : fmtHms(s.impliedMarathonSeconds)}
+                {outlier && <span className="text-hard font-bold text-[9.5px] uppercase tracking-[.04em]">· outlier · excluded</span>}
+                {!outlier && stale && <span className="text-stone/70"> · stale</span>}
               </span>
             );
           })}

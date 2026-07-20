@@ -341,9 +341,9 @@ export function standouts(input: StandoutInputs): Standout[] {
     if (isRecent(addDays(lastW.weekStart, 6))) {                    // that week ended within the recent window
       const maxKm = Math.max(...weeks.map(x => x.km));
       if (weeks.length >= STANDOUTS.weeklyPbMinWeeks && lastW.km >= maxKm) {
-        out.push({ key: 'weekvol', icon: 'trophy', tone: 'good', value: `${Math.round(lastW.km)}km`, text: 'Biggest running week yet', when: 'this week' });
+        out.push({ key: 'weekvol', icon: 'trophy', tone: 'good', value: `${Math.round(lastW.km)}km`, text: 'Biggest running week yet', when: 'last week' });
       } else if (prevW.km > 0 && lastW.km >= prevW.km * (1 + STANDOUTS.weeklyIncreasePct)) {
-        out.push({ key: 'weekvol', icon: 'up', tone: 'good', value: `${Math.round(lastW.km)}km`, text: `Weekly volume up ${Math.round((lastW.km / prevW.km - 1) * 100)}%`, when: 'this week' });
+        out.push({ key: 'weekvol', icon: 'up', tone: 'good', value: `${Math.round(lastW.km)}km`, text: `Weekly volume up ${Math.round((lastW.km / prevW.km - 1) * 100)}%`, when: 'last week' });
       }
     }
   }

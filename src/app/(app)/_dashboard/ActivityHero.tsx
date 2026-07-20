@@ -10,13 +10,14 @@ import { sessionKcalValue, kcalDeltaValue } from '@/lib/energy';
 import type { DashboardData, PlanSession, CompletedToday } from './data';
 
 export default function ActivityHero({
-  label, session, completed, d, light = false,
+  label, session, completed, d, light = false, collapseSplits = false,
 }: {
   label: string;
   session: PlanSession;
   completed: CompletedToday | null;
   d: DashboardData;
   light?: boolean;   // light surface (Recently-completed); only Today's hero is dark
+  collapseSplits?: boolean;   // run hero only: tuck per-km splits behind a nested accordion
 }) {
   const sport = resolveSport(session);
   const completedKcal = completed ? { mins: completed.mins, distanceKm: completed.distanceKm } : null;
@@ -31,5 +32,5 @@ export default function ActivityHero({
         planSessionId={session.id} perceivedEffort={completed?.perceivedEffort ?? null} kcalValue={kcalValue} kcalDelta={kcalDelta} />;
   }
   return <SessionHero label={label} session={session} thresholdPace={d.thresholdPace}
-      zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} fuelProducts={d.fuelProducts} kcalValue={kcalValue} kcalDelta={kcalDelta} />;
+      zones={d.zones} hrZones={d.hrZones} completed={completed} light={light} fuelProducts={d.fuelProducts} kcalValue={kcalValue} kcalDelta={kcalDelta} collapseSplits={collapseSplits} />;
 }

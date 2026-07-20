@@ -282,7 +282,7 @@ export function WeeklyBars({
   raceName: string | null;
 }) {
   const maxKm = Math.max(...days.map(d => d.km), 1);
-  const note = weekPlannedKm != null ? `${weekPlannedKm} km this week` : undefined;
+  const note = weekPlannedKm != null ? `${weekPlannedKm} km planned this week` : undefined;
 
   return (
     <TrendCard title="Running volume" note={note} noteColor={BUILD_C}>
