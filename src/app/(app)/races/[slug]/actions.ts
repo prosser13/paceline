@@ -66,18 +66,28 @@ export async function refreshRaceSplits(
   const session = await getRaceSessionBySlug(slug);
   if (!session) return { ok: false, reason: 'no-session' };
 
-  const dist = session.distance_km != null ? Number(session.distance_km) : guide?.distanceKm ?? null;
-  if (!dist) return { ok: false, reason: 'no-distance' };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (!isPerKmStructure(session.structure as any[])) {
-    const structure = buildRaceStructure(dist, (session.target_pace as string | null) ?? guide?.targetPace ?? null);
-    await updatePlanSession(session.id, { structure });
-    session.structure = structure;
-  }
-
   const ref = await getCompletionRefForSession(session.id);
   if (!ref?.strava_activity_id) return { ok: false, reason: 'no-completion' };
+
+  // Build the per-km structure from the ACTUAL distance run, so every kilometre
+  // loads — including any overrun past the race distance, added as extra 1km
+  // segments plus a final partial. The race's headline distance
+  // (session.distance_km) is deliberately NOT changed. Falls back to the planned
+  // race distance when the completion has no recorded distance.
+  const actualKm = ref.actual_distance_km != null ? Number(ref.actual_distance_km) : null;
+  const dist = actualKm ?? (session.distance_km != null ? Number(session.distance_km) : guide?.distanceKm ?? null);
+  if (!dist) return { ok: false, reason: 'no-distance' };
+
+  const wanted = buildRaceStructure(dist, (session.target_pace as string | null) ?? guide?.targetPace ?? null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const current = session.structure as any[] | null;
+  // Rebuild whenever the structure isn't per-km OR its segment count doesn't match
+  // the actual distance (stale, or built from a different distance) — so a short
+  // structure that misses overrun kms self-corrects.
+  if (!isPerKmStructure(current) || (current?.length ?? 0) !== wanted.length) {
+    await updatePlanSession(session.id, { structure: wanted });
+    session.structure = wanted;
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const done = await recomputeCompletionSegments(ref.id, Number(ref.strava_activity_id), session.structure as any[]);

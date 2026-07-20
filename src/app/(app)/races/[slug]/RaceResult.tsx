@@ -8,7 +8,7 @@ import { getRaceSessionBySlug, getCompletedForSession } from '@/data/plan-sessio
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, listBikeHrZones } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace } from '@/lib/completed';
-import { isPerKmStructure } from '@/data/races/race-session';
+import { isPerKmStructure, buildRaceStructure } from '@/data/races/race-session';
 import SessionHero from '@/app/(app)/_dashboard/SessionHero';
 import type { PlanSession, CompletedToday } from '@/app/(app)/_dashboard/data';
 import RefreshSplits from './RefreshSplits';
@@ -29,15 +29,19 @@ export default async function RaceResult({ slug }: { slug: string }) {
   });
   const completed: CompletedToday | null = row ? buildCompletedActuals(row, threshMinKm, ftp) : null;
 
-  // Offer to (re)load per-km splits whenever the completion's splits aren't yet
-  // per-km — either the structure isn't 1km-per-phase, or the stored segments are
-  // stale/coarser than the structure (fewer entries than kilometres).
+  // Offer to (re)load per-km splits whenever the stored splits don't yet cover the
+  // whole run — the structure isn't 1km-per-phase, or there are fewer split entries
+  // than the actual distance needs (e.g. the run overran the race distance, so the
+  // extra kilometres aren't loaded yet). Splits target the ACTUAL distance run.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const structure = session.structure as any[] | null;
-  const expectedSplits = Array.isArray(structure) && structure.length ? structure.length
-    : (session.distance_km != null ? Math.floor(Number(session.distance_km)) : 0);
+  const actualKm = completed?.distanceKm ?? null;
+  const wantedSplits = actualKm != null
+    ? buildRaceStructure(actualKm, null).length
+    : (Array.isArray(structure) && structure.length ? structure.length
+      : (session.distance_km != null ? Math.floor(Number(session.distance_km)) : 0));
   const haveSplits = completed?.segmentActuals?.length ?? 0;
-  const needsSplits = !!completed && (!isPerKmStructure(structure) || haveSplits < expectedSplits);
+  const needsSplits = !!completed && (!isPerKmStructure(structure) || haveSplits < wantedSplits);
 
   return (
     <div>

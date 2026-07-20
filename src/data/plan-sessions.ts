@@ -423,7 +423,7 @@ export async function getCompletionRefForSession(planSessionId: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, strava_activity_id, segment_actuals')
+    .select('id, strava_activity_id, segment_actuals, actual_distance_km')
     .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
