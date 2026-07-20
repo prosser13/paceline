@@ -109,7 +109,8 @@ export async function analyseRace(
   if (!row) return { ok: false, reason: 'no-completion' };
 
   const threshold = (await getThresholdPace()) ?? '3:40';
-  const completed = buildCompletedActuals(row, parseThresholdPace(threshold), null);
+  // isRace = true → completed.durationStr is the elapsed finish the coach reasons about.
+  const completed = buildCompletedActuals(row, parseThresholdPace(threshold), null, true);
   const [weather, result, note] = await Promise.all([getRaceWeather(slug), getRaceResult(slug), getRaceNote(slug)]);
 
   const cleanAnswers = answers

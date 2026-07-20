@@ -365,7 +365,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c, strava_activity_id, plan_sessions!inner(*)')
+    .select('id, completed_date, actual_distance_km, actual_duration_mins, actual_duration_secs, actual_elapsed_secs, actual_avg_pace_min_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c, strava_activity_id, plan_sessions!inner(*)')
     .eq('user_id', userId)
     .lt('completed_date', beforeDate)
     .not('plan_sessions.session_type', 'in', '("STRENGTH","CORE","YOGA")')
@@ -402,7 +402,7 @@ export async function listRaceFinishes(): Promise<Record<string, { secs: number 
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('actual_duration_secs, actual_duration_mins, completed_date, plan_sessions!inner(race_slug, session_type, scheduled_date)')
+    .select('actual_elapsed_secs, actual_duration_secs, actual_duration_mins, completed_date, plan_sessions!inner(race_slug, session_type, scheduled_date)')
     .eq('user_id', userId)
     .eq('plan_sessions.session_type', 'RACE');
   const out: Record<string, { secs: number | null; date: string | null }> = {};
@@ -411,7 +411,10 @@ export async function listRaceFinishes(): Promise<Record<string, { secs: number 
     const ps: any = Array.isArray(row.plan_sessions) ? row.plan_sessions[0] : row.plan_sessions;
     const slug = ps?.race_slug as string | null;
     if (!slug) continue;
-    const secs = row.actual_duration_secs != null ? Number(row.actual_duration_secs)
+    // Races show elapsed (wall-clock) finish time; fall back to moving for rows synced
+    // before the elapsed column existed.
+    const secs = row.actual_elapsed_secs != null ? Number(row.actual_elapsed_secs)
+      : row.actual_duration_secs != null ? Number(row.actual_duration_secs)
       : row.actual_duration_mins != null ? Math.round(Number(row.actual_duration_mins) * 60) : null;
     out[slug] = { secs, date: (ps?.scheduled_date as string | null) ?? (row.completed_date as string | null) };
   }
@@ -435,7 +438,7 @@ export async function getCompletedForSession(planSessionId: string) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
+    .select('id, actual_duration_mins, actual_duration_secs, actual_elapsed_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
     .eq('user_id', userId)
     .eq('plan_session_id', planSessionId)
     .maybeSingle();
@@ -449,7 +452,7 @@ export async function listCompletedForSessions(planSessionIds: string[]) {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('id, plan_session_id, actual_duration_mins, actual_duration_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
+    .select('id, plan_session_id, actual_duration_mins, actual_duration_secs, actual_elapsed_secs, actual_avg_pace_min_km, actual_distance_km, actual_avg_hr, actual_avg_power, actual_ngp_min_km, segment_actuals, segment_hr, tss, perceived_effort, decoupling_pct, pace_decay_pct, fuel_carbs_per_h, fuel_items, weight_before_kg, weight_after_kg, fluid_ml, sweat_rate_l_per_h, run_temp_c')
     .eq('user_id', userId)
     .in('plan_session_id', planSessionIds);
   return data ?? [];

@@ -99,7 +99,7 @@ export const listRaceResultsSince = cache(async (since: string): Promise<RaceRes
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('completed_workouts')
-    .select('completed_date, actual_duration_secs, actual_duration_mins, actual_distance_km, plan_sessions!inner(name, session_type, distance_km)')
+    .select('completed_date, actual_elapsed_secs, actual_duration_secs, actual_duration_mins, actual_distance_km, plan_sessions!inner(name, session_type, distance_km)')
     .eq('user_id', userId)
     .gte('completed_date', since)
     .eq('plan_sessions.session_type', 'RACE');
@@ -109,7 +109,10 @@ export const listRaceResultsSince = cache(async (since: string): Promise<RaceRes
       { name: string; distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : null;
-    const secs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
+    // A race's time is its elapsed (wall-clock) finish; fall back to moving for rows
+    // synced before the elapsed column. (Ultras are dropped from predictions upstream.)
+    const secs = r.actual_elapsed_secs != null ? Number(r.actual_elapsed_secs)
+      : r.actual_duration_secs != null ? Number(r.actual_duration_secs)
       : r.actual_duration_mins != null ? Math.round(Number(r.actual_duration_mins) * 60) : null;
     if (!km || !secs || !r.completed_date) return [];
     return [{ date: r.completed_date as string, name: ps?.name ?? 'Race', distanceKm: km, seconds: secs }];
@@ -550,12 +553,14 @@ export async function getTuneUpValidation(asOf: string, marathonDate: string | n
   // Actual times for any that have been run.
   const { data: cws } = await supabaseAdmin
     .from('completed_workouts')
-    .select('plan_session_id, actual_duration_secs, actual_duration_mins')
+    .select('plan_session_id, actual_elapsed_secs, actual_duration_secs, actual_duration_mins')
     .eq('user_id', userId)
     .in('plan_session_id', races.map(r => r.id));
   const doneBy = new Map<string, number>();
   for (const c of cws ?? []) {
-    const s = c.actual_duration_secs != null ? Number(c.actual_duration_secs)
+    // Tune-up races validate against their elapsed (wall-clock) finish.
+    const s = c.actual_elapsed_secs != null ? Number(c.actual_elapsed_secs)
+      : c.actual_duration_secs != null ? Number(c.actual_duration_secs)
       : c.actual_duration_mins != null ? Math.round(Number(c.actual_duration_mins) * 60) : null;
     if (c.plan_session_id && s != null) doneBy.set(c.plan_session_id as string, s);
   }

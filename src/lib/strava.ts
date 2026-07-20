@@ -23,6 +23,7 @@ export interface StravaActivity {
   sport_type: string;
   distance: number;           // metres
   moving_time: number;        // seconds
+  elapsed_time: number;       // seconds — wall-clock incl. stops; the finish time for races
   start_date_local: string;   // "2026-06-19T07:30:00"
   average_heartrate?: number;
   average_speed?: number;     // m/s
@@ -278,6 +279,9 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
   // Strava id → moving time in seconds — the precise duration stored on the
   // completion so a race time reads 34:02, not the minute-rounded 34:00.
   const secsByStravaId = new Map(relevant.map(a => [a.id, a.moving_time]));
+  // Strava id → elapsed (wall-clock) time in seconds — includes aid-station/stopped
+  // time; used as the finish time for RACE sessions (moving time undercounts a race).
+  const elapsedByStravaId = new Map(relevant.map(a => [a.id, a.elapsed_time]));
 
   await upsertActivities(
     relevant.map(a => ({
@@ -409,6 +413,7 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
       actual_distance_km:     kind === 'strength' || kind === 'yoga' ? null : activity.distance_km,
       actual_duration_mins:   activity.duration_mins,
       actual_duration_secs:   secsByStravaId.get(activity.strava_activity_id) ?? null,
+      actual_elapsed_secs:    elapsedByStravaId.get(activity.strava_activity_id) ?? null,
       // Pace is meaningless for rides/strength; leaving it null stops the plan view
       // from deriving a bogus pace-based TSS against a non-run activity.
       actual_avg_pace_min_km: kind === 'run' ? activity.avg_pace_min_km : null,

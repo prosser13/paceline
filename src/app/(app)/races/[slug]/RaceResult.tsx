@@ -27,7 +27,8 @@ export default async function RaceResult({ slug }: { slug: string }) {
   const { zones, hrZones, ftp } = buildZoneMaps({
     paceZones, hrZones: hrZoneRows, powerZones: powerZoneRows, bikeHrZones: bikeHrRows,
   });
-  const completed: CompletedToday | null = row ? buildCompletedActuals(row, threshMinKm, ftp) : null;
+  const isRace = (session as { session_type?: string }).session_type === 'RACE';
+  const completed: CompletedToday | null = row ? buildCompletedActuals(row, threshMinKm, ftp, isRace) : null;
 
   // Offer to (re)load per-km splits whenever the stored splits don't yet cover the
   // whole run — the structure isn't 1km-per-phase, or there are fewer split entries
