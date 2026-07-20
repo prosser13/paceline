@@ -9,7 +9,7 @@ import { getPlanContext } from '@/data/plan-context';
 import { listSessionsBetween, listCompletedBetween, setSessionEffort } from '@/data/plan-sessions';
 import { listRacePlans, updatePlanTarget, getPlanTargetInfo } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, setThresholdPace } from '@/data/zones';
-import { applyPlanChange, deletePlanSession } from '@/data/plan-mutations';
+import { applyPlanChange, deletePlanSession, addPlanSession } from '@/data/plan-mutations';
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
 import { regenerateCoachReview } from '@/lib/coach-dispatch';
@@ -96,6 +96,19 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
         reason: { type: 'string', description: 'Short human-readable reason (stored in the change log).' },
       },
       required: ['session_id', 'patch', 'reason'],
+    },
+  },
+  {
+    name: 'add_plan_session',
+    description:
+      'Add a new planned session to the plan on a date within the athlete\'s plan (a logged, audited create). Provide `session` with scheduled_date (YYYY-MM-DD), session_type (e.g. GA, LR, REC, RACE, STRENGTH, YOGA, CORE) and name; optionally activity_type ("running"/"cycling"), description, distance_km, intensity, estimated_duration ("H:MM"), estimated_tss, target_pace, structure, priority. The week and day are derived from the date; status defaults to planned. Returns the new session_id. The date must fall inside a plan week and cannot be in the past.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        session: { type: 'object', description: 'Fields for the new session. Required: scheduled_date, session_type, name.' },
+        reason: { type: 'string', description: 'Short human-readable reason (stored in the change log).' },
+      },
+      required: ['session', 'reason'],
     },
   },
   {
@@ -250,6 +263,18 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
         reason,
         session_id: sessionId,
         patch,
+      });
+    }
+    case 'add_plan_session': {
+      const session = args.session as Record<string, unknown> | undefined;
+      const reason = args.reason as string | undefined;
+      if (!session || typeof session !== 'object') bad('session object is required');
+      if (!reason) bad('reason is required');
+      return addPlanSession({
+        idempotency_key: `mcp_${randomBytes(9).toString('base64url')}`,
+        actor: 'user',
+        reason,
+        session: session as Record<string, unknown>,
       });
     }
     case 'delete_plan_session': {
