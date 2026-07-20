@@ -25,7 +25,10 @@ export default function StrengthHero({
   const [pending, start] = useTransition();
   const router = useRouter();
 
-  const shortFocus = focus ? focus.split(/\s*[—–·]\s*/)[0].trim() : null;
+  // Split on the em-dash / middle-dot separators (optionally spaced) or a *spaced*
+  // en-dash — never a bare en-dash, so a numeric range like "20–30 min" isn't cut
+  // to "20".
+  const shortFocus = focus ? focus.split(/\s*[—·]\s*|\s+–\s+/)[0].trim() : null;
   const dur = humanHMM(duration);
   const headline = [dur, exercises.length ? `${exercises.length} exercises` : null].filter(Boolean).join(' · ') || 'Strength';
 
