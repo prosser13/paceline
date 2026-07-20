@@ -30,7 +30,9 @@ import { generateEveningReview } from '@/lib/coach-generate';
 import { sendTelegramMessage, mdToTelegramHtml } from '@/lib/telegram';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+// The evening review runs two sequential model calls (Phase 3 cause-ranking then the
+// prose), so it needs more than the single-call 60s.
+export const maxDuration = 120;
 
 const GENERATE_HOUR_LONDON = 21; // 9pm
 
