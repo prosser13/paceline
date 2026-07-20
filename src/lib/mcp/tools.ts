@@ -12,6 +12,11 @@ import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, setThresh
 import { applyPlanChange, deletePlanSession, addPlanSession } from '@/data/plan-mutations';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { resolveFuelGuidance, type FuelOverride } from '@/lib/fuel-progression';
+import { EDITABLE_FIELDS } from '@/data/plan-mutations';
+import {
+  editablePatchSchema, editableFieldList, CREATABLE_FIELD_NAMES,
+  CREATE_REQUIRED_FIELDS, assertEditableFieldContract,
+} from '@/lib/plan-fields';
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
 import { regenerateCoachReview } from '@/lib/coach-dispatch';
@@ -85,16 +90,47 @@ export const TOOL_DEFS: ToolDef[] = [
 ];
 
 // Write tools — only exposed/callable on a connection granted write scope.
+// The apply_plan_change patch schema + its description's field list are GENERATED
+// from the single source (src/lib/plan-fields.ts). add_plan_session takes the same
+// definition's `creatable` subset, so a field settable on create is editable after.
+const APPLY_PATCH_SCHEMA = editablePatchSchema();
+const APPLY_DESCRIPTION =
+  'Change one planned session through the logged, revertable path. Use for rescheduling, editing ' +
+  'distance/description/structure, intensity, priority, status (e.g. "skipped"), or the fuelling directive. ' +
+  'Cannot change a completed or past session; unknown keys are rejected. ' +
+  `Editable fields: ${editableFieldList()}. ` +
+  'fuel_guidance / fuel_override set or clear the day\'s fuelling directive ({ kind, gph }, or null to clear); ' +
+  'raising intensity to race/threshold on a low-fuel/fasted day returns a warning in the response but still applies.';
+
+const CREATE_OPTIONAL_FIELDS = CREATABLE_FIELD_NAMES.filter(f => !(CREATE_REQUIRED_FIELDS as readonly string[]).includes(f));
+const ADD_SESSION_SCHEMA = {
+  ...editablePatchSchema(CREATABLE_FIELD_NAMES),
+  required: [...CREATE_REQUIRED_FIELDS],
+};
+const ADD_DESCRIPTION =
+  'Add a new planned session on a date within the athlete\'s plan (a logged, audited create). ' +
+  `Required: ${CREATE_REQUIRED_FIELDS.join(', ')}. Optional: ${editableFieldList(CREATE_OPTIONAL_FIELDS)}. ` +
+  'The week and day are derived from the date; status defaults to planned. Returns the new session_id. ' +
+  'The date must fall inside a plan week and cannot be in the past.';
+
+// Fail the build (this module is imported by the MCP route, evaluated by next build)
+// the instant the schema, the description's field list, or the server allowlist drift
+// from EDITABLE_SESSION_FIELDS.
+assertEditableFieldContract({
+  schemaProperties: APPLY_PATCH_SCHEMA.properties,
+  description: APPLY_DESCRIPTION,
+  allowlist: EDITABLE_FIELDS,
+});
+
 export const WRITE_TOOL_DEFS: ToolDef[] = [
   {
     name: 'apply_plan_change',
-    description:
-      'Change one planned session through the logged, revertable path. Use for rescheduling, changing distance/description/structure, intensity, priority, or status (e.g. "skipped"). Cannot change a completed or past session. Editable fields: scheduled_date, name, description, distance_km, structure, target_pace, intensity, priority, status, session_type, activity_type, notes, fuel_guidance. fuel_guidance overrides the day\'s fuelling directive — pass { "kind": "normal"|"low_fuel"|"high_carb"|…, "gph": number|null } to set it, or null to clear (revert to the derived value). Raising intensity to race/threshold on a low-fuel/fasted day returns a warning in the response but still applies.',
+    description: APPLY_DESCRIPTION,
     inputSchema: {
       type: 'object',
       properties: {
         session_id: { type: 'string', description: 'The plan_session id to change.' },
-        patch: { type: 'object', description: 'Object of editable field → new value.' },
+        patch: { ...APPLY_PATCH_SCHEMA, description: 'The fields to change (only the allowlisted keys; unknown keys are rejected).' },
         reason: { type: 'string', description: 'Short human-readable reason (stored in the change log).' },
       },
       required: ['session_id', 'patch', 'reason'],
@@ -102,12 +138,11 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
   },
   {
     name: 'add_plan_session',
-    description:
-      'Add a new planned session to the plan on a date within the athlete\'s plan (a logged, audited create). Provide `session` with scheduled_date (YYYY-MM-DD), session_type (e.g. GA, LR, REC, RACE, STRENGTH, YOGA, CORE) and name; optionally activity_type ("running"/"cycling"), description, distance_km, intensity, estimated_duration ("H:MM"), estimated_tss, target_pace, structure, priority. The week and day are derived from the date; status defaults to planned. Returns the new session_id. The date must fall inside a plan week and cannot be in the past.',
+    description: ADD_DESCRIPTION,
     inputSchema: {
       type: 'object',
       properties: {
-        session: { type: 'object', description: 'Fields for the new session. Required: scheduled_date, session_type, name.' },
+        session: { ...ADD_SESSION_SCHEMA, description: 'Fields for the new session (a create-time subset of the editable fields).' },
         reason: { type: 'string', description: 'Short human-readable reason (stored in the change log).' },
       },
       required: ['session', 'reason'],
