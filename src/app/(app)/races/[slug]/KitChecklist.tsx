@@ -29,7 +29,7 @@ function cleanItems(arr: KitItem[]): KitItem[] {
 }
 
 export default function KitChecklist({
-  slug, wear, carry, dropBag, nightBefore, intro, dropBagSubtitle = 'CP4 · 43.5 km',
+  slug, wear, carry, dropBag, nightBefore, intro, dropBagSubtitle = 'CP4 · 43.2 km',
 }: {
   slug: string;
   wear: KitItem[];

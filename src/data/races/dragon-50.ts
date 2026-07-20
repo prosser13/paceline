@@ -1,6 +1,7 @@
 // Dragon Coastal 50 Mile Ultra (Run Walk Crawl) — curated race guide. Joined to
-// the live `plans` row (slug 'dragon-50') for date/target/countdown. Checkpoint
-// distances, cut-offs and supplies are the 2026 organiser figures.
+// the live `plans` row (slug 'dragon-50') for date/target/countdown. Cut-offs and
+// supplies are the 2026 organiser figures; checkpoint distances are scaled to the
+// 80.74 km GPS total actually run, so the splits line up with the recorded race.
 
 import type { RaceGuide } from './types';
 
@@ -13,7 +14,7 @@ export const DRAGON_50: RaceGuide = {
   region: 'South Wales coast — Kenfig to Cardiff Bay',
   start: { name: 'Kenfig Nature Reserve', lat: 51.5031, lng: -3.7283 },
   finish: { name: 'Norwegian Church, Cardiff Bay', lat: 51.4636, lng: -3.1656 },
-  distanceKm: 81.3,
+  distanceKm: 80.74,
   ascentM: 1150,
   startTime: '07:30', // midnight finish cut-off at 16.5 h ⇒ 07:30 start
   // Drop the user-supplied GPX here. The map/elevation render a placeholder
@@ -36,38 +37,38 @@ export const DRAGON_50: RaceGuide = {
 
   checkpoints: [
     { index: 0, name: 'Start — Kenfig Nature Reserve', distanceKm: 0, ascentM: 0, descentM: 0, cutoff: null,
-      supplies: 'Toilets. 7.2 km loop of the reserve before CP1.' },
-    { index: 1, name: 'CP1 · Kenfig', distanceKm: 7.2, ascentM: 30, descentM: 55, cutoff: null,
+      supplies: 'Toilets. 7.15 km loop of the reserve before CP1.' },
+    { index: 1, name: 'CP1 · Kenfig', distanceKm: 7.15, ascentM: 30, descentM: 55, cutoff: null,
       supplies: 'Sweets, biscuits, crisps, crackers, fruit, water, squash. Toilets.',
       fuelBetween: 'Nothing yet — settle in, sip water.',
       fuelAt: 'Run through. Top up water if needed.' },
-    { index: 2, name: 'CP2 · Newton', distanceKm: 17.7, ascentM: 100, descentM: 117, cutoff: null,
+    { index: 2, name: 'CP2 · Newton', distanceKm: 17.58, ascentM: 100, descentM: 117, cutoff: null,
       supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.',
       fuelBetween: '1 pack of Beta Fuel chews.',
       fuelAt: 'Crisps + a few sweets. Fill water.' },
-    { index: 3, name: 'CP3 · Southerndown', distanceKm: 31.4, ascentM: 200, descentM: 327, cutoff: '14:00',
+    { index: 3, name: 'CP3 · Southerndown', distanceKm: 31.18, ascentM: 200, descentM: 327, cutoff: '14:00',
       supplies: 'Hot drinks, soup, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
       fuelBetween: '1 pack of chews. Start the Hi5 flask if it’s warm.',
       fuelAt: '½ sandwich + biscuits. Fill water.' },
-    { index: 4, name: 'CP4 · Llantwit Major', distanceKm: 43.5, ascentM: 650, descentM: 603, cutoff: '17:00', dropBag: true,
+    { index: 4, name: 'CP4 · Llantwit Major', distanceKm: 43.2, ascentM: 650, descentM: 603, cutoff: '17:00', dropBag: true,
       supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
       note: 'Drop-bag access here.',
       fuelBetween: '1 pack of chews.',
       fuelAt: 'Drop bag: restock chews, refill Hi5 flask, ½ sandwich, grab your treat.' },
-    { index: 5, name: 'CP5 · Aberthaw', distanceKm: 49.9, ascentM: 700, descentM: 722, cutoff: '18:30',
+    { index: 5, name: 'CP5 · Aberthaw', distanceKm: 49.56, ascentM: 700, descentM: 722, cutoff: '18:30',
       supplies: 'Fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash, High5. No toilets.',
       note: 'No supporters or support crews at this checkpoint.',
       fuelBetween: '1 pack of chews.',
       fuelAt: 'Quick stop — crisps/sweets, fill water.' },
-    { index: 6, name: 'CP6 · Porthkerry Park', distanceKm: 60.4, ascentM: 900, descentM: 910, cutoff: '20:00',
+    { index: 6, name: 'CP6 · Porthkerry Park', distanceKm: 59.98, ascentM: 900, descentM: 910, cutoff: '20:00',
       supplies: 'Hot dogs, hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets nearby.',
       fuelBetween: '1 pack of chews.',
       fuelAt: 'Hot dog! Fill water.' },
-    { index: 7, name: 'CP7 · Sully', distanceKm: 70.0, ascentM: 1000, descentM: 1002, cutoff: '22:00',
+    { index: 7, name: 'CP7 · Sully', distanceKm: 69.52, ascentM: 1000, descentM: 1002, cutoff: '22:00',
       supplies: 'Hot drinks, fruit, sweets, biscuits, crisps, crackers, sandwiches, water, squash. Toilets.',
       fuelBetween: '1 pack of chews.',
       fuelAt: 'Sweets/biscuits if the stomach allows. Fill water.' },
-    { index: 8, name: 'Finish — Norwegian Church', distanceKm: 81.3, ascentM: 1150, descentM: 1150, cutoff: '00:00',
+    { index: 8, name: 'Finish — Norwegian Church', distanceKm: 80.74, ascentM: 1150, descentM: 1150, cutoff: '00:00',
       supplies: 'Cardiff Bay.',
       fuelBetween: 'Last pack of chews if you need it. Push to the line.',
       fuelAt: 'Done — 2:50 pm finish.' },
@@ -96,7 +97,7 @@ export const DRAGON_50: RaceGuide = {
             'march uphill costs little time versus running and saves the legs for the relentless ' +
             'back third.' },
     { heading: 'Use the drop bag at CP4',
-      body: 'Llantwit Major (43.5 km) is your one drop bag and the gateway to the hard section. Restock ' +
+      body: 'Llantwit Major (43.2 km) is your one drop bag and the gateway to the hard section. Restock ' +
             'chews, refill the drink flask, swap to fresh socks if wet, and grab any layer you want for ' +
             'the exposed back half. CP5 (Aberthaw) has no crew, so leave CP4 self-sufficient to CP6.' },
     { heading: 'The race begins at CP4',
@@ -166,7 +167,7 @@ export const DRAGON_50: RaceGuide = {
     { label: 'Caffeine gels or tablets', detail: 'Save for the back half' },
     { label: 'Wet wipes', detail: 'A quick freshen-up at halfway' },
     { label: 'Cap / sunglasses', detail: 'If it’s bright on the exposed coast' },
-    { label: 'A treat', detail: 'Something you’ll actually fancy at 43.5 km' },
+    { label: 'A treat', detail: 'Something you’ll actually fancy at 43.2 km' },
     { label: 'Nipple plasters', detail: 'Fresh pair for the back half' },
   ],
   nightBefore: [
