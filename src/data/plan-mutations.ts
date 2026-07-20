@@ -12,6 +12,8 @@ import { getCurrentWeek } from '@/data/plans';
 import { expandSegmentDistances } from '@/lib/plan-structure';
 import { countsToWeeklyVolume } from '@/lib/weekly-volume';
 import { triggerIntervalsSync } from '@/lib/intervals-sync';
+import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { resolveFuelGuidance, fuelIntensityConflict, type FuelOverride } from '@/lib/fuel-progression';
 
 // Fields the planning layer may change. Everything else (id, plan_id, timestamps,
 // intervals link, is_completed) is off-limits — a patch touching them is rejected.
@@ -19,7 +21,7 @@ const EDITABLE_FIELDS = new Set([
   'scheduled_date', 'day_of_week', 'am_pm', 'session_type', 'activity_type', 'name',
   'description', 'distance_km', 'warmup_km', 'cooldown_km', 'structure', 'target_pace',
   'target_pace_end', 'estimated_tss', 'estimated_duration', 'intensity', 'profile_shape',
-  'week_phase', 'priority', 'status', 'rationale', 'notes',
+  'week_phase', 'priority', 'status', 'rationale', 'notes', 'fuel_override',
 ]);
 
 // Fields a caller may set when *creating* a session. plan_id / week_number /
@@ -86,6 +88,17 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   // Only editable fields; reject the whole change if it reaches for a locked one.
   const patch: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(input.patch)) {
+    if (k === 'fuel_guidance') {
+      // Friendly alias for the fuel_override column: an object { kind, gph } sets the
+      // day's directive; null clears the override (reverts to the derived value).
+      if (v === null) { patch.fuel_override = null; continue; }
+      const o = v as { kind?: unknown; gph?: unknown };
+      if (typeof v !== 'object' || typeof o.kind !== 'string' || !o.kind) {
+        return reject('fuel_guidance must be null (to clear) or an object { kind: string, gph?: number|null }');
+      }
+      patch.fuel_override = { kind: o.kind, gph: typeof o.gph === 'number' ? o.gph : null };
+      continue;
+    }
     if (!EDITABLE_FIELDS.has(k)) return reject(`field not editable: ${k}`);
     patch[k] = v;
   }
@@ -160,6 +173,18 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     }
   }
 
+  // ── fuelling ↔ intensity conflict (warn, never reject) ──
+  // A low-fuel / fasted day can't carry race- or threshold-effort work. Surface the
+  // clash so it's stated, not hidden — the athlete may intend to drop the protocol.
+  let fuelWarning: string | null = null;
+  if ('intensity' in patch || 'fuel_override' in patch) {
+    const effIntensity = ('intensity' in patch ? patch.intensity : session.intensity) as string | null;
+    const effOverride = ('fuel_override' in patch ? patch.fuel_override : session.fuel_override) as FuelOverride | null;
+    const effDate = (typeof patch.scheduled_date === 'string' ? patch.scheduled_date : session.scheduled_date) as string;
+    const derivedMap = await getFuelPlanForGoalBlock(effDate);
+    fuelWarning = fuelIntensityConflict(resolveFuelGuidance(effOverride, derivedMap.get(session_id)), effIntensity);
+  }
+
   // Capture the inverse (the fields we're about to change) for an exact revert.
   const before: Record<string, unknown> = {};
   for (const k of Object.keys(patch)) before[k] = session[k as keyof typeof session] ?? null;
@@ -203,6 +228,7 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   // a run in that week just changed, warn so the author/agent reviews the text.
   // (Prose can't be auto-rewritten safely — surfacing it is the honest fix.)
   const warnings: string[] = [];
+  if (fuelWarning) warnings.push(fuelWarning);
   if (touchesShape && isRun && session.plan_id != null) {
     const effDate = typeof patch.scheduled_date === 'string'
       ? patch.scheduled_date : (session.scheduled_date as string);
@@ -414,8 +440,20 @@ export async function addPlanSession(input: {
   }
   await supabaseAdmin.from('adjustment_logs').update({ plan_session_id: created.id }).eq('user_id', userId).eq('id', logRow.id);
 
+  // Warn (never reject) when the new session's intensity conflicts with the fuelling
+  // directive its type earns — e.g. a race/threshold effort on a low-fuel day.
+  const derivedMap = await getFuelPlanForGoalBlock(scheduledDate);
+  const fuelWarning = fuelIntensityConflict(
+    resolveFuelGuidance(null, derivedMap.get(created.id as string)),
+    (row.intensity as string | null) ?? null,
+  );
+
   await triggerIntervalsSync();
-  return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: {}, after: finalRow, session_id: created.id as string };
+  return {
+    ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string,
+    before: {}, after: finalRow, session_id: created.id as string,
+    ...(fuelWarning ? { warnings: [fuelWarning] } : {}),
+  };
 }
 
 // Undo a previously-applied change by replaying its before_state. Idempotent per

@@ -28,7 +28,7 @@ import { getStrengthCoachSummary } from '@/data/strength-progression';
 import { listActiveNiggles } from '@/data/strength-niggles';
 import { getPendingThresholdSuggestion } from '@/data/threshold-suggestion';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
-import { fuelTargetLabel } from '@/lib/fuel-progression';
+import { resolveFuelGuidance, NORMAL_FUEL_KIND, type FuelGuidance, type FuelOverride } from '@/lib/fuel-progression';
 
 // Static reference an agent needs to author edits, bundled into the briefing so a
 // fresh session has it without searching the codebase. `structure` is shaped
@@ -104,7 +104,7 @@ function fmtPaceMinKm(minKm: number): string {
 const SESSION_FIELDS =
   'id, plan_id, scheduled_date, day_of_week, am_pm, session_type, activity_type, ' +
   'name, description, distance_km, target_pace, target_pace_end, estimated_tss, ' +
-  'estimated_duration, intensity, priority, status, week_phase, rationale, structure';
+  'estimated_duration, intensity, priority, status, week_phase, rationale, structure, fuel_override';
 
 export interface PlanContext {
   as_of: string;
@@ -222,6 +222,8 @@ export interface RecentSession {
     merged_from: { name: string | null; distance_km: number | null; duration_mins: number | null; avg_pace_min_km: number | null; avg_hr: number | null }[] | null;
   } | null;
   pace_check: PaceCheck | null;   // pace-vs-prescribed-zone verdict for completed runs
+  fuel_override?: FuelOverride | null; // raw per-session override (for resolution)
+  fuel_guidance?: FuelGuidance;   // resolved fuelling directive — always set on output
 }
 
 // Assemble the briefing as of `asOf` (YYYY-MM-DD; defaults to today, UTC).
@@ -301,14 +303,16 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
   // Today's gut-training fuel guidance (for the morning briefing's session line) —
   // the first of today's sessions that carries a target. Today lives in `upcoming`
   // for the mid-day agent and in `recent` for the evening review.
-  const todaysAll: { id: string; name: string }[] = [
-    ...upcoming.filter(s => (s.scheduled_date as string) === today).map(s => ({ id: s.id as string, name: s.name as string })),
-    ...recent.filter(s => s.scheduled_date === today).map(s => ({ id: s.id, name: s.name })),
+  // Resolved (override-aware) so it matches the per-session fuel_guidance below for
+  // the same date — the first of today's sessions carrying a non-normal directive.
+  const todaysAll: { id: string; name: string; override: FuelOverride | null }[] = [
+    ...upcoming.filter(s => (s.scheduled_date as string) === today).map(s => ({ id: s.id as string, name: s.name as string, override: (s.fuel_override as FuelOverride | null) ?? null })),
+    ...recent.filter(s => s.scheduled_date === today).map(s => ({ id: s.id, name: s.name, override: s.fuel_override ?? null })),
   ];
   let fuelGuidance: PlanContext['fuel_guidance'] = null;
   for (const s of todaysAll) {
-    const t = fuelMap.get(s.id);
-    if (t) { fuelGuidance = { session: s.name, kind: t.kind, gph: t.gph, label: fuelTargetLabel(t) }; break; }
+    const g = resolveFuelGuidance(s.override, fuelMap.get(s.id));
+    if (g.kind !== NORMAL_FUEL_KIND) { fuelGuidance = { session: s.name, kind: g.kind, gph: g.gph, label: g.label }; break; }
   }
 
   // ONE consolidated evening log-nudge: unlogged fuel on today's gut-training rep
@@ -334,8 +338,15 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     current_week: currentWeek as Record<string, unknown> | null,
     // Each run carries its prescribed `target` — paired pace + HR from the same zone,
     // so a reader never mixes (e.g.) a Z2 pace with a Z1 HR on an unstructured easy run.
-    upcoming: upcoming.map(s => ({ ...s, target: runTargets(s, runZones, runHrBands) })),
-    recent,
+    // Every session also carries an explicit `fuel_guidance` (never omitted): the
+    // resolved fuelling directive for that session, override-aware and matching the
+    // top-level fuel_guidance for the same date.
+    upcoming: upcoming.map(s => ({
+      ...s,
+      target: runTargets(s, runZones, runHrBands),
+      fuel_guidance: resolveFuelGuidance((s.fuel_override as FuelOverride | null) ?? null, fuelMap.get(s.id as string)),
+    })),
+    recent: recent.map(s => ({ ...s, fuel_guidance: resolveFuelGuidance(s.fuel_override ?? null, fuelMap.get(s.id)) })),
     wellness: wellness as Record<string, unknown> | null,
     zones: {
       threshold_pace: threshold,
@@ -709,7 +720,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const userId = await currentUserId();
   const { data: sessions } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, rationale, structure')
+    .select('id, scheduled_date, session_type, activity_type, name, description, intensity, priority, status, distance_km, target_pace, estimated_tss, estimated_duration, rationale, structure, fuel_override')
     .eq('user_id', userId)
     .gte('scheduled_date', from)
     .lte('scheduled_date', to)
@@ -837,6 +848,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         },
         actualPaceMinKm, ngpMinKm, avgHr, elevGainM, distanceKm, segmentActuals, zones, hrBands,
       ) : null,
+      fuel_override: (s.fuel_override as FuelOverride | null) ?? null,
     };
   });
 }
