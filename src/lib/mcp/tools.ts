@@ -13,8 +13,10 @@ import { applyPlanChange } from '@/data/plan-mutations';
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
 import { regenerateCoachReview } from '@/lib/coach-dispatch';
+import { currentUserId, runWithUser } from '@/lib/scope';
 import { secondsToPace } from '@/lib/plan-structure';
 import { todayISO } from '@/lib/dates';
+import { after } from 'next/server';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -169,7 +171,7 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
   {
     name: 'regenerate_coach_review',
     description:
-      "Regenerate the athlete's coach message for a day and re-send it to their Telegram, replacing any existing message for that day. Use after changing the plan, a session result, a daily note or availability so the review reflects it. kind 'evening' (default) is the nightly review that looks back on the day; 'morning' is the forward-looking briefing that factors in overnight wellness. Returns the new headline/body.",
+      "Regenerate the athlete's coach message for a day and re-send it to their Telegram, replacing any existing message for that day. Use after changing the plan, a session result, a daily note or availability so the review reflects it. kind 'evening' (default) is the nightly review that looks back on the day; 'morning' is the forward-looking briefing that factors in overnight wellness. Runs in the background and returns immediately (the evening review is a two-stage generation); the updated review is delivered to Telegram and the dashboard when ready, usually under a minute.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -299,7 +301,19 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       if (kind !== 'evening' && kind !== 'morning') bad("kind must be 'evening' or 'morning'");
       const date = (args.date as string | undefined) ?? todayISO();
       if (!ISO_DATE.test(date)) bad('date must be YYYY-MM-DD');
-      return regenerateCoachReview(kind, date);
+      // The evening review is a two-stage generation that can exceed the MCP client's
+      // ~60s wait, so run it AFTER the response and ack immediately — it delivers to
+      // Telegram + the dashboard when done. Re-open the caller's scope inside the
+      // deferred task; the request scope isn't guaranteed to persist into it.
+      const userId = await currentUserId();
+      after(() =>
+        runWithUser(userId, () => regenerateCoachReview(kind, date))
+          .catch(err => console.error(`regenerate_coach_review (${kind} ${date}) failed:`, err)),
+      );
+      return {
+        ok: true, status: 'regenerating', kind, for_date: date,
+        note: `Regenerating the ${kind} review for ${date} — it will arrive on your Telegram and dashboard shortly (usually under a minute).`,
+      };
     }
 
     default:
