@@ -77,7 +77,8 @@ export default function TomorrowCard({
     if (segs.length > 0) detail = <SwimSegmentDetail segments={segs} variant="card" />;
   } else if (sport === 'strength') {
     const exercises = (session.structure as unknown as StrengthEx[] | null) ?? [];
-    const focus = session.description ? session.description.split(/\s*[—–·]\s*/)[0].trim() : null;
+    // Spaced separators only for the en-dash, so a "20–30 min" range isn't cut to "20".
+    const focus = session.description ? session.description.split(/\s*[—·]\s*|\s+–\s+/)[0].trim() : null;
     big = humanHMM(session.estimated_duration) ?? `${exercises.length} exercises`;
     sub = [focus, session.intensity].filter(Boolean).join(' · ') || null;
     if (exercises.length > 0) detail = <StrengthDetailTable exercises={exercises} />;

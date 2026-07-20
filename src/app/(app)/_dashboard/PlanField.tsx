@@ -61,7 +61,7 @@ export default function PlanField({ d }: { d: DashboardData }) {
       <div className="flex flex-col h-full" style={PAD}>
         <div className="text-[11px] uppercase font-bold" style={{ letterSpacing: '.06em', color: accent }}>{eyebrow}</div>
         <div className="font-display font-bold text-[18px] leading-[1.12]" style={{ marginTop: '5px' }}>
-          {(d.weekPurpose ?? 'Training block').split(/\s*[—–]\s*/)[0]}
+          {(d.weekPurpose ?? 'Training block').split(/\s*—\s*|\s+–\s+/)[0]}
         </div>
         <PhaseBottom segments={d.phaseSegments} todayPct={d.todayPct} />
       </div>
