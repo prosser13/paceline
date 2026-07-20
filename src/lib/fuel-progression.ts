@@ -32,6 +32,20 @@ interface FuelSession {
   session_type?: string | null;
   activity_type?: string | null;
   distance_km?: number | string | null;
+  // A manual per-session override of the derived directive (stored jsonb). When
+  // present it decides this session's kind BEFORE the progression is numbered, so
+  // an overridden fuelling day counts as a rep and the totals stay right.
+  fuel_override?: { kind?: string | null; gph?: number | null } | null;
+}
+
+// The kinds the row-model FuelTarget can carry. An override of one of these
+// replaces the derived kind; `normal` clears the directive; any other override
+// kind (e.g. high_carb) isn't representable here, so we keep the derived value.
+function overrideKind(ov: FuelSession['fuel_override']): FuelTargetKind | 'clear' | null {
+  if (!ov || typeof ov.kind !== 'string' || !ov.kind) return null;   // no override
+  if (ov.kind === NORMAL_FUEL_KIND) return 'clear';
+  if (ov.kind === 'progression' || ov.kind === 'low_fuel' || ov.kind === 'fasted_ok') return ov.kind;
+  return null;   // unrepresentable kind → fall back to the derivation
 }
 
 function classify(s: FuelSession): FuelTargetKind | null {
@@ -45,19 +59,33 @@ function classify(s: FuelSession): FuelTargetKind | null {
   return null;   // quality / races / strength / yoga / rest
 }
 
+// A session's EFFECTIVE kind: a manual override wins (`normal` clears it to no
+// directive); otherwise the deterministic classification. This is resolved up
+// front so overrides are part of the fuelled sequence, not a post-hoc patch.
+function effectiveKind(s: FuelSession): FuelTargetKind | null {
+  const ov = overrideKind(s.fuel_override);
+  if (ov === 'clear') return null;
+  return ov ?? classify(s);
+}
+
 // The per-session fuel guidance for a block's sessions, keyed by session id.
 // The progression is anchored to the FUELLED-SESSION SEQUENCE (not calendar
 // weeks) so a moved session shifts the sequence rather than skipping a step:
-// rep n targets min(90, 50 + 8·(n−1)).
+// rep n targets min(90, 50 + 8·(n−1)). Manual overrides are folded in first, so
+// an overridden fuelling day is counted and numbered like any other rep (its own
+// g/h target still wins over the ramp value).
 export function fuelPlanForSessions(sessions: FuelSession[]): Map<string, FuelTarget> {
   const out = new Map<string, FuelTarget>();
   const ordered = [...sessions].sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
 
-  const fuelled = ordered.filter(s => classify(s) === 'progression');
+  const fuelled = ordered.filter(s => effectiveKind(s) === 'progression');
   fuelled.forEach((s, i) => {
+    const rampGph = Math.min(FUEL_PEAK_GPH, FUEL_START_GPH + FUEL_STEP_GPH * i);
+    const ovGph = s.fuel_override?.gph;
     out.set(s.id, {
       kind: 'progression',
-      gph: Math.min(FUEL_PEAK_GPH, FUEL_START_GPH + FUEL_STEP_GPH * i),
+      // An explicit override g/h wins over the ramp value for its position.
+      gph: overrideKind(s.fuel_override) === 'progression' && ovGph != null ? ovGph : rampGph,
       repIndex: i + 1,
       repTotal: fuelled.length,
     });
@@ -65,8 +93,11 @@ export function fuelPlanForSessions(sessions: FuelSession[]): Map<string, FuelTa
 
   for (const s of ordered) {
     if (out.has(s.id)) continue;
-    const kind = classify(s);
-    if (kind === 'low_fuel') out.set(s.id, { kind, gph: LOW_FUEL_MAX_GPH });
+    const kind = effectiveKind(s);
+    if (kind === 'low_fuel') {
+      const ovGph = s.fuel_override?.gph;
+      out.set(s.id, { kind, gph: overrideKind(s.fuel_override) === 'low_fuel' && ovGph != null ? ovGph : LOW_FUEL_MAX_GPH });
+    }
     else if (kind === 'fasted_ok') out.set(s.id, { kind, gph: null });
   }
   return out;
