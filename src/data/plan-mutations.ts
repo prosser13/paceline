@@ -22,6 +22,15 @@ const EDITABLE_FIELDS = new Set([
   'week_phase', 'priority', 'status', 'rationale', 'notes',
 ]);
 
+// Fields a caller may set when *creating* a session. plan_id / week_number /
+// week_phase / day_of_week / status are derived (never caller-supplied).
+const CREATABLE_FIELDS = new Set([
+  'scheduled_date', 'session_type', 'name', 'activity_type', 'description',
+  'distance_km', 'warmup_km', 'cooldown_km', 'structure', 'target_pace',
+  'target_pace_end', 'estimated_tss', 'estimated_duration', 'intensity',
+  'profile_shape', 'priority', 'rationale', 'notes',
+]);
+
 export interface PlanChangeInput {
   idempotency_key: string;
   actor: 'claude' | 'user';
@@ -223,6 +232,190 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
     ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string,
     before, after: patch, ...(warnings.length ? { warnings } : {}),
   };
+}
+
+// Permanently remove one planned session through the logged path. Mirrors
+// applyPlanChange's guardrails (completed/past off-limits, agent autonomy gate) and
+// writes an audited `delete` row whose before_state holds the full session, so the
+// deletion is recorded and the row is recoverable. The FKs into plan_sessions are
+// ON DELETE SET NULL / CASCADE, so the delete leaves no orphans.
+export async function deletePlanSession(input: {
+  idempotency_key: string; actor: 'claude' | 'user'; reason: string; session_id: string;
+}): Promise<PlanChangeResult> {
+  const { idempotency_key, actor, reason, session_id } = input;
+  if (!idempotency_key?.trim()) return reject('idempotency_key is required');
+  if (!reason?.trim()) return reject('reason is required');
+  if (actor !== 'claude' && actor !== 'user') return reject('actor must be "claude" or "user"');
+
+  const userId = await currentUserId();
+  const { data: session } = await supabaseAdmin
+    .from('plan_sessions').select('*').eq('user_id', userId).eq('id', session_id).maybeSingle();
+  if (!session) return reject('session not found');
+
+  const now = today();
+  if (session.status === 'completed') return reject('session is completed — cannot delete');
+  if ((session.scheduled_date as string) < now) return reject('session is in the past — cannot delete');
+  const { data: linked } = await supabaseAdmin
+    .from('completed_workouts').select('id').eq('user_id', userId).eq('plan_session_id', session_id).maybeSingle();
+  if (linked) return reject('session has a completed workout linked — cannot delete');
+
+  // ── agent-only guardrails (mirror applyPlanChange) — MCP calls as 'user' and skips these ──
+  if (actor === 'claude') {
+    const prefs = await getCoachingPrefs();
+    const autonomy = prefs?.autonomy ?? 'propose';
+    if (autonomy === 'propose') {
+      return { ok: false, applied: false, status: 'proposal_only',
+        reason: 'autonomy is "propose" — surface this deletion for approval instead of applying' };
+    }
+    if (prefs?.protect_priority_a && session.priority === 'A') {
+      return reject('A-priority session is protected (protect_priority_a)');
+    }
+    if (autonomy === 'auto_within_week') {
+      const week = await getCurrentWeek(now);
+      if (!week) return reject('autonomy is "auto_within_week" but the current week is unknown — propose instead');
+      const d = session.scheduled_date as string;
+      if (!(d >= (week.date_from as string) && d <= (week.date_to as string))) {
+        return reject('autonomy is "auto_within_week" — session is outside the current week; propose instead');
+      }
+    }
+  }
+
+  // Record the deletion first (this also claims the idempotency key), then delete.
+  const { data: logRow, error: logErr } = await supabaseAdmin
+    .from('adjustment_logs')
+    .insert({
+      user_id:         userId,
+      plan_session_id: session_id,
+      operation:       'delete',
+      actor,
+      reason:          reason.trim(),
+      idempotency_key,
+      before_state:    session,   // full row — recoverable
+      after_state:     null,
+    })
+    .select('id')
+    .single();
+
+  if (logErr) {
+    if (logErr.code === '23505') {
+      const dup = await findByKey(userId, idempotency_key);
+      return { ok: true, applied: false, status: 'duplicate', adjustment_id: dup };
+    }
+    return reject(`could not record deletion: ${logErr.message}`);
+  }
+
+  const { error: delErr } = await supabaseAdmin
+    .from('plan_sessions').delete().eq('user_id', userId).eq('id', session_id);
+  if (delErr) {
+    // Keep audit + state in lockstep — drop the log row we just wrote.
+    await supabaseAdmin.from('adjustment_logs').delete().eq('user_id', userId).eq('id', logRow.id);
+    return reject(`delete failed: ${delErr.message}`);
+  }
+
+  // Drop the workout from the intervals.icu calendar too (best-effort, no-op if off).
+  await triggerIntervalsSync();
+
+  return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: session, after: {} };
+}
+
+// Add a new planned session through the logged path. The date must fall inside a
+// plan's week calendar (that's what supplies plan_id / week_number / phase); the
+// day_of_week is derived, status defaults to 'planned'. Writes an audited `create`
+// row and returns the new session id. Mirrors applyPlanChange's run structure/
+// distance invariant and the agent autonomy gate (MCP calls as 'user' and skips it).
+export async function addPlanSession(input: {
+  idempotency_key: string; actor: 'claude' | 'user'; reason: string; session: Record<string, unknown>;
+}): Promise<PlanChangeResult & { session_id?: string }> {
+  const { idempotency_key, actor, reason, session: src } = input;
+  if (!idempotency_key?.trim()) return reject('idempotency_key is required');
+  if (!reason?.trim()) return reject('reason is required');
+  if (actor !== 'claude' && actor !== 'user') return reject('actor must be "claude" or "user"');
+  if (!src || typeof src !== 'object') return reject('session is required');
+
+  const scheduledDate = src.scheduled_date;
+  const sessionType = src.session_type;
+  const name = src.name;
+  if (typeof scheduledDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) return reject('session.scheduled_date must be YYYY-MM-DD');
+  if (typeof sessionType !== 'string' || !sessionType.trim()) return reject('session.session_type is required');
+  if (typeof name !== 'string' || !name.trim()) return reject('session.name is required');
+
+  const now = today();
+  if (scheduledDate < now) return reject('cannot add a session in the past');
+
+  const userId = await currentUserId();
+  const week = await getCurrentWeek(scheduledDate);
+  if (!week) return reject("no plan covers that date — a session can only be added within a plan's week range");
+
+  // Whitelist caller fields; everything structural is derived below.
+  const row: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(src)) if (CREATABLE_FIELDS.has(k)) row[k] = v;
+  const activityType = typeof row.activity_type === 'string' && row.activity_type ? row.activity_type : 'running';
+
+  // Same run invariant as applyPlanChange: structure must describe the headline distance.
+  const isRun = countsToWeeklyVolume({ session_type: sessionType, activity_type: activityType });
+  if (isRun && 'structure' in row && 'distance_km' in row) {
+    const sum = structureKm(row.structure);
+    const dist = Number(row.distance_km) || 0;
+    if (sum != null && dist > 0 && Math.abs(sum - dist) > Math.max(1, dist * 0.1)) {
+      return reject(`structure distances sum to ${sum.toFixed(1)}km but distance_km is ${dist}km — keep them in sync`);
+    }
+  }
+
+  // ── agent-only guardrails (MCP calls as 'user' and skips these) ──
+  if (actor === 'claude') {
+    const prefs = await getCoachingPrefs();
+    const autonomy = prefs?.autonomy ?? 'propose';
+    if (autonomy === 'propose') {
+      return { ok: false, applied: false, status: 'proposal_only',
+        reason: 'autonomy is "propose" — surface this addition for approval instead of applying' };
+    }
+    if (autonomy === 'auto_within_week') {
+      const cw = await getCurrentWeek(now);
+      if (!cw || scheduledDate < (cw.date_from as string) || scheduledDate > (cw.date_to as string)) {
+        return reject('autonomy is "auto_within_week" — target date is outside the current week; propose instead');
+      }
+    }
+  }
+
+  const finalRow = {
+    ...row,
+    user_id:     userId,
+    plan_id:     week.plan_id,
+    week_number: week.week_number,     // the week trigger reaffirms this from the date
+    week_phase:  week.phase ?? null,
+    day_of_week: isoDow(scheduledDate),
+    activity_type: activityType,
+    status:      'planned',
+  };
+
+  // Claim the idempotency key with the audit row first (session id backfilled after insert),
+  // so a retried create can't insert a duplicate session.
+  const { data: logRow, error: logErr } = await supabaseAdmin
+    .from('adjustment_logs')
+    .insert({
+      user_id: userId, plan_session_id: null, operation: 'create', actor,
+      reason: reason.trim(), idempotency_key, before_state: null, after_state: finalRow,
+    })
+    .select('id')
+    .single();
+  if (logErr) {
+    if (logErr.code === '23505') {
+      const dup = await findByKey(userId, idempotency_key);
+      return { ok: true, applied: false, status: 'duplicate', adjustment_id: dup };
+    }
+    return reject(`could not record addition: ${logErr.message}`);
+  }
+
+  const { data: created, error: insErr } = await supabaseAdmin
+    .from('plan_sessions').insert(finalRow).select('id').single();
+  if (insErr || !created) {
+    await supabaseAdmin.from('adjustment_logs').delete().eq('user_id', userId).eq('id', logRow.id);
+    return reject(`insert failed: ${insErr?.message ?? 'unknown error'}`);
+  }
+  await supabaseAdmin.from('adjustment_logs').update({ plan_session_id: created.id }).eq('user_id', userId).eq('id', logRow.id);
+
+  await triggerIntervalsSync();
+  return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: {}, after: finalRow, session_id: created.id as string };
 }
 
 // Undo a previously-applied change by replaying its before_state. Idempotent per
