@@ -8,7 +8,7 @@ import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
-import { danielsVdot, vdotToThresholdPaceMinKm } from '@/lib/prediction';
+import { danielsVdot, vdotToThresholdPaceMinKm, isOutlierRaceDistanceM } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import { secondsToPace, normalizeStructure, paceToSeconds, type NormStep, type NormSegment } from '@/lib/plan-structure';
@@ -28,7 +28,7 @@ const SLOWER_WINDOW_DAYS = 35;     // …all within this window (stale history c
 // ── types ─────────────────────────────────────────────────────
 export type ThresholdOutcome =
   | 'suggested' | 'within_noise' | 'capped_wait' | 'cooldown' | 'no_fresh_evidence'
-  | 'taper_freeze' | 'slower_pending_confirmation' | 'applied' | 'dismissed' | 'held';
+  | 'taper_freeze' | 'recovery_freeze' | 'slower_pending_confirmation' | 'applied' | 'dismissed' | 'held';
 
 export interface ThresholdEvidence { label: string; impliedThresholdMinKm: number; weight: number; }
 
@@ -135,6 +135,10 @@ async function estimateThreshold(asOf: string, currentMinKm: number): Promise<Es
   let newestRaceDate: string | null = null;
 
   for (const r of races) {
+    // Ultra-distance races say nothing reliable about 60-min threshold — pacing,
+    // terrain and fuelling dominate. Exclude them exactly as the marathon-prediction
+    // blend does (benchmarks.ts Riegel input), so a slow ultra can't ratchet zones down.
+    if (isOutlierRaceDistanceM(r.distanceKm * 1000)) continue;
     const vdot = danielsVdot(r.distanceKm * 1000, r.seconds / 60);
     const implied = vdotToThresholdPaceMinKm(vdot);
     if (implied == null || !r.date) continue;
@@ -183,15 +187,17 @@ export function slowerConfirmed(
   return { confirmed: streak >= SLOWER_CONFIRM_CHECKS, streak };
 }
 
-// The weekly checks before `weekStart` (newest first) — applied/reverted change
-// records are excluded; they're change markers, not weekly reads.
+// The weekly checks before `weekStart` (newest first) — applied change records and
+// freeze weeks (taper/recovery) are excluded. Freezes are transparent to the streak:
+// a recovery block's slow-by-design weeks must neither confirm a slower threshold nor
+// break a legitimate streak that spans the block.
 async function priorWeeklyChecks(weekStart: string, limit = SLOWER_CONFIRM_CHECKS): Promise<{ gap_s: number | null; week_start: string; current_min_km: number }[]> {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin.from('threshold_checks')
     .select('gap_s, week_start, current_min_km, outcome')
     .eq('user_id', userId)
     .lt('week_start', weekStart)
-    .neq('outcome', 'applied')
+    .not('outcome', 'in', '("applied","taper_freeze","recovery_freeze")')
     .order('week_start', { ascending: false })
     .limit(limit);
   return ((data ?? []) as { gap_s: number | string | null; week_start: string; current_min_km: number | string }[]).map(r => ({
@@ -213,6 +219,18 @@ async function lastDismissedThreshold(): Promise<{ suggestedMinKm: number | null
     suggestedMinKm: data.suggested_min_km != null ? Number(data.suggested_min_km) : null,
     currentMinKm: Number(data.current_min_km),
   };
+}
+
+// Is `onDate` inside a Recovery-phase plan week? Checks every plan_week spanning the
+// date (blocks can overlap), so it doesn't depend on getCurrentWeek's tie-break when
+// two plans share a date. In a recovery block easy paces are slow by design, so the
+// threshold estimate reads slow week after week — freeze suggestions either direction.
+async function isRecoveryWeek(onDate: string): Promise<boolean> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin.from('plan_weeks')
+    .select('phase').eq('user_id', userId)
+    .lte('date_from', onDate).gte('date_to', onDate).ilike('phase', 'recovery').limit(1).maybeSingle();
+  return !!data;
 }
 
 // ── last change (for cooldown) — applied checks + manual edits ─
@@ -281,6 +299,15 @@ export async function runThresholdCheck(asOf?: string): Promise<void> {
     if (goal?.raceDate && daysBetween(today, goal.raceDate) >= 0 && daysBetween(today, goal.raceDate) <= TAPER_FREEZE_DAYS) {
       await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'taper_freeze', status: 'none',
         commentary: `${stamp} ${evidenceText} ${estText}. Inside ${TAPER_FREEZE_DAYS} days of ${goal.name} — zones stay put through the taper. No change.`, evidence: signals });
+      return;
+    }
+    // 1b. Recovery-block freeze. In a recovery phase, easy paces are slow by design
+    //     (and the block often follows a hard race), so the estimate reads slow week
+    //     after week. Freeze rather than let those weeks accumulate a slower
+    //     confirmation streak — freeze rows are excluded from priorWeeklyChecks.
+    if (await isRecoveryWeek(today)) {
+      await writeCheck({ weekStart, currentMinKm, estimateMinKm, gapS, outcome: 'recovery_freeze', status: 'none',
+        commentary: `${stamp} ${evidenceText} ${estText}. Recovery block — easy paces are slow by design; zones stay put. No change.`, evidence: signals });
       return;
     }
     // 2. Within noise.
