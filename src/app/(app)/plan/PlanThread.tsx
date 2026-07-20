@@ -400,6 +400,7 @@ export default function PlanThread({
     const isNext    = currentWeekNum != null && week.week_number === currentWeekNum + 1;
 
     let weekTss = 0, weekTssEstimated = false, weekKm = 0, weekMins = 0, weekCount = 0;
+    let weekDoneCount = 0, weekDoneKm = 0;
     for (const sess of sessions) {
       const st = resolveStatus(sess, todayStr, completedMap);
       if (st === 'rest') continue;
@@ -409,8 +410,12 @@ export default function PlanThread({
       else { weekTss += sess.estimated_tss ?? 0; if (st !== 'done') weekTssEstimated = true; }
       weekKm += Number(sess.distance_km) || 0;
       weekMins += c?.durationMins ?? durHM(sess.estimated_duration);
+      if (st === 'done') { weekDoneCount += 1; weekDoneKm += c?.distanceKm ?? (Number(sess.distance_km) || 0); }
     }
     const weekHours = weekMins / 60;
+    // Done-vs-planned summary, shown only once the week has started (past + current).
+    const weekStarted = week.date_from <= todayStr;
+    const weekRunKm = Math.round(weekKm);
 
     const byDate: Record<string, PlanSession[]> = {};
     for (const s of sessions) (byDate[s.scheduled_date] ??= []).push(s);
@@ -454,7 +459,13 @@ export default function PlanThread({
             {weekRace && <RaceBadge priority={weekRace} />}
             <svg className="w-[18px] h-[18px] text-stone transition-transform group-open:rotate-180 shrink-0 ml-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
           </div>
-          {week.purpose && <div className="text-[12px] font-semibold text-stone" style={{ marginBottom: '11px' }}>{week.purpose}</div>}
+          {week.purpose && <div className="text-[12px] font-semibold text-stone" style={{ marginBottom: weekStarted && weekCount > 0 ? '4px' : '11px' }}>{week.purpose}</div>}
+          {weekStarted && weekCount > 0 && (
+            <div className="text-[11px] font-semibold text-stone/80 tabular-nums" style={{ marginBottom: '11px' }}>
+              <span className="text-ink">{weekDoneCount}</span>/{weekCount} sessions done
+              {weekRunKm > 0 && <> · <span className="text-ink">{Math.round(weekDoneKm)}</span>/{weekRunKm} km</>}
+            </div>
+          )}
           {/* Stack the stats above the day graph on mobile so the graph gets the
               full width; side-by-side from md up. */}
           <div className="flex flex-col gap-[12px] md:flex-row md:items-end md:gap-[18px]">
