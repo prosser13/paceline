@@ -80,3 +80,73 @@ export function fuelTargetLabel(t: FuelTarget): string {
   if (t.kind === 'low_fuel') return `Low-fuel day — water or ≤${LOW_FUEL_MAX_GPH} g/h, fat-adaptation`;
   return 'Fasted OK';
 }
+
+// ── Per-session fuel guidance (single source of truth for every consumer) ──────
+//
+// The object every read path attaches to a session — list_sessions,
+// get_plan_context.upcoming/recent, and the coach payload. Shaped identically to
+// the top-level get_plan_context.fuel_guidance so there is one schema. Never null:
+// a session with no special protocol carries an explicit `normal` object, so
+// "no directive" is distinguishable from "field absent".
+
+export const NORMAL_FUEL_KIND = 'normal';
+
+export interface FuelGuidance {
+  kind: string;          // low_fuel | progression | fasted_ok | normal | high_carb | …
+  gph: number | null;
+  label: string;
+}
+
+// A per-session manual override of the derived directive (stored on the row). null
+// means "no override — use the derived value".
+export interface FuelOverride {
+  kind: string;
+  gph: number | null;
+}
+
+// A label for any kind/gph pair — covers the derived kinds and manual overrides.
+export function fuelGuidanceLabel(kind: string, gph: number | null): string {
+  switch (kind) {
+    case 'progression': return `Fuel target ${gph ?? '?'} g/h`;
+    case 'low_fuel':    return `Low-fuel day — water or ≤${gph ?? LOW_FUEL_MAX_GPH} g/h, fat-adaptation`;
+    case 'fasted_ok':   return 'Fasted OK';
+    case 'high_carb':   return gph != null ? `High-carb day — ${gph} g/h` : 'High-carb day';
+    case NORMAL_FUEL_KIND: return 'Normal fuelling — no special protocol';
+    default:            return gph != null ? `${kind} — ${gph} g/h` : kind;
+  }
+}
+
+// A derived FuelTarget → guidance (keeps the rep detail in the label). No target
+// (quality / race / strength / rest, or a session outside the goal block) → normal.
+export function fuelGuidanceFor(t: FuelTarget | null | undefined): FuelGuidance {
+  if (!t) return { kind: NORMAL_FUEL_KIND, gph: null, label: fuelGuidanceLabel(NORMAL_FUEL_KIND, null) };
+  return { kind: t.kind, gph: t.gph, label: fuelTargetLabel(t) };
+}
+
+// The resolution every consumer uses: an explicit per-session override wins; else
+// the derived progression; else an explicit normal object. Never returns null.
+export function resolveFuelGuidance(
+  override: FuelOverride | null | undefined,
+  derived: FuelTarget | null | undefined,
+): FuelGuidance {
+  if (override && typeof override.kind === 'string' && override.kind) {
+    const gph = override.gph ?? null;
+    return { kind: override.kind, gph, label: fuelGuidanceLabel(override.kind, gph) };
+  }
+  return fuelGuidanceFor(derived);
+}
+
+// A non-normal directive constrains what a session can become: a low-fuel or fasted
+// day can't carry race- or threshold-effort work. Returns a warning string when the
+// intensity conflicts with the directive, or null when compatible. Stated, never
+// enforced — the athlete may intend to drop the protocol.
+const HARD_FUEL_INTENSITIES = new Set(['race', 'threshold']);
+export function fuelIntensityConflict(g: FuelGuidance, intensity: string | null | undefined): string | null {
+  if (!intensity || !HARD_FUEL_INTENSITIES.has(intensity)) return null;
+  if (g.kind === 'low_fuel' || g.kind === 'fasted_ok') {
+    const day = g.kind === 'low_fuel' ? 'low-fuel' : 'fasted';
+    return `Fuelling conflict: this is a ${day} day (${g.label}) — incompatible with ${intensity}-effort work. ` +
+      `Clear or change the day's fuelling directive (fuel_guidance) if you mean to drop the protocol.`;
+  }
+  return null;
+}

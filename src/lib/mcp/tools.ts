@@ -10,6 +10,8 @@ import { listSessionsBetween, listCompletedBetween, setSessionEffort } from '@/d
 import { listRacePlans, updatePlanTarget, getPlanTargetInfo } from '@/data/plans';
 import { getThresholdPace, listPaceZones, listHrZones, listPowerZones, setThresholdPace } from '@/data/zones';
 import { applyPlanChange, deletePlanSession, addPlanSession } from '@/data/plan-mutations';
+import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { resolveFuelGuidance, type FuelOverride } from '@/lib/fuel-progression';
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
 import { regenerateCoachReview } from '@/lib/coach-dispatch';
@@ -87,7 +89,7 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
   {
     name: 'apply_plan_change',
     description:
-      'Change one planned session through the logged, revertable path. Use for rescheduling, changing distance/description/structure, intensity, priority, or status (e.g. "skipped"). Cannot change a completed or past session. Editable fields: scheduled_date, name, description, distance_km, structure, target_pace, intensity, priority, status, session_type, activity_type, notes.',
+      'Change one planned session through the logged, revertable path. Use for rescheduling, changing distance/description/structure, intensity, priority, or status (e.g. "skipped"). Cannot change a completed or past session. Editable fields: scheduled_date, name, description, distance_km, structure, target_pace, intensity, priority, status, session_type, activity_type, notes, fuel_guidance. fuel_guidance overrides the day\'s fuelling directive — pass { "kind": "normal"|"low_fuel"|"high_carb"|…, "gph": number|null } to set it, or null to clear (revert to the derived value). Raising intensity to race/threshold on a low-fuel/fasted day returns a warning in the response but still applies.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -229,7 +231,13 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
       const to = args.to as string | undefined;
       if (!from || !ISO_DATE.test(from)) bad('from must be YYYY-MM-DD');
       if (!to || !ISO_DATE.test(to)) bad('to must be YYYY-MM-DD');
-      return listSessionsBetween(from, to);
+      // Attach each session's resolved fuel_guidance (override-aware, never omitted)
+      // from the same single-source derivation get_plan_context uses.
+      const [sessions, derived] = await Promise.all([listSessionsBetween(from, to), getFuelPlanForGoalBlock(from)]);
+      return sessions.map(s => ({
+        ...s,
+        fuel_guidance: resolveFuelGuidance((s.fuel_override as FuelOverride | null) ?? null, derived.get(s.id as string)),
+      }));
     }
     case 'get_recent_workouts': {
       const raw = args.days;
