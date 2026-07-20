@@ -155,6 +155,16 @@ export interface PlanContext {
 // never mis-reads a decimal min/km (5.28) as clock time (5:28). Paces are already
 // formatted "m:ss/km". Also carries the effort read (avg HR + its HR zone) so the
 // coach weighs effort = HR × pace, not pace alone, and can spot decoupling.
+// Signed per-phase pacing miss for a structured run: how far each planned phase's
+// actual pace ran from its target. This is the single number that makes a pacing
+// deviation against plan structurally un-overlookable (Phase 2b).
+export interface PlanDeviation {
+  phase: string;        // the phase label, e.g. "First 50km"
+  planned: string;      // planned target, "m:ss/km" (or a range)
+  actual: string;       // actual segment pace, "m:ss/km"
+  dev_sec_km: number;   // signed s/km: + = slower than target, − = faster
+}
+
 export interface PaceCheck {
   planned_zone: string;          // e.g. "Z2 Aerobic Endurance", or "mixed (Z2 + Z1)"
   planned_window: string | null; // e.g. "4:10–4:54/km" (null for mixed workouts)
@@ -165,6 +175,7 @@ export interface PaceCheck {
   actual_hr_zone: string | null; // the HR zone that HR fell in, e.g. "Z1 Recovery"
   elevation_gain_m: number | null; // total climb (metres) — the terrain signal
   effort_note: string | null;    // decoupling read when HR effort and pace diverge
+  plan_deviation: PlanDeviation[] | null; // per-phase actual-vs-target (structured runs)
   verdict: string;               // plain-language on-plan / OUTSIDE-plan judgement
 }
 
@@ -200,6 +211,9 @@ export interface RecentSession {
     // against its planned target rather than only the whole-run average.
     segment_paces?: (string | null)[] | null;
     segment_hr?: (number | null)[] | null;
+    // The stored split profile (Phase 2) — quartile pace/GAP, first-20% vs target,
+    // stopped time, split outliers. Present when the sync has computed it for the run.
+    split_profile?: unknown;
     rpe: number | null; fuel_g_per_h: number | null; source: string | null;
     // When the athlete stitched two+ Strava activities into this one session, the
     // individual activities that make it up (primary first). Null for a normal
@@ -557,6 +571,38 @@ function fmtShortDate(iso: string): string {
   return m >= 1 && m <= 12 && d ? `${d} ${MONTHS[m - 1]}` : iso;
 }
 
+// Signed per-phase pacing miss: each planned phase's target pace vs its actual
+// segment pace. Only a simple (no-repeat) phase list aligns 1:1 with segment_actuals,
+// so repeats/mismatched lengths return null (the raw structure + segment_paces are
+// still in the payload). + s/km = slower than target, − = faster.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function computePlanDeviation(structure: any, segmentActuals: (number | null)[] | null): PlanDeviation[] | null {
+  if (!Array.isArray(structure) || !Array.isArray(segmentActuals)) return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (structure.some((p: any) => p?.type === 'repeat' || Array.isArray(p?.steps))) return null;
+  if (structure.length !== segmentActuals.length) return null;
+  const out: PlanDeviation[] = [];
+  for (let i = 0; i < structure.length; i++) {
+    const p = structure[i] ?? {};
+    const actualSec = segmentActuals[i];
+    if (actualSec == null) continue;
+    const pMin = paceToSeconds((p.pace_per_km ?? p.pace_min ?? null) as string | null);
+    const pMax = paceToSeconds((p.pace_max ?? p.pace_per_km ?? p.pace_min ?? null) as string | null) ?? pMin;
+    if (pMin == null || pMax == null) continue;
+    const plannedMid = (pMin + pMax) / 2;
+    const planned = p.pace_min && p.pace_max && p.pace_min !== p.pace_max
+      ? `${p.pace_min}–${p.pace_max}/km`
+      : `${secondsToPace(Math.round(plannedMid))}/km`;
+    out.push({
+      phase: (p.label ?? p.phase ?? `Phase ${i + 1}`) as string,
+      planned,
+      actual: `${secondsToPace(Math.round(actualSec))}/km`,
+      dev_sec_km: Math.round(actualSec - plannedMid),
+    });
+  }
+  return out.length ? out : null;
+}
+
 // Deterministic pace-vs-prescribed-zone verdict for a completed run. Returns null
 // for non-runs, sessions without an actual pace, or runs with no zone to check
 // against (so the coach falls back to the raw actuals, as before). The verdict is
@@ -565,12 +611,14 @@ function buildPaceCheck(
   s: { scheduled_date: string; session_type: string; activity_type: string | null; name: string; description: string | null; target_pace: string | null; structure: unknown },
   actualPaceMinKm: number | null, ngpMinKm: number | null, actualHr: number | null,
   elevationGainM: number | null, distanceKm: number | null,
+  segmentActuals: (number | null)[] | null,
   zones: ZoneMap, hrBands: HrBand[],
 ): PaceCheck | null {
   if (NON_RUN_TYPES.includes(s.session_type) || s.activity_type === 'cycling' || s.activity_type === 'swimming') return null;
   if (actualPaceMinKm == null) return null;
 
   const dateLabel = fmtShortDate(s.scheduled_date);
+  const planDeviation = computePlanDeviation(s.structure, segmentActuals);
 
   const rawSec = Math.round(actualPaceMinKm * 60);
   const ngpSec = ngpMinKm != null ? Math.round(ngpMinKm * 60) : null;
@@ -618,6 +666,7 @@ function buildPaceCheck(
       actual_hr_zone: actualHrZoneLabel,
       elevation_gain_m: elevationGainM,
       effort_note: null, // whole-run average is a blend across zones — decoupling read isn't meaningful
+      plan_deviation: planDeviation,
       verdict: `${dateLabel}: structured multi-zone session — assess each segment against its own target, not the whole-run average (actual_pace ${actualPace} is a blend, NOT an easy-run pace)${hilly ? ` — ${elevTag}` : ''}`,
     };
   }
@@ -651,7 +700,7 @@ function buildPaceCheck(
     planned_zone: plannedLabel, planned_window: plannedWindow,
     actual_pace: actualPace, actual_ngp: actualNgp, actual_zone: actualZoneLabel,
     actual_hr: actualHr, actual_hr_zone: actualHrZoneLabel, elevation_gain_m: elevationGainM,
-    effort_note: effortNote, verdict,
+    effort_note: effortNote, plan_deviation: planDeviation, verdict,
   };
 }
 
@@ -673,7 +722,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, segment_actuals, segment_hr, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, segment_actuals, segment_hr, split_profile, perceived_effort, fuel_carbs_per_h, source')
         .eq('user_id', userId)
         .in('plan_session_id', ids)
     : null;
@@ -727,6 +776,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
     // Per-phase actuals (s/km, aligned to the planned structure) → "m:ss/km" strings.
     const segmentActuals = c ? ((c.segment_actuals as (number | null)[] | null) ?? null) : null;
     const segmentHr = c ? ((c.segment_hr as (number | null)[] | null) ?? null) : null;
+    const splitProfile = c ? ((c.split_profile as unknown) ?? null) : null;
     const segmentPaces = Array.isArray(segmentActuals)
       ? segmentActuals.map(v => (v != null ? `${secondsToPace(Math.round(v))}/km` : null))
       : null;
@@ -764,6 +814,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
         pace_decay_pct: paceDecayPct,
         durability: durabilityNote(s.session_type as string, distanceKm, decouplingPct, paceDecayPct),
         ...(segmentPaces ? { segment_paces: segmentPaces, segment_hr: segmentHr } : {}),
+        ...(splitProfile ? { split_profile: splitProfile } : {}),
         rpe: c.perceived_effort != null ? Number(c.perceived_effort) : null,
         fuel_g_per_h: c.fuel_carbs_per_h != null ? Number(c.fuel_carbs_per_h) : null,
         source: (c.source as string | null) ?? null,
@@ -784,7 +835,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
           target_pace: (s.target_pace as string | null) ?? null,
           structure: s.structure,
         },
-        actualPaceMinKm, ngpMinKm, avgHr, elevGainM, distanceKm, zones, hrBands,
+        actualPaceMinKm, ngpMinKm, avgHr, elevGainM, distanceKm, segmentActuals, zones, hrBands,
       ) : null,
     };
   });

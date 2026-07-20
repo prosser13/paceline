@@ -3,7 +3,8 @@ import { invalidateWellnessCache } from './intervals';
 import { getStravaTokens, updateStravaTokens, markStravaSynced } from '@/data/strava-connection';
 import {
   getEarliestSessionDate, listSessionsForMatching, completedWorkoutExistsForSession,
-  insertCompletedWorkout, listCompletedMissingSegments, listLongRunsMissingQuality, updateCompletedWorkout,
+  insertCompletedWorkout, listCompletedMissingSegments, listLongRunsMissingQuality,
+  listCompletedRunsMissingSplitProfile, updateCompletedWorkout,
   listCompletedSessionIds,
   listCompletedStravaActivityIds,
   recomputeAllCompletedTss,
@@ -11,7 +12,7 @@ import {
 import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
-import { computeNgp, computeLongRunQuality } from '@/lib/run-tss';
+import { computeNgp, computeLongRunQuality, computeSplitProfile, type SplitProfile } from '@/lib/run-tss';
 import { timedFetch } from '@/lib/http';
 import { currentUserId } from '@/lib/scope';
 
@@ -151,18 +152,31 @@ function computeSegmentHr(distancesKm: number[], dist: number[], hr: number[]): 
   return out;
 }
 
+// "m:ss" (or "m:ss–m:ss", taking the first) → min/km. Null when unparseable.
+function parseTargetPaceMinKm(target: string | null | undefined): number | null {
+  if (!target) return null;
+  const first = target.split(/[–-]/)[0].trim();
+  const [m, s] = first.split(':').map(Number);
+  return Number.isFinite(m) && Number.isFinite(s) ? m + s / 60 : null;
+}
+
 async function computeForActivity(
   stravaId: number,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   structure: any[] | null | undefined,
   token: string,
-): Promise<{ pace: (number | null)[] | null; hr: (number | null)[] | null; ngpMinKm: number | null; decouplingPct: number | null; paceDecayPct: number | null } | null> {
+  opts?: { movingTimeSecs?: number | null; targetPace?: string | null },
+): Promise<{ pace: (number | null)[] | null; hr: (number | null)[] | null; ngpMinKm: number | null; decouplingPct: number | null; paceDecayPct: number | null; splitProfile: SplitProfile | null } | null> {
   const streams = await fetchStreams(stravaId, token);
   if (!streams) return null;
-  // NGP + long-run quality need only the streams; per-segment pacing additionally
-  // needs a structure.
+  // NGP + long-run quality + split profile need only the streams; per-segment pacing
+  // additionally needs a structure.
   const ngpMinKm = computeNgp(streams.distance, streams.time, streams.altitude);
   const lrq = computeLongRunQuality(streams.distance, streams.time, streams.heartrate, streams.altitude);
+  const splitProfile = computeSplitProfile(
+    streams.distance, streams.time, streams.heartrate, streams.altitude,
+    opts?.movingTimeSecs ?? null, parseTargetPaceMinKm(opts?.targetPace), lrq,
+  );
   const distances = expandSegmentDistances(structure);
   return {
     pace: distances.length ? computeSegmentActuals(distances, streams.distance, streams.time) : null,
@@ -170,6 +184,7 @@ async function computeForActivity(
     ngpMinKm,
     decouplingPct: lrq.decouplingPct,
     paceDecayPct:  lrq.paceDecayPct,
+    splitProfile,
   };
 }
 
@@ -186,6 +201,7 @@ export async function recomputeCompletionSegments(
   if (!seg) return false;
   await updateCompletedWorkout(completionId, {
     segment_actuals: seg.pace, segment_hr: seg.hr, actual_ngp_min_km: seg.ngpMinKm,
+    split_profile: seg.splitProfile,
   });
   return true;
 }
@@ -378,9 +394,12 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
     // already excluded above; this guards a partial prior run or a concurrent sync.)
     if (await completedWorkoutExistsForSession(match.id)) continue;
 
-    // Per-segment pacing only applies to distance-structured runs.
+    // Per-segment pacing + the split profile only apply to runs.
     const seg = kind === 'run'
-      ? await computeForActivity(activity.strava_activity_id, match.structure, token)
+      ? await computeForActivity(activity.strava_activity_id, match.structure, token, {
+          movingTimeSecs: secsByStravaId.get(activity.strava_activity_id) ?? null,
+          targetPace: (match.target_pace as string | null) ?? null,
+        })
       : null;
 
     await insertCompletedWorkout({
@@ -409,6 +428,9 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
       // Long-run quality (runs only): aerobic decoupling + final-third pace decay.
       decoupling_pct:         kind === 'run' ? (seg?.decouplingPct ?? null) : null,
       pace_decay_pct:         kind === 'run' ? (seg?.paceDecayPct ?? null) : null,
+      // Split profile (runs only) — quartile pace/GAP, first-20% vs target, stopped
+      // time, split outliers. Read by the coach review, not recomputed.
+      split_profile:          kind === 'run' ? (seg?.splitProfile ?? null) : null,
     });
 
     if (!(await planSessionHasMatch(match.id))) {
@@ -465,6 +487,23 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
     if (q?.decouplingPct != null) update.decoupling_pct = q.decouplingPct;
     if (q?.paceDecayPct != null)  update.pace_decay_pct = q.paceDecayPct;
     if (Object.keys(update).length) await updateCompletedWorkout(cw.id, update);
+  }
+
+  // Backfill the split profile for runs synced before the column existed. Runs only,
+  // capped; computes moving/target-aware from the run's own target_pace + moving time.
+  const spMissing = await listCompletedRunsMissingSplitProfile(BACKFILL_LIMIT);
+  if (spMissing.length) {
+    const spStructById = new Map(planSessions.map(p => [p.id, p.structure]));
+    const targetPaceById = new Map(planSessions.map(p => [p.id, (p.target_pace as string | null) ?? null]));
+    for (const cw of spMissing) {
+      if (!cw.strava_activity_id) continue;
+      const sp = await computeForActivity(cw.strava_activity_id,
+        cw.plan_session_id ? spStructById.get(cw.plan_session_id) : null, token, {
+          movingTimeSecs: cw.actual_duration_secs ?? null,
+          targetPace: cw.plan_session_id ? (targetPaceById.get(cw.plan_session_id) ?? null) : null,
+        });
+      if (sp?.splitProfile) await updateCompletedWorkout(cw.id, { split_profile: sp.splitProfile });
+    }
   }
 
   // Store TSS for new completions and any whose NGP was just backfilled — one

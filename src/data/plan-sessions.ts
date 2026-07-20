@@ -297,7 +297,7 @@ export async function listSessionsForMatching() {
   const userId = await currentUserId();
   const { data } = await supabaseAdmin
     .from('plan_sessions')
-    .select('id, scheduled_date, distance_km, structure, activity_type, session_type, estimated_duration')
+    .select('id, scheduled_date, distance_km, structure, activity_type, session_type, estimated_duration, target_pace')
     .eq('user_id', userId);
   return data ?? [];
 }
@@ -637,6 +637,24 @@ export async function listLongRunsMissingQuality(limit: number) {
   // Skip merged runs — decoupling/pace-decay can't be derived from the primary
   // activity's partial streams (see listCompletedMissingSegments).
   return (data ?? []).filter(r => !((r.merged_strava_ids as number[] | null)?.length)) as { id: string; strava_activity_id: number | null }[];
+}
+
+// Runs synced before the split-profile column existed (or synced without one) —
+// so the Strava backfill can compute and store it over a few passes. Runs only
+// (rides/strength/yoga carry null pace), non-merged, capped.
+export async function listCompletedRunsMissingSplitProfile(limit: number) {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('completed_workouts')
+    .select('id, plan_session_id, strava_activity_id, actual_duration_secs, merged_strava_ids')
+    .eq('user_id', userId)
+    .eq('source', 'strava')
+    .is('split_profile', null)
+    .not('actual_avg_pace_min_km', 'is', null)
+    .not('strava_activity_id', 'is', null)
+    .limit(limit);
+  return (data ?? []).filter(r => !((r.merged_strava_ids as number[] | null)?.length)) as
+    { id: string; plan_session_id: string | null; strava_activity_id: number | null; actual_duration_secs: number | null }[];
 }
 
 // Recompute + store `tss` for every completion from the CURRENT threshold pace and
