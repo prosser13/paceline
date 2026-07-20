@@ -17,6 +17,19 @@
 
 const MARATHON_M = 42195;
 
+// Daniels' VDOT equivalence holds up to ~the marathon; beyond it, terrain, pacing
+// strategy and fuelling dominate the result far more than aerobic fitness, so an
+// ultra run through the model implies a wildly slow "equivalent" marathon and drags
+// every prediction down. Any race more than 5% past the marathon (a real marathon,
+// even measured long by GPS, stays under this) is treated as an outlier: kept for
+// display but excluded from the fitness blend. ~44.3 km.
+export const MAX_PREDICTION_DISTANCE_M = Math.round(MARATHON_M * 1.05);
+
+// Whether a race distance is too long to be VDOT-comparable to a marathon (an ultra).
+export function isOutlierRaceDistanceM(distanceM: number): boolean {
+  return distanceM > MAX_PREDICTION_DISTANCE_M;
+}
+
 // Canonical race distances the prediction shows (Benchmarks table + race-page
 // gating). The blend runs in VDOT space, so a time exists for ANY distance — this is
 // just the display set. loadTrajectory (the campaign scoreboard) stays marathon-only
@@ -88,6 +101,7 @@ export interface PredictionSignal {
   vdot: number;                  // implied fitness VDOT
   impliedMarathonSeconds: number;// = time at 42.195 km for this VDOT (display)
   weight: number;                // final blend weight (base reliability × recency)
+  isOutlier?: boolean;           // ultra-distance race — shown, but excluded from the blend
 }
 
 export interface MarathonPrediction {
@@ -205,7 +219,11 @@ export function predictMarathon(inputs: PredictionInputs): MarathonPrediction {
 
   for (const r of inputs.races) {
     const s = raceSignal(r.distanceM, r.timeSeconds, r.date, r.label);
-    if (s) raw.push(s);
+    if (!s) continue;
+    // Ultra results aren't VDOT-comparable to a marathon — keep for display, flag,
+    // and hold out of the blend below.
+    if (isOutlierRaceDistanceM(r.distanceM)) s.isOutlier = true;
+    raw.push(s);
   }
   if (inputs.thresholdMinKm) {
     const s = thresholdSignal(inputs.thresholdMinKm, inputs.thresholdDate ?? inputs.asOf);
@@ -215,11 +233,13 @@ export function predictMarathon(inputs: PredictionInputs): MarathonPrediction {
   if (!raw.length) return { vdot: null, predictedSeconds: null, signals: [] };
 
   for (const s of raw) {
+    if (s.isOutlier) { s.weight = 0; continue; }   // excluded — never contributes
     const recency = s.date ? Math.pow(0.5, daysBetween(s.date, inputs.asOf) / RECENCY_HALFLIFE_DAYS) : 0.5;
     s.weight = BASE_RELIABILITY[s.source] * recency;
   }
 
   // Blend in VDOT space → one fitness number, so a time exists for every distance.
+  // Outliers carry weight 0, so they drop out here without special-casing.
   const totalW = raw.reduce((a, s) => a + s.weight, 0);
   const vdot = totalW > 0 ? raw.reduce((a, s) => a + s.vdot * s.weight, 0) / totalW : null;
   const predictedSeconds = predictedTimeAt(vdot, MARATHON_M);
