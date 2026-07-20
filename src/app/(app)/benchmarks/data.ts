@@ -15,7 +15,7 @@ import { getFuelProgressionAdherence } from '@/data/fuel-plan';
 import { listHydrationRunsSince, listRecentRunsForNutrition, getSweatSodium, getGutCapMl, type HydrationRun, type NutritionRun } from '@/data/hydration';
 import { buildSweatModel, conditionBuckets, modelConfidence, type ConditionBucket } from '@/lib/hydration';
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
-import { danielsVdot, vdotToTimeMin, enduranceMultiplier } from '@/lib/prediction';
+import { danielsVdot, vdotToTimeMin, enduranceMultiplier, isOutlierRaceDistanceM } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
 import { todayISO } from '@/lib/dates';
 
@@ -49,7 +49,7 @@ export interface BenchmarksData {
   predictedSeconds: number | null;       // endurance-adjusted (the number of record)
   rawPredictedSeconds: number | null;    // unadjusted VDOT-equivalent
   endurance: { score: number; avgWeeklyKm: number; longestKm: number; anchorWeeklyKm: number };
-  signals: { source: string; label: string; impliedSeconds: number }[];
+  signals: { source: string; label: string; impliedSeconds: number; isOutlier: boolean }[];
   experimental: ExperimentalPredictionView[];   // the three alternative-model tiles + trend
   swimPredictions: SwimPredictionView[];        // 750 m / 1900 m swim projections
   tri703: Tri703View;                           // Swansea 70.3 finish predictor
@@ -61,7 +61,7 @@ export interface BenchmarksData {
   thresholdCheck: { latest: ThresholdCheck | null; pending: ThresholdCheck | null; history: ThresholdCheck[]; revertable: RevertableChange | null };
   vdot: { current: number | null; series: Series[] };   // running VDOT (from the prediction)
   restingHr: { current: number | null; series: Series[] };
-  races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number }[];
+  races: { date: string; name: string; distanceKm: number; seconds: number; impliedMarathonSeconds: number; isOutlier: boolean }[];
   longRuns: {
     id: string; date: string; km: number; ngpMinKm: number;
     decouplingPct: number | null; paceDecayPct: number | null;
@@ -208,7 +208,7 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
     predictedSeconds: adjustedPredictedSeconds,
     rawPredictedSeconds: prediction.predictedSeconds,
     endurance: { score: endurance.score, avgWeeklyKm: endurance.avgWeeklyKm, longestKm: endurance.longestKm, anchorWeeklyKm: endurance.anchorWeeklyKm },
-    signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds })),
+    signals: prediction.signals.map(s => ({ source: s.source, label: s.label, impliedSeconds: s.impliedMarathonSeconds, isOutlier: s.isOutlier ?? false })),
     experimental,
     swimPredictions,
     tri703,
@@ -224,7 +224,11 @@ export async function loadBenchmarksData(): Promise<BenchmarksData> {
       .sort((a, b) => b.date.localeCompare(a.date))
       .map(r => {
         const vdot = danielsVdot(r.distanceKm * 1000, r.seconds / 60);
-        return { ...r, impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, 42195) * 60) };
+        return {
+          ...r,
+          impliedMarathonSeconds: Math.round(vdotToTimeMin(vdot, 42195) * 60),
+          isOutlier: isOutlierRaceDistanceM(r.distanceKm * 1000),
+        };
       }),
     longRuns: [...longRuns].sort((a, b) => b.date.localeCompare(a.date)),   // most recent first
     ef: efTrend(longRuns),

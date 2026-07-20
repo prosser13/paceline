@@ -16,6 +16,7 @@ import { listPlanPhaseWeeks } from '@/data/plans';
 import {
   predictMarathon, parseHmsToSeconds, fmtHms, danielsVdot, vdotToTimeMin,
   predictedTimeAt, PREDICTABLE_DISTANCES_M, enduranceScore, enduranceMultiplier,
+  isOutlierRaceDistanceM,
   type MarathonPrediction, type PredictionInputs, type EnduranceReadiness,
 } from '@/lib/prediction';
 import {
@@ -290,7 +291,10 @@ function experimentalAsOf(
   longRuns: LongRun[],
   hr: { thresholdHr: number | null; maxHr: number | null },
 ): ExperimentalPrediction[] {
-  const raceWin = races.filter(r => r.date <= d && r.date >= addDays(d, -RIEGEL_LOOKBACK_D));
+  // Exclude ultras — Riegel extrapolating an 80 km result down to the marathon is
+  // as misleading as the VDOT blend, so hold them out here too.
+  const raceWin = races.filter(r =>
+    r.date <= d && r.date >= addDays(d, -RIEGEL_LOOKBACK_D) && !isOutlierRaceDistanceM(r.distanceKm * 1000));
   const trainWin = training.filter(r => r.date <= d && r.date >= addDays(d, -TANDA_WINDOW_DAYS));
   const lrWin = longRuns.filter(l => l.date <= d && l.date >= addDays(d, -CARDIAC_WINDOW_D));
   return [

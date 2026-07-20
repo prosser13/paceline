@@ -111,14 +111,27 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
               </thead>
               <tbody>
                 {d.signals.map((s, i) => (
-                  <tr key={i}>
-                    <td className="py-[8px] border-b border-fog/60">{s.label}</td>
-                    <td className="py-[8px] border-b border-fog/60 text-right font-semibold">{fmtHms(s.impliedSeconds)}</td>
+                  <tr key={i} className={s.isOutlier ? 'text-stone/55' : undefined}>
+                    <td className="py-[8px] border-b border-fog/60">
+                      {s.label}
+                      {s.isOutlier && (
+                        <span className="ml-[6px] inline-block text-[9.5px] uppercase font-bold tracking-[.04em] text-hard align-middle"
+                          title="Ultra distance — excluded from the prediction as an outlier">outlier · excluded</span>
+                      )}
+                    </td>
+                    <td className="py-[8px] border-b border-fog/60 text-right font-semibold">
+                      {s.isOutlier
+                        ? <span className="line-through text-stone/50 font-normal">{fmtHms(s.impliedSeconds)}</span>
+                        : fmtHms(s.impliedSeconds)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
             <p className="text-[11.5px] text-stone mt-[8px]">Blended, weighting the freshest and most reliable signals highest.</p>
+            {d.signals.some(s => s.isOutlier) && (
+              <p className="text-[11.5px] text-stone mt-[3px]">Ultra-distance results are flagged as outliers and left out of the blend — pacing, terrain and fuelling dominate an ultra, so it isn’t a fair marathon-equivalent.</p>
+            )}
           </div>
         )}
       </Card>
@@ -230,11 +243,21 @@ export default function BenchmarksBody({ d }: { d: BenchmarksData }) {
               </thead>
               <tbody>
                 {d.races.map((r, i) => (
-                  <tr key={i}>
+                  <tr key={i} className={r.isOutlier ? 'text-stone/55' : undefined}>
                     <td className="py-[9px] border-b border-fog/60">{shortDate(r.date)}</td>
-                    <td className="py-[9px] border-b border-fog/60">{raceLabel(r.distanceKm)}</td>
+                    <td className="py-[9px] border-b border-fog/60">
+                      {raceLabel(r.distanceKm)}
+                      {r.isOutlier && (
+                        <span className="ml-[6px] inline-block text-[9.5px] uppercase font-bold tracking-[.04em] text-hard align-middle"
+                          title="Ultra distance — excluded from the marathon prediction as an outlier">outlier</span>
+                      )}
+                    </td>
                     <td className="py-[9px] border-b border-fog/60 text-right">{fmtHms(r.seconds)}</td>
-                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold">{fmtHms(r.impliedMarathonSeconds)}</td>
+                    <td className="py-[9px] border-b border-fog/60 text-right font-semibold">
+                      {r.isOutlier
+                        ? <span className="text-stone/50 font-normal" title="Excluded from the marathon prediction">—</span>
+                        : fmtHms(r.impliedMarathonSeconds)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
