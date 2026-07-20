@@ -14,24 +14,14 @@ import { countsToWeeklyVolume } from '@/lib/weekly-volume';
 import { triggerIntervalsSync } from '@/lib/intervals-sync';
 import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
 import { resolveFuelGuidance, fuelIntensityConflict, type FuelOverride } from '@/lib/fuel-progression';
+import { editableAllowlist, CREATABLE_FIELD_NAMES } from '@/lib/plan-fields';
 
-// Fields the planning layer may change. Everything else (id, plan_id, timestamps,
-// intervals link, is_completed) is off-limits — a patch touching them is rejected.
-const EDITABLE_FIELDS = new Set([
-  'scheduled_date', 'day_of_week', 'am_pm', 'session_type', 'activity_type', 'name',
-  'description', 'distance_km', 'warmup_km', 'cooldown_km', 'structure', 'target_pace',
-  'target_pace_end', 'estimated_tss', 'estimated_duration', 'intensity', 'profile_shape',
-  'week_phase', 'priority', 'status', 'rationale', 'notes', 'fuel_override',
-]);
-
-// Fields a caller may set when *creating* a session. plan_id / week_number /
-// week_phase / day_of_week / status are derived (never caller-supplied).
-const CREATABLE_FIELDS = new Set([
-  'scheduled_date', 'session_type', 'name', 'activity_type', 'description',
-  'distance_km', 'warmup_km', 'cooldown_km', 'structure', 'target_pace',
-  'target_pace_end', 'estimated_tss', 'estimated_duration', 'intensity',
-  'profile_shape', 'priority', 'rationale', 'notes',
-]);
+// The editable allowlist and the create-time allowlist are DERIVED from the single
+// source of truth (src/lib/plan-fields.ts) — never hand-maintained here. Everything
+// not listed there (id, plan_id, timestamps, intervals link, is_completed, …) is
+// off-limits; a patch touching it is rejected.
+export const EDITABLE_FIELDS = editableAllowlist();
+const CREATABLE_FIELDS = new Set<string>(CREATABLE_FIELD_NAMES);
 
 export interface PlanChangeInput {
   idempotency_key: string;
