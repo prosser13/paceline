@@ -171,8 +171,13 @@ function addDays(date: Date, n: number): Date {
   d.setDate(d.getDate() + n);
   return d;
 }
+// Format a *local-midnight* Date back to YYYY-MM-DD with local getters. These Dates
+// are built from todayISO() (London) parsed at server-local midnight, so a
+// toISOString() round-trip would shift them a day back whenever the server clock is
+// ahead of UTC (e.g. this dev machine on BST) — dropping the whole window a day.
 function isoDate(d: Date): string {
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 function eachDate(from: string, to: string): string[] {
   const out: string[] = [];

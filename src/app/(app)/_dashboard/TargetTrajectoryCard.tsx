@@ -32,7 +32,7 @@ const SIGNAL_LABEL: Record<'race' | 'threshold' | 'long_run', { dot: string }> =
 
 function fmtGap(seconds: number): string {
   const s = Math.round(seconds);
-  return s >= 60 ? `${Math.round(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
+  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
 }
 
 // Signed gap like "−4:30" / "+1:10".
