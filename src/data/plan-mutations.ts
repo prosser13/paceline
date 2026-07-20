@@ -225,6 +225,90 @@ export async function applyPlanChange(input: PlanChangeInput): Promise<PlanChang
   };
 }
 
+// Permanently remove one planned session through the logged path. Mirrors
+// applyPlanChange's guardrails (completed/past off-limits, agent autonomy gate) and
+// writes an audited `delete` row whose before_state holds the full session, so the
+// deletion is recorded and the row is recoverable. The FKs into plan_sessions are
+// ON DELETE SET NULL / CASCADE, so the delete leaves no orphans.
+export async function deletePlanSession(input: {
+  idempotency_key: string; actor: 'claude' | 'user'; reason: string; session_id: string;
+}): Promise<PlanChangeResult> {
+  const { idempotency_key, actor, reason, session_id } = input;
+  if (!idempotency_key?.trim()) return reject('idempotency_key is required');
+  if (!reason?.trim()) return reject('reason is required');
+  if (actor !== 'claude' && actor !== 'user') return reject('actor must be "claude" or "user"');
+
+  const userId = await currentUserId();
+  const { data: session } = await supabaseAdmin
+    .from('plan_sessions').select('*').eq('user_id', userId).eq('id', session_id).maybeSingle();
+  if (!session) return reject('session not found');
+
+  const now = today();
+  if (session.status === 'completed') return reject('session is completed — cannot delete');
+  if ((session.scheduled_date as string) < now) return reject('session is in the past — cannot delete');
+  const { data: linked } = await supabaseAdmin
+    .from('completed_workouts').select('id').eq('user_id', userId).eq('plan_session_id', session_id).maybeSingle();
+  if (linked) return reject('session has a completed workout linked — cannot delete');
+
+  // ── agent-only guardrails (mirror applyPlanChange) — MCP calls as 'user' and skips these ──
+  if (actor === 'claude') {
+    const prefs = await getCoachingPrefs();
+    const autonomy = prefs?.autonomy ?? 'propose';
+    if (autonomy === 'propose') {
+      return { ok: false, applied: false, status: 'proposal_only',
+        reason: 'autonomy is "propose" — surface this deletion for approval instead of applying' };
+    }
+    if (prefs?.protect_priority_a && session.priority === 'A') {
+      return reject('A-priority session is protected (protect_priority_a)');
+    }
+    if (autonomy === 'auto_within_week') {
+      const week = await getCurrentWeek(now);
+      if (!week) return reject('autonomy is "auto_within_week" but the current week is unknown — propose instead');
+      const d = session.scheduled_date as string;
+      if (!(d >= (week.date_from as string) && d <= (week.date_to as string))) {
+        return reject('autonomy is "auto_within_week" — session is outside the current week; propose instead');
+      }
+    }
+  }
+
+  // Record the deletion first (this also claims the idempotency key), then delete.
+  const { data: logRow, error: logErr } = await supabaseAdmin
+    .from('adjustment_logs')
+    .insert({
+      user_id:         userId,
+      plan_session_id: session_id,
+      operation:       'delete',
+      actor,
+      reason:          reason.trim(),
+      idempotency_key,
+      before_state:    session,   // full row — recoverable
+      after_state:     null,
+    })
+    .select('id')
+    .single();
+
+  if (logErr) {
+    if (logErr.code === '23505') {
+      const dup = await findByKey(userId, idempotency_key);
+      return { ok: true, applied: false, status: 'duplicate', adjustment_id: dup };
+    }
+    return reject(`could not record deletion: ${logErr.message}`);
+  }
+
+  const { error: delErr } = await supabaseAdmin
+    .from('plan_sessions').delete().eq('user_id', userId).eq('id', session_id);
+  if (delErr) {
+    // Keep audit + state in lockstep — drop the log row we just wrote.
+    await supabaseAdmin.from('adjustment_logs').delete().eq('user_id', userId).eq('id', logRow.id);
+    return reject(`delete failed: ${delErr.message}`);
+  }
+
+  // Drop the workout from the intervals.icu calendar too (best-effort, no-op if off).
+  await triggerIntervalsSync();
+
+  return { ok: true, applied: true, status: 'applied', adjustment_id: logRow.id as string, before: session, after: {} };
+}
+
 // Undo a previously-applied change by replaying its before_state. Idempotent per
 // source change (keyed revert:<id>); writes its own audit row.
 export async function revertPlanChange(
