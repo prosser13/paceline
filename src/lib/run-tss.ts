@@ -167,6 +167,137 @@ export function computeLongRunQuality(
   return { decouplingPct, paceDecayPct };
 }
 
+// A structural split profile of a run, computed once at sync from the same streams
+// so the coach review READS it instead of re-deriving pacing from a whole-run
+// average (which structurally hid the 19 Jul Dragon 50 fast/hot open + late fade).
+// Paces are min/km; GAP is the grade-adjusted equivalent (Minetti, as NGP).
+export interface SplitProfile {
+  km_count: number;
+  quartiles: { pace_min_km: number | null; gap_min_km: number | null }[];   // by distance, 4
+  first_20pct: {
+    pace_min_km: number | null; gap_min_km: number | null;
+    target_pace_min_km: number | null; dev_sec_km: number | null; dev_pct: number | null;
+  } | null;
+  stopped_secs: number | null;   // elapsed − moving
+  stopped_pct: number | null;    // stopped as % of elapsed
+  slow_split_count: number | null; // per-km splits slower than 1.5× the median km
+  decoupling_pct: number | null;   // carried through (whole-run)
+  pace_decay_pct: number | null;   // carried through (whole-run)
+}
+
+export function computeSplitProfile(
+  distanceM: number[] | null | undefined,
+  timeS: number[] | null | undefined,
+  heartrate: number[] | null | undefined,
+  altitudeM: number[] | null | undefined,
+  movingTimeSecs: number | null,
+  targetPaceMinKm: number | null,
+  lrq: { decouplingPct: number | null; paceDecayPct: number | null },
+): SplitProfile | null {
+  if (!distanceM?.length || !timeS?.length || distanceM.length !== timeS.length) return null;
+  const n = distanceM.length;
+  if (n < 4) return null;
+  const startD = distanceM[0], endD = distanceM[n - 1];
+  const totalD = endD - startD;
+  const startT = timeS[0], endT = timeS[n - 1];
+  const elapsed = endT - startT;
+  if (totalD <= 0 || elapsed <= 0) return null;
+
+  // Grade-adjusted metres per step (Minetti), same basis as NGP / long-run quality.
+  const hasAlt = altitudeM?.length === n;
+  const gaStep = new Array<number>(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const d = distanceM[i] - distanceM[i - 1];
+    if (d <= 0) continue;
+    let mult = 1;
+    if (hasAlt) {
+      const grade = d > 0.5 ? (altitudeM![i] - altitudeM![i - 1]) / d : 0;
+      mult = gradeCostMultiplier(grade);
+    }
+    gaStep[i] = d * mult;
+  }
+
+  // Interpolated elapsed time (s) at an absolute cumulative distance (m).
+  const timeAt = (dTarget: number): number => {
+    if (dTarget <= startD) return startT;
+    if (dTarget >= endD) return endT;
+    for (let i = 1; i < n; i++) {
+      if (distanceM[i] >= dTarget) {
+        const d0 = distanceM[i - 1], d1 = distanceM[i], t0 = timeS[i - 1], t1 = timeS[i];
+        return d1 === d0 ? t1 : t0 + (t1 - t0) * ((dTarget - d0) / (d1 - d0));
+      }
+    }
+    return endT;
+  };
+
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+  const round1 = (x: number) => Math.round(x * 10) / 10;
+
+  // Raw pace + grade-adjusted pace (min/km) over an absolute distance window.
+  const windowPace = (dLo: number, dHi: number): { pace_min_km: number | null; gap_min_km: number | null } => {
+    if (dHi <= dLo) return { pace_min_km: null, gap_min_km: null };
+    let ga = 0;
+    for (let i = 1; i < n; i++) {
+      const a = distanceM[i - 1], b = distanceM[i];
+      if (b <= dLo || a >= dHi) continue;
+      const step = b - a;
+      if (step <= 0) continue;
+      const frac = (Math.min(b, dHi) - Math.max(a, dLo)) / step;   // portion of this step inside the window
+      ga += gaStep[i] * frac;
+    }
+    const dur = timeAt(dHi) - timeAt(dLo);
+    const rawKm = (dHi - dLo) / 1000;
+    if (dur <= 0 || rawKm <= 0) return { pace_min_km: null, gap_min_km: null };
+    return {
+      pace_min_km: round2((dur / 60) / rawKm),
+      gap_min_km: ga > 0 ? round2((dur / 60) / (ga / 1000)) : null,
+    };
+  };
+
+  const quartiles = [0, 1, 2, 3].map(q =>
+    windowPace(startD + totalD * (q / 4), startD + totalD * ((q + 1) / 4)));
+
+  const f = windowPace(startD, startD + totalD * 0.2);
+  const first_20pct = f.pace_min_km != null ? {
+    pace_min_km: f.pace_min_km,
+    gap_min_km: f.gap_min_km,
+    target_pace_min_km: targetPaceMinKm != null ? round2(targetPaceMinKm) : null,
+    dev_sec_km: targetPaceMinKm != null ? Math.round((f.pace_min_km - targetPaceMinKm) * 60) : null,
+    dev_pct: targetPaceMinKm ? round1(((f.pace_min_km - targetPaceMinKm) / targetPaceMinKm) * 100) : null,
+  } : null;
+
+  const stopped_secs = movingTimeSecs != null ? Math.max(0, Math.round(elapsed - movingTimeSecs)) : null;
+  const stopped_pct = stopped_secs != null ? round1((stopped_secs / elapsed) * 100) : null;
+
+  // Per-km split outliers: km splits slower than 1.5× the median km split.
+  const kmCount = Math.floor(totalD / 1000);
+  let slow_split_count: number | null = null;
+  if (kmCount >= 3) {
+    const splits: number[] = [];
+    for (let k = 1; k <= kmCount; k++) {
+      const t = timeAt(startD + k * 1000) - timeAt(startD + (k - 1) * 1000);
+      if (t > 0) splits.push(t);
+    }
+    if (splits.length >= 3) {
+      const sorted = [...splits].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      slow_split_count = splits.filter(s => s > median * 1.5).length;
+    }
+  }
+
+  return {
+    km_count: kmCount,
+    quartiles,
+    first_20pct,
+    stopped_secs,
+    stopped_pct,
+    slow_split_count,
+    decoupling_pct: lrq.decouplingPct,
+    pace_decay_pct: lrq.paceDecayPct,
+  };
+}
+
 // The shared run-TSS formula. `paceMinKm` is NGP when available, else average
 // pace; `threshMinKm` is the user's threshold pace. Returns null without enough
 // to compute.
