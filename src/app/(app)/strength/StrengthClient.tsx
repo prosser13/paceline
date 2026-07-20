@@ -17,7 +17,7 @@ import {
 } from '@/data/strength-injuries';
 import { saveSession, addNiggle, setNiggleActive } from './actions';
 
-export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean }
+export interface HistoryItem { shortId: string; title: string; sub: string; done: boolean; expired: boolean }
 
 // Per-intent saved progression state (matches BuilderStateMaps on the server).
 export interface StateMaps {
@@ -359,8 +359,9 @@ export default function StrengthClient({ exercises, history, stateMaps, context,
                     <div className="text-[13px] font-semibold text-ink leading-snug">{h.title}</div>
                     <div className="text-[11px] text-stone mt-[1px]">{h.sub}</div>
                   </div>
-                  <span className="shrink-0 text-[11px] uppercase font-bold tracking-[.06em]" style={{ color: h.done ? 'var(--color-ready)' : 'var(--color-stone)' }}>
-                    {h.done ? '✓ Done' : 'In progress'}
+                  <span className="shrink-0 text-[11px] uppercase font-bold tracking-[.06em]"
+                    style={{ color: h.done ? 'var(--color-ready)' : 'var(--color-stone)', opacity: !h.done && h.expired ? 0.55 : 1 }}>
+                    {h.done ? '✓ Done' : h.expired ? 'Expired' : 'In progress'}
                   </span>
                 </Link>
               ))}

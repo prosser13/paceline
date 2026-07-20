@@ -5,7 +5,7 @@ import { listStrengthHistory } from '@/data/strength-sessions';
 import { loadBuilderStateMaps, listRecentProgressionEvents } from '@/data/strength-progression';
 import { getStrengthContext } from '@/data/strength-context';
 import { listActiveNiggles } from '@/data/strength-niggles';
-import { SESSION_INTENT_CONFIG, DURATION_CONFIG, type SessionIntent, type Duration } from '@/data/strength';
+import { SESSION_INTENT_CONFIG, DURATION_CONFIG, sessionExpired, type SessionIntent, type Duration } from '@/data/strength';
 
 type HistoryRow = {
   short_id: string; intent: string; duration: string; groups: string[];
@@ -49,6 +49,7 @@ export default async function StrengthPage() {
       title: `${label}${mins ? ` · ${mins} min` : ''}`,
       sub: `${date} · ${count} exercise${count === 1 ? '' : 's'}${s.groups?.length ? ` · ${s.groups.join(', ')}` : ''}`,
       done: !!s.completed_at,
+      expired: sessionExpired(s.confirmed_at, s.completed_at),
     };
   });
 

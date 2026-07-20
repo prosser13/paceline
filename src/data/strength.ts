@@ -125,6 +125,13 @@ export function timerElapsedSecs(
   return accumSecs + running;
 }
 
+// A confirmed session never completed within 24h is treated as abandoned/expired.
+// Here (not inline in a server component) so callers don't trip the impure-Date lint.
+const SESSION_EXPIRY_MS = 24 * 60 * 60 * 1000;
+export function sessionExpired(confirmedAtISO: string, completedAt: string | null): boolean {
+  return !completedAt && (Date.now() - Date.parse(confirmedAtISO)) > SESSION_EXPIRY_MS;
+}
+
 // One exercise as prescribed in a built session.
 export interface SessionExercise {
   exercise: Exercise;
