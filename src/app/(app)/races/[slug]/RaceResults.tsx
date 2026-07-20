@@ -6,7 +6,10 @@ import { CardTitle, cardClass } from '@/components/dashboard-graphics';
 import { saveRaceResult } from './actions';
 import { primaryFinishTime, type RaceResult, type RaceNeighbour, type TimeType } from '@/lib/race-result';
 
-const inputCls = 'w-full bg-input-surface border border-fog rounded px-2.5 py-2 text-ink font-mono text-[13px] focus:outline-none focus:border-stone transition-colors placeholder:text-stone/40';
+// Split the width off so the narrow neighbour fields can set their own — two width
+// utilities on one element resolve by stylesheet order, and w-full was winning.
+const inputBase = 'bg-input-surface border border-fog rounded px-2.5 py-2 text-ink font-mono text-[13px] focus:outline-none focus:border-stone transition-colors placeholder:text-stone/40';
+const inputCls = `w-full ${inputBase}`;
 const NBR_SLOTS = ['2nd ahead', '1st ahead', '1st behind', '2nd behind'];
 
 // A chip/gun segmented toggle.
@@ -121,15 +124,15 @@ export default function RaceResults({ slug, result }: { slug: string; result: Ra
           <TimeToggle value={f.timeType} onChange={t => setF(p => ({ ...p, timeType: t }))} />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-[8px] mb-[10px]">
-          <L label="Chip time"><input className={inputCls} value={f.finishTime} onChange={setField('finishTime')} placeholder="34:02" /></L>
-          <L label="Gun time"><input className={inputCls} value={f.finishTimeGun} onChange={setField('finishTimeGun')} placeholder="34:05" /></L>
-          <L label="Winner time"><input className={inputCls} value={f.winnerTime} onChange={setField('winnerTime')} placeholder="30:41" /></L>
-          <L label="Overall pos"><input className={inputCls} value={f.position} onChange={setField('position')} placeholder="12" inputMode="numeric" /></L>
-          <L label="Field size"><input className={inputCls} value={f.fieldSize} onChange={setField('fieldSize')} placeholder="480" inputMode="numeric" /></L>
+          <L label="Chip time"><input className={inputCls} value={f.finishTime} onChange={setField('finishTime')} placeholder="h:mm:ss" /></L>
+          <L label="Gun time"><input className={inputCls} value={f.finishTimeGun} onChange={setField('finishTimeGun')} placeholder="h:mm:ss" /></L>
+          <L label="Winner time"><input className={inputCls} value={f.winnerTime} onChange={setField('winnerTime')} placeholder="h:mm:ss" /></L>
+          <L label="Overall pos"><input className={inputCls} value={f.position} onChange={setField('position')} placeholder="pos" inputMode="numeric" /></L>
+          <L label="Field size"><input className={inputCls} value={f.fieldSize} onChange={setField('fieldSize')} placeholder="field size" inputMode="numeric" /></L>
           <span />
-          <L label="Category"><input className={inputCls} value={f.category} onChange={setField('category')} placeholder="M35" /></L>
-          <L label="Cat pos"><input className={inputCls} value={f.categoryPos} onChange={setField('categoryPos')} placeholder="7" inputMode="numeric" /></L>
-          <L label="Cat size (or blank)"><input className={inputCls} value={f.categorySize} onChange={setField('categorySize')} placeholder="?" inputMode="numeric" /></L>
+          <L label="Category"><input className={inputCls} value={f.category} onChange={setField('category')} placeholder="cat" /></L>
+          <L label="Cat pos"><input className={inputCls} value={f.categoryPos} onChange={setField('categoryPos')} placeholder="pos" inputMode="numeric" /></L>
+          <L label="Cat size (or blank)"><input className={inputCls} value={f.categorySize} onChange={setField('categorySize')} placeholder="size" inputMode="numeric" /></L>
         </div>
         <L label="Official results link"><input className={inputCls} value={f.resultsUrl} onChange={setField('resultsUrl')} placeholder="https://results.example.com/…" /></L>
 
@@ -141,9 +144,9 @@ export default function RaceResults({ slug, result }: { slug: string; result: Ra
           {nbrs.map((n, i) => (
             <div key={i} className="flex items-center gap-[6px]">
               <span className="w-[62px] text-[11px] text-stone shrink-0">{NBR_SLOTS[i]}</span>
-              <input className={`${inputCls} w-[48px] shrink-0`} value={n.position ?? ''} onChange={setNbr(i, 'position')} placeholder="pos" inputMode="numeric" />
-              <input className={`${inputCls} flex-1 min-w-0`} value={n.name} onChange={setNbr(i, 'name')} placeholder="Name" />
-              <input className={`${inputCls} w-[70px] shrink-0`} value={n.time} onChange={setNbr(i, 'time')} placeholder="time" />
+              <input className={`${inputBase} w-[52px] shrink-0`} value={n.position ?? ''} onChange={setNbr(i, 'position')} placeholder="pos" inputMode="numeric" />
+              <input className={`${inputBase} flex-1 min-w-0`} value={n.name} onChange={setNbr(i, 'name')} placeholder="Name" />
+              <input className={`${inputBase} w-[74px] shrink-0`} value={n.time} onChange={setNbr(i, 'time')} placeholder="time" />
             </div>
           ))}
         </div>
