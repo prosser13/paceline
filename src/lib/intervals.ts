@@ -338,14 +338,30 @@ export async function syncWellnessDays(windowDays = WELLNESS_SYNC_WINDOW_DAYS): 
 
 // ── RPE sync (PB-campaign wave 3) ─────────────────────────────
 //
-// Garmin's 1–10 RPE rides on the intervals.icu *activity* as `perceived_exertion`
-// (distinct from `feel`). We pull it and stamp it onto the matching completion by
-// Strava id, so completed runs show the RPE the athlete logged on their watch.
+// Garmin's 1–10 RPE rides on the intervals.icu *activity*. The field is `icu_rpe`
+// (what the Garmin watch's RPE prompt lands in, via Strava → intervals.icu);
+// `session_rpe` and the legacy `perceived_exertion` are fallbacks. NOT `feel` (a 1–4
+// "how did it go", a different scale). We pull it and stamp it onto the matching
+// completion by Strava id, so completed runs show the RPE the athlete logged.
 
 interface IntervalsActivity {
   id?: string | number;
   strava_id?: number | string | null;
+  icu_rpe?: number | null;
+  session_rpe?: number | null;
   perceived_exertion?: number | null;
+}
+
+// The RPE (1–10) intervals.icu carries for an activity, preferring `icu_rpe`. Each
+// candidate is only accepted as a whole 1–10 rating — `session_rpe` can instead hold
+// an RPE×load figure, which the 1–10 guard rejects. Null when none is a valid rating.
+function rpeOf(a: IntervalsActivity): number | null {
+  for (const raw of [a.icu_rpe, a.session_rpe, a.perceived_exertion]) {
+    if (raw == null) continue;
+    const n = Math.round(Number(raw));
+    if (n >= 1 && n <= 10) return n;
+  }
+  return null;
 }
 
 // The Strava id an intervals activity maps to: the explicit `strava_id`, else the
@@ -374,11 +390,11 @@ async function fetchActivityRpe(ctx: IntervalsCtx, windowDays: number): Promise<
   const acts = (await res.json()) as IntervalsActivity[];
   const out: { stravaId: number; rpe: number }[] = [];
   for (const a of acts) {
-    if (a.perceived_exertion == null) continue;
+    const rpe = rpeOf(a);
+    if (rpe == null) continue;
     const stravaId = stravaIdOf(a);
     if (stravaId == null) continue;
-    const rpe = Math.round(Number(a.perceived_exertion));
-    if (rpe >= 1 && rpe <= 10) out.push({ stravaId, rpe });
+    out.push({ stravaId, rpe });
   }
   return out;
 }
