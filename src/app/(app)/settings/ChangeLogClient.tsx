@@ -49,8 +49,19 @@ function Entry({ entry }: { entry: AdjustmentEntry }) {
   const isRevert = entry.operation === 'revert';
   const canRevert = entry.operation === 'update' && !entry.reverted && !!entry.session;
 
-  // Fields that changed — keyed by after_state (the values that were set).
-  const fields = Object.keys(entry.after_state ?? {});
+  // Title when the joined session is gone (create backfill lost, or session later
+  // deleted): a create still reads as an addition, not a removal.
+  const missingSessionLabel = entry.operation === 'create' ? 'Session added' : 'Session removed';
+
+  // Fields that changed — keyed by after_state. Always hide the internal IDs; on a
+  // create (after_state is the whole new row) also drop the structural scaffolding
+  // so the diff shows the session, not plumbing. status stays visible on updates
+  // (skip/unskip is a real, meaningful change).
+  const ALWAYS_HIDDEN = new Set(['user_id', 'plan_id']);
+  const CREATE_HIDDEN = new Set(['week_number', 'week_phase', 'day_of_week', 'activity_type', 'status']);
+  const fields = Object.keys(entry.after_state ?? {}).filter(
+    k => !ALWAYS_HIDDEN.has(k) && !(entry.operation === 'create' && CREATE_HIDDEN.has(k)),
+  );
 
   function revert() {
     setError(null);
@@ -74,7 +85,7 @@ function Entry({ entry }: { entry: AdjustmentEntry }) {
             <span className="font-mono text-[9.5px] uppercase tracking-[.1em] text-stone/60">revert</span>
           )}
           <span className="text-[14px] text-ink truncate">
-            {entry.session ? entry.session.name : 'Session removed'}
+            {entry.session ? entry.session.name : missingSessionLabel}
             {entry.session && (
               <span className="text-stone/60"> · {entry.session.scheduled_date}</span>
             )}
