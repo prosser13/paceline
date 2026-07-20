@@ -25,10 +25,15 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
   return (
     <>
       <SecLabel>Trends &amp; insights</SecLabel>
-      <Suspense fallback={<CardSkeleton header="Target trajectory" bodyHeight={150} />}>
-        <TargetTrajectoryAsync />
+      <Suspense fallback={<CardSkeleton header="Where your form sits" bodyHeight={230} />}>
+        <FitnessChartAsync />
       </Suspense>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px]">
+      <div className="mt-[12px]">
+        <Suspense fallback={<CardSkeleton header="Target trajectory" bodyHeight={150} />}>
+          <TargetTrajectoryAsync />
+        </Suspense>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-[12px] mt-[12px]">
         <SeasonGoalCard
           name={d.raceName ?? 'No race scheduled'}
           daysTo={d.daysToRace}
@@ -41,9 +46,6 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
           weekPhase={d.weekPhase}
           tuneUpName={d.nextRace && d.nextRace.name !== d.raceName ? d.nextRace.name : null}
         />
-        <Suspense fallback={<CardSkeleton header="Fitness &amp; fatigue" bodyHeight={120} />}>
-          <FitnessChartAsync />
-        </Suspense>
         <Suspense fallback={<CardSkeleton header="Weekly load" bodyHeight={120} />}>
           <WeeklyLoadCard raceName={d.raceName} />
         </Suspense>
