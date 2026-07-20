@@ -258,14 +258,21 @@ export default async function RaceHeroPage({ params }: { params: Promise<{ slug:
     ]);
     post = { analysis, result, note, canAnalyse: !!row };
     if (row) {
-      const secs = row.actual_duration_secs != null ? Number(row.actual_duration_secs)
+      // A race's finish is wall-clock (elapsed) time, not moving time; pace is derived
+      // from it so the headline reconciles (finish ÷ distance). Fall back to moving for
+      // rows synced before the elapsed column existed.
+      const secs = row.actual_elapsed_secs != null ? Number(row.actual_elapsed_secs)
+        : row.actual_duration_secs != null ? Number(row.actual_duration_secs)
         : row.actual_duration_mins != null ? Number(row.actual_duration_mins) * 60 : null;
       actualFinishSecs = secs;
       const dist = row.actual_distance_km != null ? Number(row.actual_distance_km) : null;
       const ngpMinKm = row.actual_ngp_min_km != null ? Number(row.actual_ngp_min_km) : null;
+      // Elapsed pace = finish ÷ distance; falls back to the stored moving pace.
+      const elapsedPaceMinKm = secs != null && dist != null && dist > 0 ? secs / 60 / dist
+        : (row.actual_avg_pace_min_km != null ? Number(row.actual_avg_pace_min_km) : null);
       actual = {
         time: fmtHMS(secs),
-        pace: fmtPace(row.actual_avg_pace_min_km != null ? Number(row.actual_avg_pace_min_km) : null),
+        pace: fmtPace(elapsedPaceMinKm),
         distanceKm: dist, avgHr: row.actual_avg_hr != null ? Number(row.actual_avg_hr) : null,
       };
       // Flat-equivalent finish: (a) grade-adjusted from the run's NGP, (b) a simple

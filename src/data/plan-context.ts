@@ -733,7 +733,7 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
   const completedRes = ids.length
     ? await supabaseAdmin
         .from('completed_workouts')
-        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, segment_actuals, segment_hr, split_profile, perceived_effort, fuel_carbs_per_h, source')
+        .select('plan_session_id, strava_activity_id, merged_strava_ids, actual_distance_km, actual_duration_mins, actual_elapsed_secs, actual_avg_pace_min_km, actual_ngp_min_km, actual_avg_hr, actual_avg_power, actual_elevation_gain_m, decoupling_pct, pace_decay_pct, segment_actuals, segment_hr, split_profile, perceived_effort, fuel_carbs_per_h, source')
         .eq('user_id', userId)
         .in('plan_session_id', ids)
     : null;
@@ -815,7 +815,11 @@ async function getRecentSessions(from: string, to: string, zones: ZoneMap, hrBan
       },
       actual: c ? {
         distance_km: c.actual_distance_km != null ? Number(c.actual_distance_km) : null,
-        duration_mins: c.actual_duration_mins != null ? Number(c.actual_duration_mins) : null,
+        // A race's duration is its elapsed finish (moving time undercounts it); other
+        // sessions report moving time. split_profile.stopped_secs still exposes stops.
+        duration_mins: (s.session_type === 'RACE' && c.actual_elapsed_secs != null)
+          ? Number(c.actual_elapsed_secs) / 60
+          : (c.actual_duration_mins != null ? Number(c.actual_duration_mins) : null),
         avg_pace_min_km: actualPaceMinKm,
         ngp_min_km: ngpMinKm,
         avg_hr: (c.actual_avg_hr as number | null) ?? null,

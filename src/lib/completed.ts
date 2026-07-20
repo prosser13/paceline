@@ -14,7 +14,8 @@ import { parseThresholdPace, sessionTss, efficiencyFactor } from '@/lib/run-tss'
 export interface CompletedActuals {
   workoutId: string | null;   // completed_workouts.id — the fuel log's write key
   durationStr: string;
-  mins: number | null;
+  mins: number | null;        // display minutes: elapsed for a race (isRace), else moving
+  elapsedSecs: number | null; // raw elapsed (wall-clock) seconds, when synced; null otherwise
   tss: number | null;
   distanceKm: number | null;
   avgHr: number | null;
@@ -40,6 +41,7 @@ export interface CompletedRow {
   id?: string | null;
   actual_duration_mins?: number | string | null;
   actual_duration_secs?: number | string | null;   // precise moving time; preferred over the minute-rounded mins
+  actual_elapsed_secs?: number | string | null;     // wall-clock elapsed time — the finish time for races
   actual_avg_pace_min_km?: number | string | null;
   actual_avg_power?: number | string | null;
   actual_ngp_min_km?: number | string | null;
@@ -59,29 +61,35 @@ export interface CompletedRow {
   run_temp_c?: number | string | null;
 }
 
-export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null): CompletedActuals {
+export function buildCompletedActuals(cw: CompletedRow, threshMinKm: number, ftp: number | null, isRace = false): CompletedActuals {
   // Prefer the precise moving-time seconds; `actual_duration_mins` is numeric(6,1)
   // so it can only ever hold whole/tenth minutes (a 34:02 race stores as 34.0),
   // which is why the displayed time used to round to 34:00. Fall back to minutes
   // for rows synced before the seconds column existed / non-Strava completions.
   const rawMins = cw.actual_duration_mins != null ? Number(cw.actual_duration_mins) : null;
-  const secs = cw.actual_duration_secs != null ? Number(cw.actual_duration_secs)
+  const movingSecs = cw.actual_duration_secs != null ? Number(cw.actual_duration_secs)
     : (rawMins != null ? Math.round(rawMins * 60) : null);
-  const mins = secs != null ? secs / 60 : rawMins;
+  const elapsedSecs = cw.actual_elapsed_secs != null ? Number(cw.actual_elapsed_secs) : null;
+  // A race's finish is wall-clock (elapsed) time — moving time undercounts it (aid
+  // stations, stops). Everything else shows moving time. TSS stays moving-based below.
+  const displaySecs = isRace && elapsedSecs != null ? elapsedSecs : movingSecs;
+  const mins = displaySecs != null ? displaySecs / 60 : rawMins;
+  const movingMins = movingSecs != null ? movingSecs / 60 : rawMins;
   const pace = cw.actual_avg_pace_min_km ? Number(cw.actual_avg_pace_min_km) : null;
   const ngp  = cw.actual_ngp_min_km != null ? Number(cw.actual_ngp_min_km) : null;
   const avgPower = cw.actual_avg_power != null ? Number(cw.actual_avg_power) : null;
   // "H:MM:SS" (seconds preserved) — humanHMM renders it as "34:02" / "1:07:00".
-  const durationStr = secs != null
-    ? `${Math.floor(secs / 3600)}:${String(Math.floor((secs % 3600) / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}`
+  const durationStr = displaySecs != null
+    ? `${Math.floor(displaySecs / 3600)}:${String(Math.floor((displaySecs % 3600) / 60)).padStart(2, '0')}:${String(displaySecs % 60).padStart(2, '0')}`
     : '';
   // Prefer the stored TSS (kept fresh by recomputeAllCompletedTss); fall back to a
   // live calc when null (e.g. a row synced before this column, or pending NGP).
-  // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace.
-  const tss = cw.tss != null ? Number(cw.tss) : sessionTss({ mins, runPace: ngp ?? pace, power: avgPower }, threshMinKm, ftp);
+  // Run TSS uses NGP (grade-adjusted rTSS) when present, else average pace. Always
+  // moving-based — training load is moving time even when the race clock is elapsed.
+  const tss = cw.tss != null ? Number(cw.tss) : sessionTss({ mins: movingMins, runPace: ngp ?? pace, power: avgPower }, threshMinKm, ftp);
   return {
     workoutId: (cw.id as string | null) ?? null,
-    durationStr, mins, tss,
+    durationStr, mins, elapsedSecs, tss,
     distanceKm: cw.actual_distance_km ? Number(cw.actual_distance_km) : null,
     avgHr: cw.actual_avg_hr != null ? Number(cw.actual_avg_hr) : null,
     avgPower,

@@ -496,7 +496,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     // ALL sessions, not just the main run/ride — strength/yoga heroes need their
     // completion for the manual RPE scale (7B).
     const row = completionById.get(s.id);
-    if (row) todayCompletedById[s.id] = buildCompletedActuals(row, threshMinKm, ftp);
+    if (row) todayCompletedById[s.id] = buildCompletedActuals(row, threshMinKm, ftp, s.session_type === 'RACE');
   }
   const todayCompleted: CompletedToday | null =
     todaySession ? todayCompletedById[todaySession.id] ?? null : null;
@@ -511,7 +511,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     recentSession = ps as unknown as PlanSession;
     const rt = fuelMap.get(recentSession.id);
     if (rt) recentSession.fuel_target = rt;
-    recentCompleted = buildCompletedActuals(rcw, threshMinKm, ftp);
+    recentCompleted = buildCompletedActuals(rcw, threshMinKm, ftp, recentSession.session_type === 'RACE');
     const dateLabel = new Date(rcw.completed_date + 'T00:00:00')
       .toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
     recentLabel = `${dateLabel} · Done`;
