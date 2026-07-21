@@ -10,6 +10,7 @@ import SeasonGoalCard from './SeasonGoalCard';
 import AcwrTile from './AcwrTile';
 import WeeklyLoadCard from './WeeklyLoadCard';
 import LongestRunCard from './LongestRunCard';
+import FuelRehearsalCard from './FuelRehearsalCard';
 import LoadSplitBar from '@/components/LoadSplitBar';
 import { fmtDate } from '@/lib/dates';
 import type { DashboardData } from './data';
@@ -49,6 +50,7 @@ export default function DashboardExtras({ d }: { d: DashboardData }) {
         <Suspense fallback={<CardSkeleton header="Weekly load" bodyHeight={120} />}>
           <WeeklyLoadCard raceName={d.raceName} />
         </Suspense>
+        {d.fuelRehearsal && <FuelRehearsalCard r={d.fuelRehearsal} />}
         <Suspense fallback={<CardSkeleton header="Load balance" bodyHeight={120} />}>
           <AcwrTile />
         </Suspense>

@@ -32,7 +32,7 @@ import { buildZoneMaps } from '@/lib/zone-builders';
 import { buildCompletedActuals, parseThresholdPace, type CompletedActuals } from '@/lib/completed';
 import { sessionTss } from '@/lib/run-tss';
 import { todayISO, appHour } from '@/lib/dates';
-import { getFuelPlanForGoalBlock } from '@/data/fuel-plan';
+import { getFuelPlanForGoalBlock, getFuelRehearsal, type FuelRehearsal } from '@/data/fuel-plan';
 import { listFuelProducts, type FuelProduct } from '@/data/fuel';
 import type { ZoneMap, HrZoneMap } from '@/lib/plan-structure';
 import type { PowerZoneMap, BikeHrZoneMap } from '@/lib/cycling';
@@ -145,6 +145,7 @@ export interface DashboardData {
   recentCompleted: CompletedToday | null;
   recentLabel: string | null;
   fuelProducts: FuelProduct[];   // fuel catalog for the inline long-run fuel log
+  fuelRehearsal: FuelRehearsal | null;   // gut-training progress + next fuelled long run
 
   coachMessages: { morning: CoachMessage | null; evening: CoachMessage | null };  // latest of each kind
   dailyNote: string;                   // today's athlete note (for tonight's review)
@@ -618,6 +619,9 @@ export async function loadDashboardData(): Promise<DashboardData> {
     sessions: calorieSessions,
   });
 
+  // Gut-training rehearsal progress + next fuelled long run (goal-marathon block only).
+  const fuelRehearsal = await getFuelRehearsal(todayStr);
+
   return {
     firstName, greeting: greet(), todayFull, todayStr,
     todaySession, tomorrowSession, tomorrowStrength, todaySessions, todayDoneIds, todayCompleted, todayCompletedById,
@@ -637,6 +641,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     offPlanToday, offPlanRecent,
     recentSession, recentCompleted, recentLabel,
     fuelProducts,
+    fuelRehearsal,
     coachMessages,
     dailyNote,
     pendingThreshold, pendingPower,
