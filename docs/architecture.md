@@ -102,6 +102,17 @@ it; `dates.ts` parses `'YYYY-MM-DD'` at server-local midnight (UTC on Vercel), `
 by UTC, and pages mint `todayStr` via `toISOString()` (UTC). Consequence: 00:00–01:00 BST renders
 yesterday. If you touch "today" logic, see backlog item on `todayLondon()`.
 
+**Date rules (memorize — this is where off-by-one bugs breed):**
+1. Mint "today" only via `todayISO()` (`dates.ts`) — never `new Date().toISOString().slice(0,10)`.
+2. A `'YYYY-MM-DD'` string is a *local* calendar day. To format a `Date` back to one, use **local
+   getters** (`getFullYear`/`getMonth`/`getDate`), never `toISOString().split('T')[0]` — that
+   reads the Date in UTC and drops it a day whenever the server clock is ahead of UTC (any BST
+   afternoon on a UK dev box; Vercel/UTC masks it in prod). This was the dashboard week-strip
+   "today is yesterday" bug.
+3. `addDays` is re-implemented ~5× across `src/data/*` and `src/lib/*` with **inconsistent** UTC vs
+   local semantics — check which one a call site wants before reusing (see the P2 dedup item in the
+   backlog; consolidating these removes the trap).
+
 ---
 
 ## 3. Sport touch-point map  ⚠️ read before adding a sport
