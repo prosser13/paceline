@@ -168,6 +168,10 @@ export function sessionKcalValue(
 
 // Signed actual−plan kcal delta for a COMPLETED session (positive = burned more than
 // the plan estimated). Null unless the session is done and both sides are positive.
+// Within ±10% of the plan reads as on-plan (returns 0 → the hero shows a ✓): the kcal
+// figure is a BMR/MET estimate, so small differences are noise, not signal. Matches
+// the ±10% band used for TSS in buildRunCompare.
+const KCAL_ON_PLAN_BAND = 0.1;
 export function kcalDeltaValue(
   session: EnergySession,
   completed: { mins?: number | null; distanceKm?: number | null } | null | undefined,
@@ -179,7 +183,8 @@ export function kcalDeltaValue(
   const planned = Math.round(sessionKcal(session, weightKg));
   const actual = Math.round(sessionKcal({ ...session, actualDurationMins: completed.mins ?? null, actualDistanceKm: completed.distanceKm ?? null }, weightKg));
   if (!(planned > 0) || !(actual > 0)) return null;
-  return actual - planned;
+  const delta = actual - planned;
+  return Math.abs(delta) <= planned * KCAL_ON_PLAN_BAND ? 0 : delta;
 }
 
 // The day's calorie target. `sessions` should be today's non-rest sessions; rest
