@@ -4,6 +4,18 @@ Prioritised findings from the July 2026 full-codebase review (five parallel subs
 item verified against source). Work top-down; tick items off or delete them as they land. When a fix
 changes a pattern documented in `architecture.md`, update that too.
 
+## User-review pass (2026-07-21)
+
+A user-POV walkthrough shipped these (PRs #259–264): threshold estimator excludes ultras + freezes in
+recovery blocks; dashboard date off-by-one (`isoDate` UTC round-trip — see the date rules now in
+architecture.md §2), trajectory gap rounding, change-log "Session added" labels + internal-field
+filtering; recently-completed splits behind a nested accordion, ultra outlier pill, coach-tab
+timestamps dropped, "planned this week" / "last week" labels; neutral race-form placeholders +
+pos-field width, strength "Expired" state; **race finish now shows elapsed not moving time**
+(`actual_elapsed_secs`); fuel-rehearsal dashboard card + plan-week done/planned summary. New docs:
+`ui-map.md`, `prediction-models.md`, `design-system.md`. **Keep `ui-map.md` in sync with the
+user-facing feature list on `/about`** — they describe the same surfaces.
+
 ## Status (July 2026 fix pass)
 
 All **P0** and **P1** items below are **done** (see the branch's commit history). Every change was
@@ -131,7 +143,9 @@ gated on `tsc --noEmit` + `eslint` (now clean, 0/0) + `next build`. Not yet done
   signed vs `prediction.ts:188` UTC abs), two `addDays` (UTC vs local), `addDays` re-implemented 5× in
   `src/data/*`, `daysUntil` ×3, `SecLabel` ×3, `fmtHms`≡`fmtClockSec`, three pace formatters, two
   `"m:ss"` parsers, `hmmToMins`≡`parseDurationMins`, two different `ZONE_COLOR` maps
-  (`colors.ts:50` vs `profile.ts:12`), race-distance labels ×3.
+  (`colors.ts:50` vs `profile.ts:12`), race-distance labels ×3. **Elevated:** the UTC-vs-local `addDays`
+  split is the same class as the dashboard `isoDate` off-by-one fixed in #260 — consolidating removes
+  the trap. Codify the rules first (done: architecture.md §2 "Date rules").
 - [ ] **Dedupe the repeat-expansion walk** (5 copies: plan-structure ×2, profile ×2, cycling,
   execution-score) and the `Z\s*([1-9])` regex (3 copies) — this is where H2-style drift bugs breed.
 - [x] **Extract `callClaudeJson()`** in `coach-generate.ts` — the ~40-line request/parse/validate block

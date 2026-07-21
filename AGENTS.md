@@ -17,6 +17,12 @@ node scripts/setup-worktree.mjs
 This installs deps (offline-first from the warm npm cache) and copies `.env.local`
 from the main checkout. Then `npm run dev` / the preview tool work as normal.
 
+**Testing the UI as a logged-in user:** every authed page needs a Supabase session. Skip the
+Google OAuth flow with the dev-only login bypass: `node scripts/setup-worktree.mjs` → start the
+dev server → open `/api/dev-login?secret=<DEV_LOGIN_SECRET>` (read the value from `.env.local`).
+It mints a real session for the test user (RLS + user-scoped data behave normally); it's
+production-gated (404s on Vercel) and disabled unless `DEV_LOGIN_SECRET` is set.
+
 # Architecture
 
 See [`docs/architecture.md`](docs/architecture.md) for the codebase map: the data model
@@ -26,6 +32,12 @@ caching patterns, the shared-utility catalog (reuse these before writing new log
 map for `src/data/`, the API-route/cron inventory, and the multi-tenant migration recipe. Read it
 before adding a feature. Known bugs and agreed cleanups are in
 [`docs/improvement-backlog.md`](docs/improvement-backlog.md) — check it before re-diagnosing an issue.
+
+Other living docs: [`docs/ui-map.md`](docs/ui-map.md) (page → card → component → data, for UI
+work), [`docs/prediction-models.md`](docs/prediction-models.md) (the prediction / threshold /
+readiness / fuelling rules), [`docs/design-system.md`](docs/design-system.md) (theme tokens +
+reusable components), [`docs/rtss.md`](docs/rtss.md) (TSS), and
+[`docs/threshold-auto-suggestion.md`](docs/threshold-auto-suggestion.md).
 
 # Quick facts (save yourself the archaeology)
 
