@@ -9,6 +9,7 @@
 // a selected user and stays on supabaseAdmin directly (cross-user).
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { sessionTss, parseThresholdPace } from '@/lib/run-tss';
 
@@ -152,7 +153,7 @@ export async function listRecentRaces(
     .gte('completed_date', since)
     .eq('plan_sessions.session_type', 'RACE');
   return (data ?? []).map(r => {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { name: string; target_pace: string | null; distance_km: number | null } | null;
     return {
       date: r.completed_date as string,
@@ -374,7 +375,7 @@ export async function getMostRecentCompletedSession(beforeDate: string) {
     .maybeSingle();
   if (!data) return null;
 
-  const ps = Array.isArray(data.plan_sessions) ? data.plan_sessions[0] : data.plan_sessions;
+  const ps = unwrapJoin(data.plan_sessions);
   if (!ps) return null;
 
   return { cw: data, ps };
@@ -408,7 +409,7 @@ export async function listRaceFinishes(): Promise<Record<string, { secs: number 
   const out: Record<string, { secs: number | null; date: string | null }> = {};
   for (const row of data ?? []) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ps: any = Array.isArray(row.plan_sessions) ? row.plan_sessions[0] : row.plan_sessions;
+    const ps: any = unwrapJoin(row.plan_sessions);
     const slug = ps?.race_slug as string | null;
     if (!slug) continue;
     // Races show elapsed (wall-clock) finish time; fall back to moving for rows synced
@@ -600,7 +601,7 @@ export async function setPerceivedEffortByStravaId(stravaId: number, rpe: number
     .eq('user_id', userId)
     .eq('strava_activity_id', stravaId);
   const ids = (rows ?? []).filter(r => {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { session_type: string | null; activity_type: string | null } | null;
     if (!ps) return true;   // off-plan / unknown → assume a run
     const nonRun = ps.activity_type === 'cycling' || ps.session_type === 'STRENGTH' || ps.session_type === 'CORE' || ps.session_type === 'YOGA';
@@ -688,7 +689,7 @@ export async function recomputeAllCompletedTss(): Promise<void> {
     const power = r.actual_avg_power != null ? Number(r.actual_avg_power) : null;
     // Swim: no run pace / power is stored, so derive pace-per-100 m from the matched
     // distance + moving time (secs ÷ (km × 10)) and score it against CSS in sessionTss.
-    const ps = Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions;
+    const ps = unwrapJoin(r.plan_sessions);
     const isSwim = (ps as { activity_type?: string | null } | null)?.activity_type === 'swimming';
     const distKm = r.actual_distance_km != null ? Number(r.actual_distance_km) : null;
     const secs = r.actual_duration_secs != null ? Number(r.actual_duration_secs) : (mins != null ? Math.round(mins * 60) : null);

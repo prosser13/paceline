@@ -10,6 +10,7 @@
 
 import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { addDaysISO as addDays } from '@/lib/dates';
 import { currentUserId } from '@/lib/scope';
 import { getThresholdPace, getHrConfig } from '@/data/zones';
@@ -63,7 +64,7 @@ export const getSwimPredictions = cache(async (asOf: string): Promise<SwimPredic
     const secs = r.actual_duration_secs != null ? Number(r.actual_duration_secs)
       : (r.actual_duration_mins != null ? Number(r.actual_duration_mins) * 60 : 0);
     if (!(distM > 0) || !(secs > 0)) return [];
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as { name?: string } | null;
+    const ps = (unwrapJoin(r.plan_sessions)) as { name?: string } | null;
     return [{ distanceM: distM, timeSeconds: secs, date: r.completed_date as string, label: ps?.name ?? `${Math.round(distM)} m swim` }];
   });
 
@@ -101,7 +102,7 @@ export const listRaceResultsSince = cache(async (since: string): Promise<RaceRes
     .eq('plan_sessions.session_type', 'RACE');
 
   return (data ?? []).flatMap(r => {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { name: string; distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : null;
@@ -142,7 +143,7 @@ export const listLongRunsSince = cache(async (since: string): Promise<LongRun[]>
     .eq('plan_sessions.activity_type', 'running');
 
   return (data ?? []).flatMap(r => {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { session_type: string | null; distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : 0;

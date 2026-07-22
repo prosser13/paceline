@@ -7,6 +7,7 @@
 
 import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { getWeatherConfig, effectiveLocation } from '@/data/weather-config';
 import { getRaceWeatherHistory } from '@/lib/weather';
@@ -226,7 +227,7 @@ export async function listHydrationRunsSince(since: string): Promise<HydrationRu
 
   return (data ?? []).flatMap(r => {
     if (!r.completed_date) return [];
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : 0;
@@ -280,7 +281,7 @@ export async function listRecentRunsForNutrition(since: string, limit = 12): Pro
 
   return (data ?? []).flatMap(r => {
     if (!r.completed_date) return [];
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       { name: string | null; distance_km: number | null } | null;
     const km = r.actual_distance_km != null ? Number(r.actual_distance_km)
       : ps?.distance_km != null ? Number(ps.distance_km) : 0;

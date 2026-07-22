@@ -320,10 +320,11 @@ reasoning about live schema, query the DB — don't trust the repo files alone.
 
 **Scripts (`scripts/*.mjs`) mutate production** — they read `.env.local` and use the service-role key;
 the `gen-*` plan generators delete-and-reinsert whole plans, and `gen-malaga.mjs` hardcodes zone/threshold
-tables that drift from the DB. Only `backfill-strength-exercise-ids.mjs` has a dry-run flag. Live ones:
-`setup-worktree.mjs` (worktree bootstrap), `coach-mcp-server.mjs` (Claude Desktop bridge; needs
-`PLAN_AGENT_TOKEN`), `gen-malaga.mjs`/`gen-supplementary.mjs` (future plan). The rest are completed
-one-offs.
+tables that drift from the DB (read them from the DB before any rerun). Live ones: `setup-worktree.mjs`
+(worktree bootstrap), `coach-mcp-server.mjs` (Claude Desktop bridge; needs `PLAN_AGENT_TOKEN`),
+`seed-user.mjs` (new-tenant baseline), `pull-exercises.mjs` (generates `strength-exercises.ts`),
+`gen-malaga.mjs`/`gen-supplementary.mjs` (future Málaga plan). Completed one-offs have been moved to
+`scripts/archive/` (dragon/beth generators, the exercise-id backfill).
 
 ---
 

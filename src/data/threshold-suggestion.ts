@@ -4,6 +4,7 @@
 // threshold_checks. Suggest freely, apply conservatively, never silently.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
@@ -86,7 +87,7 @@ async function qualitySegmentSignal(asOf: string): Promise<{ signal: ThresholdEv
 
   const implied: { minKm: number; date: string }[] = [];
   for (const r of runs ?? []) {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as { structure: unknown } | null;
+    const ps = (unwrapJoin(r.plan_sessions)) as { structure: unknown } | null;
     if (!ps?.structure || !Array.isArray(ps.structure) || !ps.structure.length || !r.completed_date) continue;
     const steps = normalizeStructure(
       ps.structure as unknown[], zones,

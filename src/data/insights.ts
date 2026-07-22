@@ -4,6 +4,7 @@
 // min-sample guarded so it never makes a claim off a handful of points.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { listRecentWellnessDays } from '@/data/wellness-days';
@@ -55,7 +56,7 @@ async function sleepVsPace(
 
   const short: number[] = [], good: number[] = [];
   for (const r of data ?? []) {
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as { target_pace: string | null } | null;
+    const ps = (unwrapJoin(r.plan_sessions)) as { target_pace: string | null } | null;
     const target = ps?.target_pace ? parseThresholdPace(ps.target_pace) : null;
     const actual = r.actual_avg_pace_min_km != null ? Number(r.actual_avg_pace_min_km) : null;
     const sleep = r.completed_date ? sleepByDate.get(r.completed_date as string) : undefined;

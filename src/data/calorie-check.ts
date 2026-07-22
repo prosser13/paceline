@@ -10,6 +10,7 @@
 // kcal/kg/km). Other sports have no independent actual and are skipped.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { getLatestBodyweightKg } from '@/data/hydration';
 import { resolveSport } from '@/lib/sports/registry';
@@ -79,7 +80,7 @@ export async function computeCalorieSamples(asOf: string): Promise<CalorieSample
   const out: CalorieSample[] = [];
   for (const r of (data ?? []) as Row[]) {
     if (!r.completed_date) continue;
-    const ps = (Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions) as
+    const ps = (unwrapJoin(r.plan_sessions)) as
       (EnergySession & { name?: string | null; distance_km?: number | null }) | null;
     if (!ps) continue;
 

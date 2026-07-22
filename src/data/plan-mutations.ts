@@ -5,6 +5,7 @@
 // should UPDATE plan_sessions for planning reasons. See docs/plan-agent.md.
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { unwrapJoin } from '@/data/_row-helpers';
 import { currentUserId } from '@/lib/scope';
 import { todayISO } from '@/lib/dates';
 import { getCoachingPrefs } from '@/data/coaching';
@@ -557,7 +558,7 @@ export async function listAdjustments(limit = 50): Promise<AdjustmentEntry[]> {
   const revertedIds = new Set((reverts ?? []).map(r => (r.idempotency_key as string).slice('revert:'.length)));
 
   return (data ?? []).map(r => {
-    const ps = Array.isArray(r.plan_sessions) ? r.plan_sessions[0] : r.plan_sessions;
+    const ps = unwrapJoin(r.plan_sessions);
     return {
       id: r.id as string,
       logged_at: (r.logged_at as string | null) ?? null,
