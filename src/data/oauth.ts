@@ -69,16 +69,19 @@ export interface AuthCodeRow {
   code_challenge: string; code_challenge_method: string; scope: string | null; expires_at: string;
 }
 
-// Single-use: fetch, delete, and reject if expired. Returns null on any miss.
+// Single-use: delete-returning so consumption is atomic. Two concurrent token
+// requests for the same code race on the DELETE; only the one whose delete affects
+// the row gets it back — the other sees no rows and fails. (A plain select-then-delete
+// let both read the row first and mint two token pairs.) Rejects if expired.
 export async function consumeAuthCode(code: string, nowMs: number): Promise<AuthCodeRow | null> {
   const hash = sha256(code);
   const { data } = await supabaseAdmin
     .from('oauth_auth_codes')
-    .select('client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at')
+    .delete()
     .eq('code_hash', hash)
+    .select('client_id, user_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at')
     .maybeSingle();
   if (!data) return null;
-  await supabaseAdmin.from('oauth_auth_codes').delete().eq('code_hash', hash);
   if (new Date(data.expires_at as string).getTime() < nowMs) return null;
   return data as AuthCodeRow;
 }
@@ -118,14 +121,18 @@ export async function resolveAccessToken(token: string | null | undefined, nowMs
   };
 }
 
-// Rotate a refresh token: consume the old row, issue a fresh pair. Null if invalid.
+// Rotate a refresh token: atomically consume the old row (delete-returning, scoped to
+// the presenting client so a wrong client_id neither matches nor burns the token) and
+// issue a fresh pair. Null if invalid. The atomic delete also prevents a concurrent
+// double-rotation minting two live token pairs from one refresh token.
 export async function rotateRefreshToken(refreshToken: string, clientId: string, nowMs: number): Promise<IssuedTokens | null> {
   const { data } = await supabaseAdmin
     .from('oauth_tokens')
-    .select('access_token_hash, client_id, user_id, scope')
+    .delete()
     .eq('refresh_token_hash', sha256(refreshToken))
+    .eq('client_id', clientId)
+    .select('user_id, scope')
     .maybeSingle();
-  if (!data || data.client_id !== clientId) return null;
-  await supabaseAdmin.from('oauth_tokens').delete().eq('access_token_hash', data.access_token_hash as string);
+  if (!data) return null;
   return issueTokens(clientId, data.user_id as string, (data.scope as string | null) ?? null, nowMs);
 }

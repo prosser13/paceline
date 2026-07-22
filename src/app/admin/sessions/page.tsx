@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import { SESSION_TYPE_CONFIG, DAYS_OF_WEEK } from '@/data/sessions';
 import type { PlanSession } from '@/data/sessions';
 import Link from 'next/link';
@@ -7,9 +8,11 @@ import SyncButton from './SyncButton';
 export const dynamic = 'force-dynamic';
 
 export default async function SessionsPage() {
+  const userId = await currentUserId();
   const { data: sessions, error } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
+    .eq('user_id', userId)
     .order('week_number', { ascending: true })
     .order('day_of_week', { ascending: true });
 

@@ -32,7 +32,7 @@ const GUEST_VIEWER_USER = {
 // Constant-time comparison that also guards the length mismatch timingSafeEqual
 // would otherwise throw on. Use for every bearer-secret check so token comparison
 // doesn't leak via timing.
-function safeEqual(a: string, b: string): boolean {
+export function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;

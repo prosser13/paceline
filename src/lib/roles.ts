@@ -6,9 +6,11 @@
 // The app is multi-tenant: each allowlisted account owns its own data. OWNER_EMAILS
 // is a comma-separated allowlist of accounts that may sign in and own data — any
 // other authenticated Supabase account resolves to null everywhere auth is checked.
-// Unset → any authed user is treated as an owner (legacy/dev fallback), so set
-// OWNER_EMAILS in production (alongside disabling Supabase signups) to close the hole
-// in code. (OWNER_EMAIL is still read as a single-value fallback for older deploys.)
+// Unset in production → nobody is an owner (fail closed): an empty allowlist must
+// never silently promote every authenticated Supabase account to full owner. In dev
+// (or with ALLOW_ANY_AUTHED=1) an unset allowlist keeps the permissive
+// any-authed-is-owner fallback for convenience. (OWNER_EMAIL is still read as a
+// single-value fallback for older deploys.)
 const OWNER_EMAILS = new Set(
   (process.env.OWNER_EMAILS ?? process.env.OWNER_EMAIL ?? '')
     .split(',')
@@ -49,12 +51,18 @@ export function coachUpdatesLocked(email: string | null | undefined): boolean {
 export type Role = 'owner' | 'viewer' | 'guest';
 
 // The single source of truth mapping an email → access tier (or null for neither).
-// When OWNER_EMAILS is unset we keep the legacy "any authed account is the owner"
-// behaviour so a misconfigured env never silently locks the owner out.
+// When OWNER_EMAILS is unset, dev keeps the legacy "any authed account is the owner"
+// convenience, but production fails closed (returns null) so a blank/typo'd env can
+// never turn every authenticated account into a full owner. Set ALLOW_ANY_AUTHED=1 to
+// opt back into the permissive fallback deliberately.
 export function roleFor(email: string | null | undefined): Role | null {
   const e = (email ?? '').trim().toLowerCase();
   if (!e) return null;
-  if (OWNER_EMAILS.size === 0) return 'owner';
+  if (OWNER_EMAILS.size === 0) {
+    const allowAny =
+      process.env.NODE_ENV !== 'production' || process.env.ALLOW_ANY_AUTHED === '1';
+    return allowAny ? 'owner' : null;
+  }
   if (OWNER_EMAILS.has(e)) return 'owner';
   if (VIEWER_EMAILS.has(e)) return 'viewer';
   return null;

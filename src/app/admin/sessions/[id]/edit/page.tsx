@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { currentUserId } from '@/lib/scope';
 import SessionForm from '@/components/SessionForm';
 import { updateSessionAction, deleteSessionAction } from '../../actions';
 import { notFound } from 'next/navigation';
@@ -12,11 +13,13 @@ interface Props {
 
 export default async function EditSessionPage({ params }: Props) {
   const { id } = await params;
+  const userId = await currentUserId();
 
   const { data: session, error } = await supabaseAdmin
     .from('plan_sessions')
     .select('*')
     .eq('id', id)
+    .eq('user_id', userId)
     .single();
 
   if (error || !session) notFound();
