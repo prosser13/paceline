@@ -32,6 +32,35 @@ drive the app: `node scripts/setup-worktree.mjs` → `npm run dev` → `/api/dev
 
 ---
 
+## Progress log
+
+**Landed (2026-07, this branch — each gated on `tsc --noEmit` + `eslint` + `next build`):**
+
+- **Batch 1 (security) — complete.** 1.1 admin per-tenant scoping + owner-only gate · 1.2 fail-closed
+  `OWNER_EMAILS` · 1.3 frame-deny headers + consent hygiene · 1.4 atomic OAuth code/token consumption ·
+  1.5 dev-login timing-safe + NODE_ENV guard · 1.6 err-trim (workout-sync, coach-context). Rate-limit +
+  `x-forwarded-host` validation (optional P3s) NOT done.
+- **Batch 2 (docs) — complete.** 2.1 architecture drift · 2.2 new `mcp-server.md` · 2.3 env table +
+  recipes · 2.4 backlog compression · 2.5 README/archive/AGENTS.
+- **Batch 3 (UX) — partial.** 3.1 loading.tsx (settings/benchmarks/races/strength/plan) · 3.3 settings
+  serial awaits folded in · 3.4 fuel-rehearsal moved to wave 2. **Deferred:** 3.2 races internal
+  Suspense refactor (*runtime*), 3.4 select-narrow (structure is required), 3.5 revalidatePath.
+- **Batch 4 (API calls) — complete.** 4.1 Strava sync watermark (activities-derived, 30-day overlap,
+  no schema change) · 4.2 `getHydrationConfig` · 4.3 batched strength writes · 4.4 two-pointer segment
+  scans (fuzz-verified identical over 20k trials).
+- **Batch 5 (dedup) — partial.** 5.1 `addDaysISO` ×9 + `daysUntil` ×3 + `fmtClockSec`≡`fmtHms` +
+  `EFFORT_ZONE_COLOR` rename · 5.3 `unwrapJoin` ×14 · 5.7 script archival · 5.8 AgendaA `resolveSport`.
+  **Deferred:** 5.1 remainder (divergent `daysBetween`, pace formatters, `shortDate`/`SecLabel`,
+  `raceLabel`), 5.2 structure-walk (segment_actuals contract risk), 5.3 `COMPLETED_COLS`/secs-fallback
+  (drifted), 5.6 route wrappers (security-sensitive), 5.4/5.5 zone-editor + Row/Hero (*runtime*).
+
+**Why the deferrals:** this environment has no `.env.local`/Supabase creds to drive the app, so
+*[runtime]*-flagged items can't be visually verified; and a few items (structure-walk, route-auth
+wrappers, the drifted COMPLETED_COLS/secs ladders) are contract- or security-sensitive enough that
+build-only verification is insufficient. Ship those from a session that can run the app.
+
+---
+
 ## Batch 1 — Security (P1/P2, do first)
 
 - [ ] **1.1 [S] Scope the admin surface per-tenant + owner-only.**
