@@ -21,14 +21,17 @@ src/app/
   (app)/                     ← authenticated shell (route group)
     layout.tsx               ← auth gate + persistent Sidebar/MobileNav; fetches nav plans
     page.tsx                 ← Dashboard (thin; streams _dashboard/DashboardBody behind <Suspense>)
-    _dashboard/              ← dashboard-only components + data.ts loader
-    plan/                    ← Plan view: page.tsx (thin) + data.ts loader + PlanThread (client)
-    races/[slug]/            ← race hero pages (curated data in src/data/races/)
+    _dashboard/              ← dashboard-only components + data.ts loader (+ _dashboard/wellness/)
+    plan/                    ← Plan view: page.tsx (thin) + data.ts loader + PlanThread (client); plan/archive/
+    races/, races/[slug]/    ← race index + race hero pages (curated data in src/data/races/)
     benchmarks/              ← predictions/threshold page (loader pattern)
-    strength/                ← strength session builder + active session
-    settings/                ← zones, target times, coaching, constraints (client editors)
-  admin/                     ← admin CMS (cross-user, supabaseAdmin) — gate is only "any authed user"
-  plan-lab/                  ← UNAUTHENTICATED dead prototypes on mock data (ideas shipped in PlanThread)
+    strength/                ← strength session builder + active session (strength/history/, strength/session/[id]/)
+    settings/                ← zones, target times, coaching, integrations, constraints (client editors)
+    availability/            ← availability editor (feeds coach conflict detection)
+    about/                   ← feature list (keep in sync with docs/ui-map.md)
+  admin/                     ← admin CMS (owner-only, supabaseAdmin; reads/writes scoped by user_id)
+  oauth/authorize/           ← MCP OAuth 2.1 consent screen (owner-gated) — see docs/mcp-server.md
+  guest/                     ← read-only guest landing (signed cookie; see docs/mcp-server.md §guest)
   auth/                      ← login / error
 src/components/              ← shared UI (rows, heroes, charts, nav)
 src/data/                    ← Supabase access layer (see §6 for table → file map)
@@ -37,9 +40,12 @@ src/lib/                     ← pure logic + integrations (see §5)
 
 **Auth model:** `src/proxy.ts` (Next 16's renamed middleware) only refreshes the Supabase cookie — it
 gates nothing. Gating = `(app)/layout.tsx` redirect + per-page `getCurrentUser()` + `requireUser()` in
-server actions (`src/lib/auth.ts`). Anything outside `(app)` (admin, plan-lab, api routes) must gate
+server actions (`src/lib/auth.ts`). Anything outside `(app)` (admin, oauth, guest, api routes) must gate
 itself. Access is an email allowlist: `OWNER_EMAILS` (each owns their own data) + `VIEWER_EMAILS`
-(read-only), via `roleFor()`; no `is_admin` flag (admin is any authed owner). Data is per-user — see §9.
+(read-only), via `roleFor()`; no `is_admin` flag. `roleFor()` **fails closed in production** when
+`OWNER_EMAILS` is unset (dev keeps the any-authed-is-owner fallback; `ALLOW_ANY_AUTHED=1` to opt back
+in). **Admin is owner-only** (`admin/layout.tsx` requires `role === 'owner'`) and every admin query/
+mutation is scoped by `user_id`. Data is per-user — see §9.
 The **settings pattern**: one server page awaits ~20 reads, renders one `'use client'`
 editor per card, each posting to a server action in `settings/actions.ts`; variants are parameterized by
 passing the action as a prop (e.g. `<HrZonesClient save={saveBikeHrZones}>`).
@@ -76,6 +82,7 @@ A session's **sport** comes from one classifier — `resolveSport(session)` in
 | `session_type === 'STRENGTH'` or `'CORE'` | `strength` | `StrengthRow` / `StrengthHero` |
 | `session_type === 'YOGA'` | `yoga` | `YogaRow` / `YogaHero` |
 | `activity_type === 'cycling'` | `cycling` | `CyclingRow` / `CyclingHero` |
+| `activity_type === 'swimming'` | `swimming` | `SwimRow` / `SwimHero` |
 | otherwise (incl. `RACE`) | `run` | `RunRow` / `SessionHero` |
 
 `SPORTS[key]` carries the behaviour flags (`isMain`, `isStrengthTier`, `countsToWeeklyVolume`) that the
@@ -97,10 +104,12 @@ minutes in the plan (`estimated_duration` can be an `"H:MM"` *string*), **second
 `actual_duration_secs`. TSS = `hours × IF² × 100`. FTP = `powerZones['Z4'].powerMax`
 (`zone-builders.ts`). Ride HR uses a separate (lower) bike-HR zone set.
 
-**Timezone:** the app's operational timezone is nominally Europe/London but only `weather.ts` hardcodes
-it; `dates.ts` parses `'YYYY-MM-DD'` at server-local midnight (UTC on Vercel), `intervals.ts` keys days
-by UTC, and pages mint `todayStr` via `toISOString()` (UTC). Consequence: 00:00–01:00 BST renders
-yesterday. If you touch "today" logic, see backlog item on `todayLondon()`.
+**Timezone:** the app's operational timezone is `APP_TZ = 'Europe/London'`, centralized in
+`dates.ts`. Mint "today" via `todayISO()` (formats `now` in `APP_TZ` via `Intl`) and read the local
+hour via `appHour()` — never `new Date().toISOString().slice(0,10)`, which is UTC and renders yesterday
+00:00–01:00 BST. Residual UTC callers still exist off this path: `intervals.ts` keys days by UTC and
+`weather.ts` hardcodes London separately — reconcile if you touch them, but the page-facing "today" is
+now correct everywhere.
 
 **Date rules (memorize — this is where off-by-one bugs breed):**
 1. Mint "today" only via `todayISO()` (`dates.ts`) — never `new Date().toISOString().slice(0,10)`.
@@ -135,8 +144,9 @@ the **shared row dispatcher** (`src/components/SessionRow.tsx`). To add a sport 
 Derive automatically from the registry (don't touch): `PlanThread` (renders via `<SessionRow>`) and
 `_dashboard/data.ts` (`isStrengthTier`/`pickRun`/`hasRun|Ride|Yoga`/weekly-volume read
 `resolveSport`/`SPORTS`). Still bespoke: `activity-merge.ts` (pace combine) and `plan-context.ts`
-`SESSION_SCHEMAS` (agent edit schemas). (`_dashboard/SessionRows.tsx` is dead — Tomorrow renders
-`TomorrowCard`; some comments still cite it.)
+`SESSION_SCHEMAS` (agent edit schemas). Tomorrow renders `TomorrowCard`. Swimming is a real registered
+sport (`SwimRow`/`SwimHero`, `src/lib/swim.ts`); the table above is the live per-sport edit checklist,
+not a hypothetical.
 
 ---
 
@@ -191,16 +201,25 @@ and Next fetch-cache on Open-Meteo (1 h forecast / 6 h race window).
 | `src/lib/wellness-stats.ts` | z-score baselines over 28 d excl. today; thresholds in `BODY`/`SLEEP`/`STANDOUTS` consts. |
 | `src/lib/fuel-progression.ts` | gut-training g/h ladder 50+8n capped 90, anchored to fuelled-session *sequence*, not weeks. |
 | `src/lib/activity-merge.ts` | merged-activity HR/power (moving-time-weighted); NGP is lost on merge. |
-| `src/lib/dates.ts` | date helpers — parses `'YYYY-MM-DD'` at server-local midnight (see §2 timezone note). |
+| `src/lib/dates.ts` | date helpers + the timezone source of truth (`APP_TZ`, `todayISO`, `appHour`). Parses `'YYYY-MM-DD'` at server-local midnight (see §2 timezone note). **Consolidation target** — `addDays`/`daysBetween`/pace+duration formatters are still duplicated across `src/data`/`src/lib` (backlog). |
+| `src/lib/http.ts` | `timedFetch` — the shared resilient fetch (timeout + backoff-retry). Wrap every new external call in it. |
+| `src/lib/weekly-volume.ts` | the single definition of weekly training volume — reuse, don't re-sum. |
+| `src/lib/plan-fields.ts` | single source of truth for the mutable `plan_sessions` fields (the agent/admin edit allowlist). |
+| `src/lib/swim.ts` / `swim-prediction.ts` | swim `structure` → segments + swim CSS/pace prediction (the swimming sport). |
+| `src/lib/energy.ts` | daily calorie-target model (BMR × activity factor + session kcal). |
+| `src/lib/base-url.ts` | `originFromRequest` — request origin for OAuth/MCP metadata (trusts `x-forwarded-host`; validate if self-hosting). |
 | `src/lib/availability-conflicts.ts` | `detectAvailabilityConflicts(availability, sessions)` — pure detector of availability↔plan clashes (time caps, barred activity/equipment, full-day/below-par). Reuses `resolveSport`; feeds the coach briefing. |
 | `src/components/session-ui.tsx` | presentation-only blocks (`fmtClock`, `ZoneChip`, `CompareTable`, …) — no per-sport branching. |
 | `src/components/glyphs.tsx`, `src/lib/colors.ts` | sport glyphs + brand colours. (`profile.ts` exports a *different* `ZONE_COLOR` — drift trap.) |
 
-**External calls:** only `strava.ts` has timeout/retry (`timedFetch`, 15 s / 2 retries / Retry-After).
-`intervals.ts`, `weather.ts`, `telegram.ts`, `coach-generate.ts` are bare `fetch`: telegram never throws
-by contract, weather returns null on failure, intervals throws-or-nulls per function. intervals.icu
-athlete id + API key and the Telegram chat id are **per-user** (`user_integrations`, resolved from scope);
-`telegram.ts` takes the chat id as an argument, `intervals.ts` builds its base URL + auth per call.
+**External calls:** the shared resilient fetch is **`src/lib/http.ts`** `timedFetch` (abort timeout +
+bounded backoff-retry on 429/5xx/network, honours Retry-After; returns null when every attempt fails —
+check `res.ok` on a non-null Response). Used by `strava.ts`, `intervals.ts`, `telegram.ts` and
+`coach-generate.ts` (the Anthropic call). Only `weather.ts` is still a bare `fetch` (returns null on
+failure). Contracts: telegram never throws, weather returns null, intervals throws-or-nulls per
+function. intervals.icu athlete id + API key and the Telegram chat id are **per-user**
+(`user_integrations`, resolved from scope); `telegram.ts` takes the chat id as an argument,
+`intervals.ts` builds its base URL + auth per call.
 
 **Two Supabase clients:** `supabase-server.ts` (anon + cookies, RLS-respecting) and `supabase-admin.ts`
 (service role, **bypasses RLS**, server-only; falls back to placeholder URL/key so builds pass — missing
@@ -212,7 +231,8 @@ throughout. Never import `supabase-admin` from a `'use client'` file.
 ## 6. Data layer — table → owner map
 
 One file per table cluster (mostly). Other files *read* across clusters freely; cross-cluster **writes**
-are the exception to preserve (`fuel.ts` writing `completed_workouts` fuel columns is the one violation).
+are the exception to preserve — `fuel.ts` and `hydration.ts` both write `completed_workouts`
+fuel/fluid columns (the two sanctioned violations).
 
 | Table(s) | Owner (`src/data/`) | Also read by |
 |---|---|---|
@@ -232,7 +252,16 @@ are the exception to preserve (`fuel.ts` writing `completed_workouts` fuel colum
 | `strength_exercise_state` / `_progression_events` / `_tuning` | `strength-progression.ts` | — |
 | `strength_niggles` | `strength-niggles.ts` | — |
 | `fuel_products` | `fuel.ts` | — |
-| `daily_notes`, `race_notes`, `race_weather`, `race_analyses`, `race_kit`, `race_results`, `sync_alerts`, `weather_config` | matching single-purpose file each | — |
+| `hydration_config` (+ fluid columns on `completed_workouts`) | `hydration.ts` | benchmarks, races, dashboard (sweat/gut/BMR/activity reads) |
+| `daily_notes`, `race_notes`, `race_weather`, `race_analyses`, `race_kit`, `race_results`, `sync_alerts`, `weather_config`, `banner_dismissals` | matching single-purpose file each | — |
+| `oauth_clients`, `oauth_auth_codes`, `oauth_tokens` | `oauth.ts` (OAuth 2.1 / PKCE store for MCP) | `api/oauth/*`, `oauth/authorize`, `api/mcp` |
+| `mcp_tokens` | `mcp-tokens.ts` (personal MCP bearer tokens, SHA-256-hashed) | `api/mcp`, settings |
+| `user_integrations` | `user-integrations.ts` (per-user intervals.icu key/athlete id + Telegram chat id) | cron fan-out, intervals/telegram/coach |
+| `guest_access` | `guest-access.ts` (owner-managed read-only guest credential) | `api/guest-login`, `guest.ts` |
+
+`power-suggestion.ts` (bike-FTP auto-suggest, the ride analogue of `threshold-suggestion.ts`),
+`insights.ts` (weekly insight banner), `fuel-plan.ts`, and `calorie-check.ts` read across the
+`plan_sessions`/`completed_workouts` cluster rather than owning a table.
 
 **Not a data layer:** `strength.ts`, `strength-injuries.ts`, `strength-context-rules.ts`,
 `strength-progression-rules.ts` are pure rule modules; `strength-exercises.ts` is **generated** (from
@@ -253,16 +282,23 @@ outside `src/data/`: `admin/sessions/*` (by design), `api/coach/run`, `api/dev-l
 
 | Route | Purpose | Auth (as coded) | Caller |
 |---|---|---|---|
-| `GET /api/auth/strava` (+`/callback`) | Strava OAuth connect; stores tokens in `strava_connection` id=1 | **none** (no session, no `state`) — backlog P0 | UI link / Strava redirect |
+| `GET /api/auth/strava` (+`/callback`) | Strava OAuth connect; per-user tokens in `strava_connection` | **owner session + random `state` cookie** (verified in callback) | UI link / Strava redirect |
 | `POST /api/strava/sync` · `/disconnect` | manual sync / clear connection | any authed session | UI |
-| `GET/POST /api/strava/webhook` | verify handshake / activity push → background `syncActivities()` | GET: `STRAVA_VERIFY_TOKEN` · POST: **none** | Strava |
-| `GET /api/strava/webhook/register` | create/view/delete push subscription | `?token=STRAVA_VERIFY_TOKEN` | manual, one-time |
+| `GET/POST /api/strava/webhook` | verify handshake / activity push → background `syncActivities()` | GET: `STRAVA_VERIFY_TOKEN` · POST: validates `subscription_id` + `owner_id`→user; `maxDuration=60` | Strava |
+| `GET /api/strava/webhook/register` | create/view/delete push subscription | **owner session** + `?token=STRAVA_VERIFY_TOKEN` | manual, one-time |
 | `GET/POST /api/coach/run` · `/api/coach/morning` | evening review / morning briefing (Claude → Telegram; idempotent one-per-day, `?force=1` regenerates). Morning also best-effort **reconciles the next 7 days' planned runs to intervals.icu → Garmin** (`syncUpcomingRunWorkouts`, gated by `INTERVALS_WORKOUT_SYNC`; also fires on every plan edit) | `Bearer CRON_SECRET` **or** any authed session | cron-job.org · UI |
 | `GET/POST /api/wellness/sync` | intervals.icu wellness → `wellness_days` (+RPE, benchmark snapshot, threshold check) | `Bearer CRON_SECRET` or session | cron-job.org · UI |
+| `GET/POST /api/intervals/workout-sync` | manual trigger + diagnostics for the intervals.icu→Garmin run sync (`?force=1`, `?days=N`) | `Bearer CRON_SECRET` or session; `maxDuration=60` | cron-job.org · UI |
 | `POST /api/coach-context` · `GET /api/plan-context` · `POST /api/plan-change` | headless plan-agent surface (see `docs/plan-agent.md`) | `Bearer PLAN_AGENT_TOKEN` or session (`isAuthorizedRequest`) | agent / UI |
+| `POST /api/mcp` | MCP server (JSON-RPC, read-only + gated write tools) | `Bearer` OAuth access token **or** personal `pmcp_` token → user scope | Claude MCP client |
+| `GET /api/oauth/register` · `token` · `metadata/*` | OAuth 2.1 for MCP: Dynamic Client Registration, PKCE code→token exchange + refresh rotation, RFC 8414/9728 discovery | public (PKCE; no client secret). Register is **open + unthrottled** (backlog) | Claude connector |
+| `GET/POST /api/guest-login` | exchange the owner-set guest password for a signed read-only guest cookie | guest password (scrypt) | guest UI |
 | `GET/POST /api/telegram/test` | fixed test message | session | UI |
-| `GET /api/dev-login` | mint a session for the test user | not-prod + `DEV_LOGIN_SECRET` | local/preview |
+| `GET /api/dev-login` | mint a session for the test user | not-prod (`VERCEL_ENV`/`NODE_ENV`) + timing-safe `DEV_LOGIN_SECRET` | local/preview |
 | `GET /auth/callback` | Supabase OAuth code exchange | Supabase | Google redirect |
+
+The MCP server + OAuth 2.1 flow and the guest/impersonation read modes are documented in
+[`docs/mcp-server.md`](mcp-server.md).
 
 **Scheduling truth:** there are **no Vercel Crons** (`vercel.json` is regions-only; stale comments in
 routes say otherwise) and the three `.github/workflows/*.yml` are `workflow_dispatch`-only relics — the
@@ -343,7 +379,45 @@ to their `user_id`).
 - Rounded corners are generous (`rounded-[12px]`/`[16px]`); rows are compact cards.
 - Session rows take `compact`, `emphasis`, `today`, `next`, `done`, `completed` props and are **shared**
   between the dashboard and the plan page — a change to a row updates both surfaces.
-- Docs hygiene: living docs are this file, `improvement-backlog.md`, `rtss.md` (TSS reference),
-  `plan-agent.md` (agent contract), `threshold-auto-suggestion.md` (feature rules),
-  `coach-briefing-roadmap.md` (planned coach-briefing signals). Completed one-off
-  plans live in `docs/archive/`.
+- Docs hygiene: living docs are this file, `improvement-backlog.md`, `mcp-server.md` (MCP + OAuth +
+  read modes), `rtss.md` (TSS reference), `plan-agent.md` (agent contract),
+  `threshold-auto-suggestion.md` (feature rules), `coach-briefing-roadmap.md` (planned coach-briefing
+  signals), `ui-map.md` / `prediction-models.md` / `design-system.md`. Completed one-off plans live in
+  `docs/archive/`.
+
+---
+
+## 11. Env vars & recipes
+
+**Env inventory.** App-level env (Vercel project settings / `.env.local`) — everything shared across
+users. Per-user secrets live in the DB (`user_integrations`, `strava_connection`, `guest_access`), not
+env; the old `INTERVALS_API_KEY` / `INTERVALS_WORKOUT_SYNC` / `TELEGRAM_CHAT_ID` env vars are **retired**.
+
+| Var | Used by | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server Supabase | public (RLS-respecting anon client) |
+| `NEXT_PUBLIC_BASE_URL` | absolute URLs (`base-url.ts`) | public |
+| `SUPABASE_SERVICE_ROLE_KEY` | `supabase-admin.ts` (bypasses RLS) | **server-only secret** |
+| `OWNER_EMAILS` (/ legacy `OWNER_EMAIL`) · `VIEWER_EMAILS` | `roles.ts` allowlist | unset + prod → fail closed (see §1) |
+| `ALLOW_ANY_AUTHED` | `roles.ts` | `=1` re-enables any-authed-is-owner when `OWNER_EMAILS` unset |
+| `COACH_DISABLED_EMAILS` | `roles.ts` | force-off coach for listed accounts |
+| `ANTHROPIC_API_KEY` · `COACH_MODEL` | `coach-generate.ts` | coach generation (model defaults to `claude-opus-4-8`) |
+| `STRAVA_CLIENT_ID` / `_SECRET` · `STRAVA_VERIFY_TOKEN` · `STRAVA_SUBSCRIPTION_ID` | Strava OAuth + webhook | secrets |
+| `TELEGRAM_BOT_TOKEN` | `telegram.ts` | chat id is per-user (DB) |
+| `CRON_SECRET` | cron routes (`isCronRequest`) | Bearer for cron-job.org |
+| `PLAN_AGENT_TOKEN` / `PLAN_AGENT_USER_ID` | plan-agent routes | token → the one configured user |
+| `GUEST_SESSION_SECRET` | `guest.ts` HMAC | signs the guest cookie |
+| `DEV_LOGIN_SECRET` / `DEV_LOGIN_EMAIL` | `api/dev-login` | dev-only; fails closed on prod (`VERCEL_ENV`/`NODE_ENV`) |
+
+**Recipe — add an API route.** Nothing outside `(app)/` is gated by the layout, so **gate the handler
+itself**: pick an auth pattern from §7 (`getCurrentUser` for a session; `isCronRequest` for cron;
+`resolveAuthorizedUserId` for the agent token; `safeEqual` for any raw secret compare — never `===`).
+Wrap non-session work in `runWithUser(userId, …)` so the data layer scopes correctly. Set
+`export const maxDuration` for anything that calls an upstream. Return **generic** error bodies (log
+detail server-side). Add the route to the §7 table.
+
+**Recipe — add a settings card.** (1) Write the read + write in the right `src/data/*` owner (scoped by
+`currentUserId()`). (2) In `settings/page.tsx`, add the read to the one `Promise.all`. (3) Build a
+`'use client'` editor and pass its server action as a prop (the action-as-prop seam — e.g.
+`<HrZonesClient save={saveBikeHrZones}>`); the action calls `requireUser()` first and
+`revalidatePath` the surfaces it affects (see §4 caveats). Reuse `ZoneGridEditor` for any zone grid.
