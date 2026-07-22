@@ -20,7 +20,7 @@ export const HERO_TINT: Record<HeroSportKey, { accent: string; soft: string }> =
 };
 
 export function HeroShell({
-  sport, eyebrow, status, defaultOpen = true, summary, foot = null, children,
+  sport, eyebrow, status, defaultOpen = true, summary, foot = null, children, dense = false,
 }: {
   sport: HeroSportKey;
   eyebrow: ReactNode;          // sport glyph + label, rendered in the accent colour
@@ -29,36 +29,43 @@ export function HeroShell({
   summary: ReactNode;          // headline metric + description + stat row (always visible)
   foot?: ReactNode;            // accordions (Session breakdown / Adjust) on the tinted footer
   children?: ReactNode;        // detail body (why / profile / fuel), shown when open
+  dense?: boolean;             // compact variant for the half-width Tomorrow cards (tighter padding, no bottom margin)
 }) {
   const tint = HERO_TINT[sport];
+  // The chevron only appears when there's something to reveal (a body or a footer),
+  // so a compact card with no detail doesn't invite an empty expand.
+  const expandable = children != null || foot != null;
+  const pad = dense
+    ? { band: '12px 15px 2px', summary: '8px 15px 13px', body: '0 15px 13px', foot: '0 15px' }
+    : { band: '15px 18px 2px', summary: '10px 18px 14px', body: '0 18px 16px', foot: '0 18px' };
   return (
     <details
       open={defaultOpen}
-      className="group relative rounded-[16px] border border-fog bg-paper text-ink overflow-hidden mb-[18px]"
+      className={`group relative border border-fog bg-paper text-ink overflow-hidden ${dense ? 'rounded-[14px]' : 'rounded-[16px] mb-[18px]'}`}
       style={{ boxShadow: '0 1px 2px rgba(40,36,28,.05), 0 12px 32px rgba(40,36,28,.07)' }}
     >
       {/* Sport rail */}
       <div className="absolute left-0 top-0 bottom-0 w-[4px] z-[1]" style={{ background: tint.accent }} aria-hidden />
       <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer">
         {/* Band header */}
-        <div style={{ background: `linear-gradient(180deg, ${tint.soft}, transparent)`, padding: '15px 18px 2px' }}>
+        <div style={{ background: `linear-gradient(180deg, ${tint.soft}, transparent)`, padding: pad.band }}>
           <div className="flex items-center justify-between gap-3">
             <span className="text-[11px] uppercase font-bold inline-flex items-center gap-[7px] min-w-0" style={{ letterSpacing: '.07em', color: tint.accent }}>
               {eyebrow}
             </span>
             <div className="flex items-center gap-2 shrink-0">
               {status}
-              <svg className="group-open:rotate-180 transition-transform" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-stone)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              {expandable && <svg className="group-open:rotate-180 transition-transform" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--color-stone)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>}
             </div>
           </div>
         </div>
-        <div style={{ padding: '10px 18px 14px' }}>{summary}</div>
+        <div style={{ padding: pad.summary }}>{summary}</div>
       </summary>
 
-      {children != null && <div style={{ padding: '0 18px 16px' }}>{children}</div>}
+      {children != null && <div style={{ padding: pad.body }}>{children}</div>}
 
       {foot != null && (
-        <div className="border-t border-fog" style={{ background: `linear-gradient(0deg, ${tint.soft}, transparent)`, padding: '0 18px' }}>
+        <div className="border-t border-fog" style={{ background: `linear-gradient(0deg, ${tint.soft}, transparent)`, padding: pad.foot }}>
           {foot}
         </div>
       )}
