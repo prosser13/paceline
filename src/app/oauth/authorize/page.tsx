@@ -75,12 +75,23 @@ export default async function AuthorizePage({ searchParams }: { searchParams: Pr
     );
   }
 
+  // client_name is supplied by the (open) Dynamic Client Registration endpoint, so it
+  // is attacker-controllable and must be treated as an unverified, self-asserted label
+  // — never as proof of identity. React escapes it as text (no markup injection); the
+  // real trust anchor the user should check is where the code is sent, so surface the
+  // redirect host explicitly.
+  let redirectHost = redirectUri;
+  try { redirectHost = new URL(redirectUri).host; } catch { /* keep raw */ }
+
   return (
     <Shell>
       <p className="text-[14px] text-stone mt-2 mb-1">
         <span className="font-semibold text-ink">{client!.client_name || 'An application'}</span> wants read-only access to your paceline training data.
       </p>
-      <p className="text-[12.5px] text-stone/80 mb-5">Signed in as {user.email}. It will be able to read your plan, sessions, zones, races and workouts — not change anything.</p>
+      <p className="text-[12.5px] text-stone/80 mb-2">Signed in as {user.email}. It will be able to read your plan, sessions, zones, races and workouts — not change anything.</p>
+      <p className="text-[12px] text-stone/70 mb-5">
+        This is an <span className="font-semibold">unverified</span> app. Only approve if you started this connection. Authorization codes will be sent to <span className="font-mono text-ink">{redirectHost}</span>.
+      </p>
       <form action={decideAuthorization} className="flex flex-col gap-[10px]">
         <input type="hidden" name="client_id" value={clientId} />
         <input type="hidden" name="redirect_uri" value={redirectUri} />

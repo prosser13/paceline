@@ -9,7 +9,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import {
   resolveZone, zoneFromPace, normalizeStructure, paceToSeconds, secondsToPace,
   type ZoneMap, type PaceZone,
@@ -86,12 +86,6 @@ const EXERCISE_CATALOG = STRENGTH_EXERCISES.map(e => ({
 const UPCOMING_DAYS = 14;
 const RECENT_DAYS = 14;
 const CHANGE_LOG_LIMIT = 20;
-
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 // min/km → "m:ss" for the coach briefing.
 function fmtPaceMinKm(minKm: number): string {

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { safeEqual } from "@/lib/auth";
 import { NextResponse } from "next/server";
 
 // DEV-ONLY auth bypass.
@@ -15,7 +16,9 @@ import { NextResponse } from "next/server";
 //
 // Usage:  /api/dev-login?secret=<DEV_LOGIN_SECRET>[&next=/plan]
 export async function GET(request: Request) {
-  if (process.env.VERCEL_ENV === "production") {
+  // Fail closed on any production build, not just Vercel's — VERCEL_ENV is undefined
+  // on non-Vercel hosts, so key on NODE_ENV too.
+  if (process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production") {
     return new NextResponse("Not found", { status: 404 });
   }
 
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams, origin } = new URL(request.url);
-  if (searchParams.get("secret") !== secret) {
+  if (!safeEqual(searchParams.get("secret") ?? "", secret)) {
     return new NextResponse("Forbidden", { status: 403 });
   }
 

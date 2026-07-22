@@ -1,8 +1,9 @@
 # Paceline
 
-A personal running-plan app: a periodised training plan with pace/HR zones, a
-daily agenda dashboard, Strava activity sync, intervals.icu fitness/form, and a
-strength-session builder.
+A multi-tenant training-plan app: each allowlisted account gets a periodised
+training plan with pace/HR zones, a daily agenda dashboard, Strava activity sync,
+intervals.icu fitness/form, a strength-session builder, and a per-user AI coach.
+Claude can also connect as an MCP client (see [`docs/mcp-server.md`](docs/mcp-server.md)).
 
 ## Stack
 
@@ -22,15 +23,16 @@ npm run dev                  # http://localhost:3000
 
 `npm run build` · `npm run lint` for production build / linting.
 
-See [.env.example](.env.example) for the required environment variables (Supabase,
-Strava, intervals.icu, Resend, dev-login).
+See [.env.example](.env.example) for the required environment variables, and
+[`docs/architecture.md`](docs/architecture.md) §11 for the full env inventory
+(Supabase, Strava, Telegram, Anthropic, cron/agent secrets, dev-login).
 
 ## Architecture notes
 
 - **Data access** lives in `src/data/*` — one module per table (plans, zones,
   plan-sessions, strength-sessions, strava-connection, …). Pages/actions call
   these rather than querying Supabase directly, which keeps per-table access in
-  one place (the seam for future per-user scoping).
+  one place; each query is scoped to the current user via `currentUserId()`.
 - **`src/proxy.ts`** (Next 16's renamed middleware) refreshes the Supabase
   session on each request.
 - The admin CMS (`/admin`) and the Strava sync engine (`src/lib/strava.ts`) use

@@ -5,12 +5,13 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Owner or an allowlisted viewer only — not any authenticated account, and NOT a
-  // temporary read-only guest (guests are kept out of admin/settings). Admin writes
-  // are already owner-gated via requireUser; this closes the read hole.
+  // Owner only. The admin CMS reads and writes plan_sessions cross-cutting the
+  // owner's whole plan, so a read-only viewer (or guest) must not reach it — that was
+  // a cross-tenant read hole. Writes are additionally owner-gated via requireUser in
+  // the actions; the pages scope their reads by currentUserId().
   const viewer = await getViewer();
   if (!viewer) redirect('/auth/login');
-  if (viewer.role === 'guest') redirect('/');
+  if (viewer.role !== 'owner') redirect('/');
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">

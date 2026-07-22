@@ -33,7 +33,10 @@ export async function POST(request: Request) {
   try {
     await runWithUser(userId, () => upsertCoachContext(summary, today));
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Failed to save' }, { status: 500 });
+    // Log detail server-side; return a generic message so internal error text never
+    // reaches the response body.
+    console.error('coach-context save failed:', e);
+    return NextResponse.json({ error: 'Failed to save' }, { status: 500 });
   }
   return NextResponse.json({ ok: true, through_date: today }, { status: 200 });
 }

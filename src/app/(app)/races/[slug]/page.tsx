@@ -27,7 +27,7 @@ import { getPredictedAtRace, listLongRunsSince } from '@/data/benchmarks';
 import { getFuelProgressionAdherence } from '@/data/fuel-plan';
 import { listHydrationRunsSince, getSweatSodium, getGutCapMl } from '@/data/hydration';
 import { buildSweatModel, raceFluidRecommendation, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
-import { todayISO } from '@/lib/dates';
+import { todayISO, daysUntil } from '@/lib/dates';
 import TargetTrajectoryAsync from '@/app/(app)/_dashboard/TargetTrajectoryAsync';
 
 import RouteMap from './RouteMap';
@@ -47,13 +47,6 @@ import { getRaceSessionBySlug, getCompletedForSession } from '@/data/plan-sessio
 import { getRaceAnalysis } from '@/data/race-analyses';
 import { getRaceResult } from '@/data/race-results';
 import { getRaceNote } from '@/data/race-notes';
-
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-}
 
 function fmtHMS(secs: number | null): string | null {
   if (secs == null) return null;

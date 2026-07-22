@@ -308,7 +308,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
   // resolve in ONE parallel wave (was: await the flag on its own, then a separate
   // Tier 2 — two serial transatlantic round-trips, now collapsed into one).
   const todayListRaw = (byDate.get(todayStr) ?? []).filter(s => s.status !== 'rest');
-  const [strengthFirst, todayCompletions, weekData, planWeeks] = await Promise.all([
+  const [strengthFirst, todayCompletions, weekData, planWeeks, fuelRehearsal] = await Promise.all([
     planId ? getPlanStrengthPriority(planId) : Promise.resolve(false),
     listCompletedForSessions(todayListRaw.map(s => s.id)),
     weekRow?.date_from && weekRow?.date_to
@@ -318,6 +318,10 @@ export async function loadDashboardData(): Promise<DashboardData> {
         ])
       : Promise.resolve(null),
     planId ? listPlanPhaseWeeks(planId) : Promise.resolve([]),
+    // Gut-training rehearsal progress + next fuelled long run (goal-marathon block
+    // only). Only needs todayStr, so it rides in this wave rather than a lone serial
+    // round-trip near the end of the loader.
+    getFuelRehearsal(todayStr),
   ]);
   // id → completion, so the lookups below survive the in-place sort that follows.
   const completionById = new Map(todayCompletions.map(c => [c.plan_session_id as string, c]));
@@ -619,8 +623,7 @@ export async function loadDashboardData(): Promise<DashboardData> {
     sessions: calorieSessions,
   });
 
-  // Gut-training rehearsal progress + next fuelled long run (goal-marathon block only).
-  const fuelRehearsal = await getFuelRehearsal(todayStr);
+  // fuelRehearsal resolved in the wave-2 Promise.all above.
 
   return {
     firstName, greeting: greet(), todayFull, todayStr,

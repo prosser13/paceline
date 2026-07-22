@@ -68,6 +68,19 @@ export function YogaGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }
   );
 }
 
+// Bed — rest / recovery day (no session scheduled).
+export function BedGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth}
+         strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M3 6v12" />
+      <path d="M3 10h16a2 2 0 0 1 2 2v6" />
+      <path d="M3 15h18" />
+      <path d="M7 10V8h4v2" />
+    </svg>
+  );
+}
+
 // Fuel — a gel sachet, for "food/carbs logged".
 export function FuelGlyph({ size = 16, strokeWidth = 2, className = 'shrink-0' }: GlyphProps) {
   return (

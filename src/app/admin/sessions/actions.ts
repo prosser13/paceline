@@ -66,12 +66,13 @@ export async function updateSessionAction(
   formData: FormData
 ): Promise<{ error?: string }> {
   try {
-    await requireUser();
+    const user = await requireUser();
     const data = parseSession(formData);
     const { error } = await supabaseAdmin
       .from('plan_sessions')
       .update({ ...data, intervals_event_id: null, intervals_synced_at: null })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) return { error: error.message };
   } catch (e) {
     return { error: (e as Error).message };
@@ -82,20 +83,25 @@ export async function updateSessionAction(
 
 export async function deleteSessionAction(id: string): Promise<{ error?: string }> {
   try {
-    await requireUser();
+    const user = await requireUser();
 
     // Remove from intervals.icu first if synced
     const { data: session } = await supabaseAdmin
       .from('plan_sessions')
       .select('intervals_event_id')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single();
 
     if (session?.intervals_event_id) {
       await deleteIntervalEvent(session.intervals_event_id);
     }
 
-    const { error } = await supabaseAdmin.from('plan_sessions').delete().eq('id', id);
+    const { error } = await supabaseAdmin
+      .from('plan_sessions')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', user.id);
     if (error) return { error: error.message };
   } catch (e) {
     return { error: (e as Error).message };
@@ -106,12 +112,13 @@ export async function deleteSessionAction(id: string): Promise<{ error?: string 
 
 export async function syncToIntervalsAction(id: string): Promise<{ error?: string }> {
   try {
-    await requireUser();
+    const user = await requireUser();
 
     const { data: session, error: fetchError } = await supabaseAdmin
       .from('plan_sessions')
       .select('*')
       .eq('id', id)
+      .eq('user_id', user.id)
       .single();
 
     if (fetchError || !session) return { error: 'Session not found' };
@@ -121,7 +128,8 @@ export async function syncToIntervalsAction(id: string): Promise<{ error?: strin
     await supabaseAdmin
       .from('plan_sessions')
       .update({ intervals_event_id: eventId, intervals_synced_at: new Date().toISOString() })
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id);
   } catch (e) {
     return { error: (e as Error).message };
   }

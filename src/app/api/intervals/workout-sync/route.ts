@@ -36,7 +36,10 @@ async function handle(request: Request): Promise<Response> {
     try {
       results[userId] = await runWithUser(userId, () => syncUpcomingRunWorkouts(days, force));
     } catch (err) {
-      results[userId] = { ok: false, error: String(err) };
+      // Log the detail server-side; return a generic marker so DB/driver text
+      // (column/constraint names) never reaches the response body.
+      console.error(`workout-sync failed for user ${userId}:`, err);
+      results[userId] = { ok: false, error: 'sync failed' };
     }
   }
   // Single-user (session) call keeps the old flat shape for the settings UI.

@@ -16,6 +16,21 @@ export async function upsertActivities(
   await supabaseAdmin.from('activities').upsert(scoped, { onConflict: 'strava_activity_id' });
 }
 
+// The most recent stored activity_date (YYYY-MM-DD) for this user, or null if none.
+// The sync uses it as a watermark so it re-fetches a recent window rather than every
+// activity since plan start on every webhook fire.
+export async function getLatestActivityDate(): Promise<string | null> {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('activities')
+    .select('activity_date')
+    .eq('user_id', userId)
+    .order('activity_date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data?.activity_date as string | undefined) ?? null;
+}
+
 // Stored activity rows (with UUIDs + timing) for the given Strava ids.
 export async function listActivitiesByStravaIds(stravaIds: number[]) {
   const userId = await currentUserId();

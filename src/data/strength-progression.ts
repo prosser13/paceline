@@ -112,18 +112,25 @@ interface UpsertState {
   completed?: boolean;
 }
 
-async function upsertExerciseState(s: UpsertState): Promise<void> {
+// Batched: one upsert for many exercise-state rows (a completed session touches
+// 10–15). Callers with a single row pass a one-element array.
+async function upsertExerciseStates(rows: UpsertState[]): Promise<void> {
+  if (!rows.length) return;
   const userId = await currentUserId();
-  await supabaseAdmin.from('strength_exercise_state').upsert({
-    user_id: userId,
-    exercise_id: s.exerciseId,
-    intent: s.intent,
-    current_reps: s.reps,
-    current_weight_kg: s.weightKg,
-    consecutive_easy: s.consecutiveEasy,
-    ...(s.completed ? { last_completed_at: new Date().toISOString() } : {}),
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id,exercise_id,intent' });
+  const now = new Date().toISOString();
+  await supabaseAdmin.from('strength_exercise_state').upsert(
+    rows.map(s => ({
+      user_id: userId,
+      exercise_id: s.exerciseId,
+      intent: s.intent,
+      current_reps: s.reps,
+      current_weight_kg: s.weightKg,
+      consecutive_easy: s.consecutiveEasy,
+      ...(s.completed ? { last_completed_at: now } : {}),
+      updated_at: now,
+    })),
+    { onConflict: 'user_id,exercise_id,intent' },
+  );
 }
 
 interface EventInput {
@@ -136,18 +143,22 @@ interface EventInput {
   after: { reps: number | null; weightKg: number | null };
 }
 
-async function insertProgressionEvent(e: EventInput): Promise<void> {
+// Batched: one insert for many progression events.
+async function insertProgressionEvents(rows: EventInput[]): Promise<void> {
+  if (!rows.length) return;
   const userId = await currentUserId();
-  await supabaseAdmin.from('strength_progression_events').insert({
-    user_id: userId,
-    exercise_id: e.exerciseId,
-    intent: e.intent,
-    session_id: e.sessionId,
-    kind: e.kind,
-    reason: e.reason,
-    before_state: e.before,
-    after_state: e.after,
-  });
+  await supabaseAdmin.from('strength_progression_events').insert(
+    rows.map(e => ({
+      user_id: userId,
+      exercise_id: e.exerciseId,
+      intent: e.intent,
+      session_id: e.sessionId,
+      kind: e.kind,
+      reason: e.reason,
+      before_state: e.before,
+      after_state: e.after,
+    })),
+  );
 }
 
 async function sessionHasEvents(sessionId: string): Promise<boolean> {
@@ -240,6 +251,11 @@ export async function evaluateProgressionAfterSession(sessionId: string): Promis
   const stateByExercise = new Map<number, StateRow>();
   for (const r of stateRows) if (r.intent === si) stateByExercise.set(r.exercise_id, r);
 
+  // Accumulate all state upserts + events across the session's exercises, then flush
+  // in two batched round-trips instead of ~2 per exercise (~30 serial writes → 2).
+  const stateUpserts: UpsertState[] = [];
+  const eventInserts: EventInput[] = [];
+
   for (const row of exRows ?? []) {
     if (!row.is_done || row.difficulty == null) continue;
     const ex = LIB.get(row.exercise_id);
@@ -262,20 +278,23 @@ export async function evaluateProgressionAfterSession(sessionId: string): Promis
 
     const streakChanged = (prev?.consecutive_easy ?? 0) !== result.consecutiveEasy;
     // Persist state whenever we processed a rating (seeds a row on first sight).
-    await upsertExerciseState({
+    stateUpserts.push({
       exerciseId: row.exercise_id, intent: si,
       reps: result.reps, weightKg: result.weightKg, consecutiveEasy: result.consecutiveEasy,
       completed: true,
     });
 
     if (result.changed || streakChanged) {
-      await insertProgressionEvent({
+      eventInserts.push({
         exerciseId: row.exercise_id, intent: si, sessionId,
         kind: result.kind, reason: result.reason,
         before, after: { reps: result.reps, weightKg: result.weightKg },
       });
     }
   }
+
+  await upsertExerciseStates(stateUpserts);
+  await insertProgressionEvents(eventInserts);
 }
 
 // Promote a one-off in-session edit into persistent state ("keep this going
@@ -295,14 +314,14 @@ export async function promoteOverride(sessionExerciseId: string): Promise<void> 
 
   const before = { reps: null as number | null, weightKg: null as number | null };
   const weightKg = row.weight_kg != null ? Number(row.weight_kg) : null;
-  await upsertExerciseState({
+  await upsertExerciseStates([{
     exerciseId: row.exercise_id, intent: si, reps: row.reps_value, weightKg, consecutiveEasy: 0,
-  });
-  await insertProgressionEvent({
+  }]);
+  await insertProgressionEvents([{
     exerciseId: row.exercise_id, intent: si, sessionId: row.session_id,
     kind: 'manual', reason: 'kept a manual edit going forward',
     before, after: { reps: row.reps_value, weightKg },
-  });
+  }]);
 }
 
 // Re-export for callers that build the state intent from a SessionIntent.

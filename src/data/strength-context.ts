@@ -6,7 +6,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { getCurrentWeek } from '@/data/plans';
 import {
   composeModifier, deriveSuggestion, fatigueLikely,
@@ -17,11 +17,6 @@ import type { SessionIntent, Duration } from './strength';
 const LONG_TYPES = new Set(['LR', 'MLR']);
 const HARD_TYPES = new Set(['LT', 'VO2', 'MP', 'RACE']);
 
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 async function getActivePlanRow(today: string) {
   const userId = await currentUserId();

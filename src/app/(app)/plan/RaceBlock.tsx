@@ -1,12 +1,7 @@
 // A-race block (and recovery variant) — the headline plan card. Used for the
 // active plan's A-race and replicated for future plans.
 
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
-  const today  = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-}
+import { daysUntil } from '@/lib/dates';
 
 function fmtDate(dateStr: string, year = false): string {
   return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', {

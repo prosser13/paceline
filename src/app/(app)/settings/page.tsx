@@ -62,7 +62,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     thrLatest, thrPending, thrHistory, thrRevertable, integrations,
     swimConfig, swimZones,
     pwrLatest, pwrPending, pwrHistory, pwrRevertable,
-    bmrKcal, activityFactor,
+    bmrKcal, activityFactor, coachLocked, mcpToken,
   ] = await Promise.all([
     getStravaConnectionSummary(),
     getThresholdPace(),
@@ -96,6 +96,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     getRevertablePowerChange(),
     getBmrKcal(),
     getActivityFactor(),
+    coachUpdatesLockedForCurrentUser(),
+    getMcpTokenInfo(),
   ]);
 
   // "View as" is owner-only. getViewer reflects the REAL session identity (not the
@@ -105,7 +107,6 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     ? await Promise.all([listImpersonatableUsers(viewer.user.id), getImpersonatedUserId()])
     : [[], null];
 
-  const mcpToken = await getMcpTokenInfo();
 
   const targetTimePlans: TargetTimeRow[] = racePlans.map(p => ({
     id: p.id,
@@ -172,7 +173,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const morningBriefing = coachingPrefs?.morning_briefing ?? true;
   const morningFallback = (coachingPrefs?.morning_fallback_time as string | undefined) ?? '09:30';
   const morningSkipRest = coachingPrefs?.morning_skip_rest ?? false;
-  const coachLocked = await coachUpdatesLockedForCurrentUser();
+  // coachLocked resolved in the main Promise.all above.
   // Locked accounts read as off and can't turn it on; everyone else uses their pref.
   const coachUpdates = coachLocked ? false : (coachingPrefs?.coach_updates_enabled ?? true);
 

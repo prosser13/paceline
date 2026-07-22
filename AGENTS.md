@@ -36,8 +36,10 @@ before adding a feature. Known bugs and agreed cleanups are in
 Other living docs: [`docs/ui-map.md`](docs/ui-map.md) (page → card → component → data, for UI
 work), [`docs/prediction-models.md`](docs/prediction-models.md) (the prediction / threshold /
 readiness / fuelling rules), [`docs/design-system.md`](docs/design-system.md) (theme tokens +
-reusable components), [`docs/rtss.md`](docs/rtss.md) (TSS), and
-[`docs/threshold-auto-suggestion.md`](docs/threshold-auto-suggestion.md).
+reusable components), [`docs/rtss.md`](docs/rtss.md) (TSS),
+[`docs/threshold-auto-suggestion.md`](docs/threshold-auto-suggestion.md),
+[`docs/plan-agent.md`](docs/plan-agent.md) (the headless plan-agent contract), and
+[`docs/mcp-server.md`](docs/mcp-server.md) (MCP server + OAuth 2.1 + guest/impersonation read modes).
 
 # Quick facts (save yourself the archaeology)
 

@@ -1,28 +1,29 @@
-// Compact expandable card for a Tomorrow (or any upcoming) session — matches the
-// mockup's 2-up cards: a sport-coloured left border, eyebrow, big headline metric
-// (distance for runs, duration otherwise), a one-line descriptor, and an
-// expandable detail (segment / exercise table). Server component (native
-// <details>). Dispatches per sport.
+// Compact expandable card for a Tomorrow (or any upcoming) session — the
+// half-width 2-up card. Renders through the shared HeroShell in its `dense`
+// variant so it matches the main session heroes (sport rail + tinted band +
+// tinted footer), with a big headline metric (distance for runs, duration
+// otherwise), a one-line descriptor, and an expandable detail (segment /
+// exercise table) in the footer. Server component. Dispatches per sport.
 
 import { resolveSport } from '@/lib/sports/registry';
 import { normalizeStructure, type ZoneMap, type HrZoneMap } from '@/lib/plan-structure';
 import { normalizeCyclingStructure, type PowerZoneMap, type BikeHrZoneMap } from '@/lib/cycling';
 import { normalizeSwimStructure, sumSwimMetres, estimateSwimSeconds, fmtSwimDistance, type SwimPaceZoneMap } from '@/lib/swim';
 import { WorkoutDetail, syntheticStructure, sumSegmentSeconds, fmtHMMSS, humanHMM, fmtClock, yogaFlowSeconds } from '@/components/session-ui';
+import { HeroShell } from '@/components/HeroShell';
 import { CyclingSegmentDetail } from '@/components/CyclingRow';
 import { SwimSegmentDetail } from '@/components/SwimRow';
 import { StrengthDetailTable, type StrengthEx } from '@/components/StrengthRow';
 import { RunGlyph, BikeGlyph, SwimGlyph, Dumbbell, YogaGlyph } from '@/components/glyphs';
-import { RUN, RIDE, SWIM, STRENGTH, YOGA } from '@/lib/colors';
 import { kcalLabel } from '@/lib/energy';
 import type { PlanSession } from './data';
 
 const SPORT = {
-  run:      { color: RUN,      label: 'Run',      Glyph: RunGlyph },
-  cycling:  { color: RIDE,     label: 'Ride',     Glyph: BikeGlyph },
-  swimming: { color: SWIM,     label: 'Swim',     Glyph: SwimGlyph },
-  strength: { color: STRENGTH, label: 'Strength', Glyph: Dumbbell },
-  yoga:     { color: YOGA,     label: 'Yoga',     Glyph: YogaGlyph },
+  run:      { label: 'Run',      Glyph: RunGlyph },
+  cycling:  { label: 'Ride',     Glyph: BikeGlyph },
+  swimming: { label: 'Swim',     Glyph: SwimGlyph },
+  strength: { label: 'Strength', Glyph: Dumbbell },
+  yoga:     { label: 'Yoga',     Glyph: YogaGlyph },
 } as const;
 
 const kmStr = (km: number) => `${km % 1 === 0 ? km : km.toFixed(1)} km`;
@@ -40,7 +41,7 @@ export default function TomorrowCard({
 }) {
   const sport = resolveSport(session);
   const spec = SPORT[sport as keyof typeof SPORT] ?? SPORT.run;
-  const { Glyph } = spec;
+  const { Glyph, label } = spec;
 
   const intensity = (session.intensity as string | null) ?? 'easy';
   const distKm = session.distance_km != null ? Number(session.distance_km) : null;
@@ -103,22 +104,19 @@ export default function TomorrowCard({
   if (kcal) sub = sub ? `${sub} · ${kcal}` : kcal;
 
   return (
-    <details className="group border border-fog rounded-[16px] bg-paper [&_summary]:list-none [&_summary::-webkit-details-marker]:hidden" style={{ padding: '18px 22px', borderLeft: `6px solid ${spec.color}` }}>
-      <summary className="cursor-pointer">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[11px] uppercase font-bold inline-flex items-center gap-[6px]" style={{ letterSpacing: '.06em', color: spec.color }}>
-              <Glyph size={14} /> {spec.label}
-            </div>
-            <div className="font-display font-bold text-[30px]" style={{ margin: '4px 0 5px', lineHeight: 1.05 }}>{big}</div>
-            {sub && <div className="text-[13px] font-semibold truncate max-w-full">{sub}</div>}
-          </div>
-          {detail && (
-            <svg className="shrink-0 mt-[2px] text-stone group-open:rotate-180 transition-transform" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-          )}
-        </div>
-      </summary>
-      {detail && <div className="border-t border-fog mt-[12px] pt-[12px]">{detail}</div>}
-    </details>
+    <HeroShell
+      sport={sport}
+      dense
+      defaultOpen={false}
+      eyebrow={<><Glyph size={14} /> {label}</>}
+      status={null}
+      summary={
+        <>
+          <div className="font-display font-bold" style={{ fontSize: 'clamp(24px, 6vw, 28px)', lineHeight: 1.04 }}>{big}</div>
+          {sub && <div className="text-[12.5px] font-semibold text-stone truncate max-w-full mt-[4px]">{sub}</div>}
+        </>
+      }
+      foot={detail ? <div style={{ padding: '12px 0 13px' }}>{detail}</div> : null}
+    />
   );
 }

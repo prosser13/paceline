@@ -7,7 +7,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { savePowerConfig, replacePowerZones, type PowerZoneRow } from '@/data/zones';
 import { getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 
@@ -47,9 +47,6 @@ export interface PowerCheck {
 function fmtDay(iso: string): string {
   try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
   catch { return iso; }
-}
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
 }
 function daysBetween(a: string, b: string): number {
   return (Date.parse(b) - Date.parse(a)) / 86400000;
