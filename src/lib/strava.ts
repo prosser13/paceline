@@ -9,7 +9,7 @@ import {
   listCompletedStravaActivityIds,
   recomputeAllCompletedTss,
 } from '@/data/plan-sessions';
-import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds } from '@/data/activities';
+import { upsertActivities, listActivitiesByStravaIds, getActivityHrByStravaIds, getLatestActivityDate } from '@/data/activities';
 import { planSessionHasMatch, insertSessionMatch } from '@/data/session-matches';
 import { activityKind } from '@/lib/activity-types';
 import { computeNgp, computeLongRunQuality, computeSplitProfile, type SplitProfile } from '@/lib/run-tss';
@@ -108,25 +108,39 @@ async function fetchStreams(
 }
 
 // Interpolated elapsed time (s) at a cumulative distance (m); null if beyond run.
-function timeAtDistance(targetM: number, dist: number[], time: number[]): number | null {
-  if (targetM <= 0) return time[0] ?? 0;
-  if (targetM > dist[dist.length - 1]) return null;
-  for (let i = 1; i < dist.length; i++) {
+// Scans forward from `fromIdx` (a lower-bound hint) and returns the bracket index so
+// a caller stepping through monotonically-increasing targets can thread the pointer
+// forward instead of rescanning from 0 each call. `dist` is monotonic, so the first
+// index with `dist[i] >= targetM` never lies before a hint taken from an earlier
+// (smaller) target's result — the interpolation bracket is identical to a scan from 1.
+function timeAtDistanceFrom(
+  targetM: number, dist: number[], time: number[], fromIdx: number,
+): { t: number | null; idx: number } {
+  if (targetM <= 0) return { t: time[0] ?? 0, idx: 1 };
+  if (targetM > dist[dist.length - 1]) return { t: null, idx: dist.length };
+  for (let i = Math.max(1, fromIdx); i < dist.length; i++) {
     if (dist[i] >= targetM) {
       const d0 = dist[i - 1], d1 = dist[i], t0 = time[i - 1], t1 = time[i];
-      return d1 === d0 ? t1 : t0 + (t1 - t0) * ((targetM - d0) / (d1 - d0));
+      return { t: d1 === d0 ? t1 : t0 + (t1 - t0) * ((targetM - d0) / (d1 - d0)), idx: i };
     }
   }
-  return time[time.length - 1];
+  return { t: time[time.length - 1], idx: dist.length };
 }
 
 // Actual pace (s/km) per planned segment, in expanded order. Null = beyond run.
+// Segment boundaries are cumulative (monotonically increasing), so a single forward
+// pointer through `dist` serves every boundary — O(streams + segments), not O(×).
 function computeSegmentActuals(distancesKm: number[], dist: number[], time: number[]): (number | null)[] {
   const out: (number | null)[] = [];
   let cum = 0;
+  let idx = 1;
+  let prevTime = timeAtDistanceFrom(0, dist, time, 1).t;
   for (const km of distancesKm) {
-    const tStart = timeAtDistance(cum * 1000, dist, time);
-    const tEnd   = timeAtDistance((cum + km) * 1000, dist, time);
+    const tStart = prevTime;
+    const end = timeAtDistanceFrom((cum + km) * 1000, dist, time, idx);
+    const tEnd = end.t;
+    idx = Math.max(idx, end.idx);
+    prevTime = tEnd;   // next segment starts where this one ended
     cum += km;
     if (km <= 0 || tStart == null || tEnd == null) { out.push(null); continue; }
     out.push(Math.round((tEnd - tStart) / km));
@@ -135,18 +149,23 @@ function computeSegmentActuals(distancesKm: number[], dist: number[], time: numb
 }
 
 // Average HR per planned segment, in expanded order. Null = beyond run / no HR.
+// Two-pointer sweep: `i` (segment-start floor) only advances forward across calls, and
+// each segment scans `[i, endM]`. Boundaries are inclusive on both ends, matching the
+// original full-stream scan (a sample exactly on a boundary counts in both neighbours).
 function computeSegmentHr(distancesKm: number[], dist: number[], hr: number[]): (number | null)[] {
   const out: (number | null)[] = [];
   const lastM = dist[dist.length - 1];
   let cum = 0;
+  let i = 0;
   for (const km of distancesKm) {
     const startM = cum * 1000;
     const endM   = (cum + km) * 1000;
     cum += km;
     if (km <= 0 || endM > lastM) { out.push(null); continue; }
+    while (i < dist.length && dist[i] < startM) i++;
     let sum = 0, n = 0;
-    for (let i = 0; i < dist.length; i++) {
-      if (dist[i] >= startM && dist[i] <= endM && hr[i] != null) { sum += hr[i]; n++; }
+    for (let j = i; j < dist.length && dist[j] <= endM; j++) {
+      if (hr[j] != null) { sum += hr[j]; n++; }
     }
     out.push(n ? Math.round(sum / n) : null);
   }
@@ -237,11 +256,27 @@ async function runSyncActivities(): Promise<{ synced: number; matched: number }>
   const token = await getValidAccessToken();
   if (!token) throw new Error('Not connected to Strava');
 
-  // Sync from the earliest planned session. Strava returns `after=` results
-  // ascending by start date in pages of `per_page`, so we MUST paginate — fetching
-  // only the first page silently drops every activity beyond the oldest 100 once a
-  // plan's history outgrows one page.
-  const afterDate = (await getEarliestSessionDate()) ?? '2026-06-15';
+  // Sync window lower bound. Strava returns `after=` results ascending by start date
+  // in pages of `per_page`, so we MUST paginate — fetching only the first page
+  // silently drops every activity beyond the oldest 100 once a plan's history
+  // outgrows one page.
+  //
+  // Watermark: rather than re-fetch (and re-upsert) every activity since plan start on
+  // every webhook fire, start from the most recent stored activity minus a wide
+  // overlap. The overlap re-fetches the last WATERMARK_OVERLAP_DAYS so late uploads and
+  // edited activities are always re-matched; anything older was already synced. First
+  // sync (no stored activities) falls back to the full window from plan start.
+  const earliestDate = (await getEarliestSessionDate()) ?? '2026-06-15';
+  const WATERMARK_OVERLAP_DAYS = 30;
+  const watermark = await getLatestActivityDate();
+  let afterDate = earliestDate;
+  if (watermark) {
+    const wm = new Date(watermark + 'T00:00:00Z');
+    wm.setUTCDate(wm.getUTCDate() - WATERMARK_OVERLAP_DAYS);
+    const overlapStart = wm.toISOString().slice(0, 10);
+    // Never earlier than plan start, never later than it either — take the later bound.
+    if (overlapStart > earliestDate) afterDate = overlapStart;
+  }
   const afterUnix = Math.floor(new Date(afterDate + 'T00:00:00Z').getTime() / 1000);
 
   const PER_PAGE = 100;

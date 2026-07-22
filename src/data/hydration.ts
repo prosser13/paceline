@@ -5,6 +5,7 @@
 // derived sweat rate, and the run's temperature). This is the second, deliberate
 // cross-cluster write; see docs/architecture.md §6.
 
+import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
 import { getWeatherConfig, effectiveLocation } from '@/data/weather-config';
@@ -14,6 +15,29 @@ import { sweatLossL, sweatRateLh, DEFAULT_FLUID_OPTS } from '@/lib/hydration';
 export const DEFAULT_SWEAT_SODIUM_MG_L = 553;
 export const DEFAULT_GUT_CAP_ML = DEFAULT_FLUID_OPTS.gutCapMl;   // 800 ml/h
 export const DEFAULT_ACTIVITY_FACTOR = 1.3;                      // light daily-living activity
+
+interface HydrationConfigRow {
+  sweat_sodium_mg_l: number | null;
+  gut_cap_ml: number | null;
+  bmr_kcal: number | null;
+  activity_factor: number | null;
+}
+
+// The single `hydration_config` row for the current user, read once per request.
+// The four accessors below (sweat sodium / gut cap / BMR / activity factor) each
+// used to be a separate one-column query — several pages read 2–4 of them, so a page
+// that needs the row hit `hydration_config` up to four times. request-`cache()`d, so
+// those collapse to one round-trip. Null when no row exists yet (accessors apply
+// their own defaults).
+export const getHydrationConfig = cache(async (): Promise<HydrationConfigRow | null> => {
+  const userId = await currentUserId();
+  const { data } = await supabaseAdmin
+    .from('hydration_config')
+    .select('sweat_sodium_mg_l, gut_cap_ml, bmr_kcal, activity_factor')
+    .eq('user_id', userId)
+    .maybeSingle();
+  return (data as HydrationConfigRow | null) ?? null;
+});
 
 export interface HydrationInput {
   weightBeforeKg: number | null;
@@ -39,13 +63,7 @@ export interface HydrationRun {
 
 // The athlete's sweat-sodium concentration (mg/L), defaulting to 553 when unset.
 export async function getSweatSodium(): Promise<number> {
-  const userId = await currentUserId();
-  const { data } = await supabaseAdmin
-    .from('hydration_config')
-    .select('sweat_sodium_mg_l')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const v = data?.sweat_sodium_mg_l;
+  const v = (await getHydrationConfig())?.sweat_sodium_mg_l;
   return v != null ? Number(v) : DEFAULT_SWEAT_SODIUM_MG_L;
 }
 
@@ -60,13 +78,7 @@ export async function setSweatSodium(mgPerL: number): Promise<void> {
 // The athlete's race fluid gut-tolerance cap (ml/h), defaulting to 800 when unset —
 // caps the personalised race fluid recommendation so it stays realistic.
 export async function getGutCapMl(): Promise<number> {
-  const userId = await currentUserId();
-  const { data } = await supabaseAdmin
-    .from('hydration_config')
-    .select('gut_cap_ml')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const v = data?.gut_cap_ml;
+  const v = (await getHydrationConfig())?.gut_cap_ml;
   return v != null ? Number(v) : DEFAULT_GUT_CAP_ML;
 }
 
@@ -82,13 +94,7 @@ export async function setGutCap(ml: number): Promise<void> {
 // Garmin/intervals.icu reports). Null when unset — the calorie tile then prompts
 // for it rather than guessing.
 export async function getBmrKcal(): Promise<number | null> {
-  const userId = await currentUserId();
-  const { data } = await supabaseAdmin
-    .from('hydration_config')
-    .select('bmr_kcal')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const v = data?.bmr_kcal;
+  const v = (await getHydrationConfig())?.bmr_kcal;
   return v != null ? Number(v) : null;
 }
 
@@ -104,13 +110,7 @@ export async function setBmrKcal(kcal: number): Promise<void> {
 // day, defaulting to 1.3 (lightly active) when unset. Planned exercise is added on
 // top separately, so this stays a light, sedentary-to-light multiplier.
 export async function getActivityFactor(): Promise<number> {
-  const userId = await currentUserId();
-  const { data } = await supabaseAdmin
-    .from('hydration_config')
-    .select('activity_factor')
-    .eq('user_id', userId)
-    .maybeSingle();
-  const v = data?.activity_factor;
+  const v = (await getHydrationConfig())?.activity_factor;
   return v != null ? Number(v) : DEFAULT_ACTIVITY_FACTOR;
 }
 
