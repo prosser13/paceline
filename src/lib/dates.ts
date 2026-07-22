@@ -57,6 +57,27 @@ export function fmtRange(a: Date | string, b: Date | string): string {
   return `${left} – ${db.getDate()} ${MON[db.getMonth()]}${yearSuffix(db)}`;
 }
 
+// Add `n` days to a 'YYYY-MM-DD' string, returning 'YYYY-MM-DD' — pure UTC calendar
+// arithmetic (no timezone/DST drift because midnight-UTC ± whole days stays on the
+// same wall date). This was copy-pasted ~9× across src/data and src/lib; import this
+// instead. NB: distinct from the local-`Date` `addDays` (see the day-rules note in
+// architecture.md §2) — this one is for 'YYYY-MM-DD' plan/DB day strings.
+export function addDaysISO(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Whole days from today until a 'YYYY-MM-DD' date; negative if past. `Math.ceil` so a
+// race later today still reads as "0" and tomorrow as "1". (Consolidated verbatim from
+// three identical copies in the races/plan countdown UI — behaviour unchanged.)
+export function daysUntil(dateStr: string): number {
+  const target = new Date(dateStr + 'T00:00:00');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
+}
+
 // Whole-day difference between two local dates.
 export function daysBetween(from: Date | string, to: Date | string): number {
   const a = toDate(from), b = toDate(to);

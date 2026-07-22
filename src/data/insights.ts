@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { listRecentWellnessDays } from '@/data/wellness-days';
 import { parseThresholdPace } from '@/lib/run-tss';
 
@@ -22,11 +22,6 @@ export interface LifestyleInsight {
   buckets: { label: string; value: number; good: boolean }[];
 }
 
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 function isoWeek(iso: string): string {
   const d = new Date(iso + 'T00:00:00Z');
   const dow = (d.getUTCDay() + 6) % 7;

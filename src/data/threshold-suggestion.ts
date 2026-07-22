@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 import { setThresholdPace, replacePaceZones, listPaceZones, listHrZones, getHrConfig } from '@/data/zones';
 import { listRaceResultsSince, getGoalMarathon, isoWeekStart } from '@/data/benchmarks';
 import { danielsVdot, vdotToThresholdPaceMinKm, isOutlierRaceDistanceM } from '@/lib/prediction';
@@ -51,9 +51,6 @@ const fmtPace = (minKm: number): string => secondsToPace(Math.round(minKm * 60))
 function fmtDay(iso: string): string {
   try { return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); }
   catch { return iso; }
-}
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
 }
 function daysBetween(a: string, b: string): number {
   return (Date.parse(b) - Date.parse(a)) / 86400000;

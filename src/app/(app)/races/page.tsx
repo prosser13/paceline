@@ -6,15 +6,8 @@ import { getPlanBySlug } from '@/data/plans';
 import { listRaceFinishes } from '@/data/plan-sessions';
 import { getViewedUser } from '@/lib/impersonation';
 import { RACE_PRIORITY_COLOR } from '@/lib/colors';
-import { todayISO } from '@/lib/dates';
+import { todayISO, daysUntil } from '@/lib/dates';
 import type { RaceGuide } from '@/data/races/types';
-
-function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00');
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-}
 
 function fmtFinish(secs: number | null): string | null {
   if (secs == null) return null;

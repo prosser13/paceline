@@ -7,6 +7,8 @@
 // taper the fast ATL decays away while the slow CTL holds, so Form rises into
 // the race — which is exactly what this surfaces.
 
+import { addDaysISO as addDays } from '@/lib/dates';
+
 export interface ProjectionPoint {
   date: string; // yyyy-mm-dd
   ctl: number;  // fitness
@@ -17,15 +19,6 @@ const CTL_TC = 42;
 const ATL_TC = 7;
 const CTL_LAMBDA = 1 - Math.exp(-1 / CTL_TC);
 const ATL_LAMBDA = 1 - Math.exp(-1 / ATL_TC);
-
-// UTC-based so the result is timezone-stable. Parsing "T00:00:00" (local) and
-// reading back via toISOString (UTC) shifts the date by a day under BST/any
-// positive offset, which would stall the projection loop — keep it all in UTC.
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().split('T')[0];
-}
 
 /**
  * Roll CTL/ATL forward day by day from `seed` (today's values) to `raceDate`,

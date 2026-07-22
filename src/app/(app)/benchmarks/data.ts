@@ -17,15 +17,9 @@ import { buildSweatModel, conditionBuckets, modelConfidence, type ConditionBucke
 import { getLatestThresholdCheck, getPendingThresholdSuggestion, listThresholdChecks, getRevertableChange, type ThresholdCheck, type RevertableChange } from '@/data/threshold-suggestion';
 import { danielsVdot, vdotToTimeMin, enduranceMultiplier, isOutlierRaceDistanceM } from '@/lib/prediction';
 import { parseThresholdPace } from '@/lib/run-tss';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO as addDays } from '@/lib/dates';
 
 const WINDOW_DAYS = 84;   // rolling 12 weeks
-
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 export interface Series { date: string; v: number }
 

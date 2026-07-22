@@ -7,7 +7,7 @@
 // the window that's no longer an emittable run. Gated behind INTERVALS_WORKOUT_SYNC.
 
 import crypto from 'node:crypto';
-import { todayISO } from '@/lib/dates';
+import { todayISO, addDaysISO } from '@/lib/dates';
 import { listPaceZones, listSwimPaceZones, getSwimConfig } from '@/data/zones';
 import { buildZoneMaps } from '@/lib/zone-builders';
 import {
@@ -53,11 +53,6 @@ export interface WorkoutSyncResult {
   error?: string;
 }
 
-function addDaysISO(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 function hashText(s: string): string {
   return crypto.createHash('sha1').update(s).digest('hex');

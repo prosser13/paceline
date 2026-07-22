@@ -7,6 +7,7 @@
 
 import { Fragment, Suspense } from 'react';
 import { intraDayOrder } from '@/lib/session-order';
+import { resolveSport } from '@/lib/sports/registry';
 import { kcalLabel } from '@/lib/energy';
 import { type DashboardData, type PlanSession, formatSpineDay } from './data';
 import ActivityHero from './ActivityHero';
@@ -62,13 +63,11 @@ export default function AgendaA({ d }: { d: DashboardData }) {
   // source of truth — the Today node no longer hardcodes its own ordering.
   const doneIds = new Set(d.todayDoneIds);
 
-  // Today's headline upcoming run (not a ride/strength/yoga, not yet done, has a
-  // pace target) — the one the heat-adjusted-pace widget previews.
-  const NON_RUN = new Set(['STRENGTH', 'CORE', 'YOGA', 'REST']);
+  // Today's headline upcoming run (not a ride/strength/yoga/swim, not yet done, has a
+  // pace target) — the one the heat-adjusted-pace widget previews. Uses the shared
+  // sport classifier rather than re-deriving the ladder.
   const todayRun = d.todaySessions.find(s =>
-    !doneIds.has(s.id) && s.target_pace &&
-    !NON_RUN.has(s.session_type ?? '') &&
-    (s.activity_type ?? 'running') !== 'cycling' && (s.activity_type ?? 'running') !== 'swimming');
+    !doneIds.has(s.id) && s.target_pace && resolveSport(s) === 'run');
   const renderTodayBlock = (s: PlanSession) => {
     const done  = doneIds.has(s.id);
     const label = done ? 'Done' : 'Today';

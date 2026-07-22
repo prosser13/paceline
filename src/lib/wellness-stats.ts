@@ -8,6 +8,7 @@
 
 import type { WellnessDay } from '@/data/wellness-days';
 import { fmtSleep, daysBetween, toDate } from '@/lib/dates';
+import { fmtHms } from '@/lib/prediction';
 
 // ── tunable thresholds ────────────────────────────────────────
 export const BODY = {
@@ -271,10 +272,6 @@ function addDays(dateStr: string, n: number): string {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-function fmtClockSec(sec: number): string {
-  const s = Math.round(sec), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}`;
-}
 const kSteps = (n: number): string => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`);
 
 export function standouts(input: StandoutInputs): Standout[] {
@@ -353,10 +350,10 @@ export function standouts(input: StandoutInputs): Standout[] {
     if (!isRecent(r.date) || r.timeSec <= 0) continue;
     if (r.targetSec != null && r.timeSec <= r.targetSec + 2) {      // 2s grace
       const gap = Math.round(r.targetSec - r.timeSec);
-      out.push({ key: 'race', icon: 'trophy', tone: 'good', value: fmtClockSec(r.timeSec),
+      out.push({ key: 'race', icon: 'trophy', tone: 'good', value: fmtHms(r.timeSec),
         text: gap >= 1 ? `${r.name} — beat target by ${gap}s` : `${r.name} — hit target`, when: whenText(r.date) });
     } else if (r.targetSec == null) {
-      out.push({ key: 'race', icon: 'run', tone: 'good', value: fmtClockSec(r.timeSec), text: `Raced ${r.name}`, when: whenText(r.date) });
+      out.push({ key: 'race', icon: 'run', tone: 'good', value: fmtHms(r.timeSec), text: `Raced ${r.name}`, when: whenText(r.date) });
     }
     break; // one race is plenty
   }

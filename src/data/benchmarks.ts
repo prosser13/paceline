@@ -10,6 +10,7 @@
 
 import { cache } from 'react';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { addDaysISO as addDays } from '@/lib/dates';
 import { currentUserId } from '@/lib/scope';
 import { getThresholdPace, getHrConfig } from '@/data/zones';
 import { listPlanPhaseWeeks } from '@/data/plans';
@@ -74,11 +75,6 @@ export const getSwimPredictions = cache(async (asOf: string): Promise<SwimPredic
 
 // ── date helpers ──────────────────────────────────────────────
 
-function addDays(iso: string, n: number): string {
-  const d = new Date(iso + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 // Monday of the ISO week containing `iso` (UTC), as yyyy-mm-dd.
 export function isoWeekStart(iso: string): string {

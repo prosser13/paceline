@@ -8,8 +8,9 @@ export interface ProfileBar {
 }
 
 // Per-zone colours — a blue → green → red effort gradient. Z1 blue, Z3 green,
-// Z5 red, with Z2 teal and Z4 amber between them.
-const ZONE_COLOR: Record<string, string> = {
+// Z5 red, with Z2 teal and Z4 amber between them. Named EFFORT_ZONE_COLOR (not
+// ZONE_COLOR) to distinguish it from the different palette in src/lib/colors.ts.
+const EFFORT_ZONE_COLOR: Record<string, string> = {
   Z1: '#14617e', // blue (marine)
   Z2: '#2b8c7e', // teal
   Z3: '#4f7a52', // green (fern)
@@ -117,7 +118,7 @@ export function buildProfileBars(
       const perf = segmentPerformance(seg);
       // Completed segments keep the pacing-performance colour; planned segments
       // are coloured by their zone (Z1 blue … Z5 red).
-      const zoneColor = seg.zoneKey ? ZONE_COLOR[seg.zoneKey] : undefined;
+      const zoneColor = seg.zoneKey ? EFFORT_ZONE_COLOR[seg.zoneKey] : undefined;
       return {
         effort:  seg.midSeconds ? paceToEffort(secondsToPace(seg.midSeconds), thresholdPace) : 40,
         minutes: Math.max(1, Math.round((seg.distanceKm * (seg.midSeconds ?? 0)) / 60)),
@@ -178,7 +179,7 @@ export function buildCyclingBars(
       : seg.powerMin ?? seg.powerMax ?? null;
     const effort = mid != null && ftp ? Math.round(Math.min(100, Math.max(5, (mid / ftp) * 75))) : 40;
     const zk = seg.zoneKey?.match(/Z[1-9]/)?.[0];
-    let color = zk ? ZONE_COLOR[zk] : undefined;
+    let color = zk ? EFFORT_ZONE_COLOR[zk] : undefined;
     if (doneAvgPower != null && segments.length === 1 && seg.powerMin != null && seg.powerMax != null) {
       color = doneAvgPower >= seg.powerMin && doneAvgPower <= seg.powerMax ? PERF_COLOR.on
         : doneAvgPower > seg.powerMax ? PERF_COLOR.ahead
