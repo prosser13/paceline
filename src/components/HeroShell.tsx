@@ -95,9 +95,9 @@ export function HeroStatRow({ stats }: { stats: HeroStat[] }) {
     <div className="flex items-end flex-wrap shrink-0 gap-[18px] sm:text-right border-t border-fog pt-[10px] sm:border-0 sm:pt-0">
       {stats.map((s, i) => (
         <div key={i}>
+          {s.delta && <div className="text-[10px] font-bold mb-[3px] tabular-nums whitespace-nowrap" style={{ color: heroDeltaColor(s.tone, true) }}>{s.delta}</div>}
           <div className="font-display font-bold tabular-nums" style={{ fontSize: '19px', lineHeight: 1 }}>{s.v}</div>
           <div className="text-[10px] uppercase font-bold text-stone" style={{ letterSpacing: '.05em', marginTop: '4px' }}>{s.l}</div>
-          {s.delta && <div className="text-[10px] font-bold mt-[2px] tabular-nums whitespace-nowrap" style={{ color: heroDeltaColor(s.tone, true) }}>{s.delta}</div>}
         </div>
       ))}
     </div>

@@ -54,12 +54,16 @@ export default function YogaHero({
 
   const detailIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: YOGA }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
 
+  // Keep a completed session open until it's been rated (manual RPE, only ratable
+  // when there's a plan session), then collapse it on the next load.
+  const awaitingRating = done && planSessionId != null && perceivedEffort == null;
+
   return (
     <HeroShell
       sport="yoga"
       eyebrow={<><YogaGlyph size={15} /> Yoga{focus ? ` · ${focus}` : ''}</>}
       status={done ? <HeroDone /> : <span className="flex items-center gap-[10px]"><HeroWhen>{label}</HeroWhen>{startPill}</span>}
-      defaultOpen
+      defaultOpen={!done || awaitingRating}
       summary={
         <div className="flex items-end justify-between gap-4">
           <div className="font-display font-bold tabular-nums" style={{ fontSize: 'clamp(24px, 6vw, 30px)', lineHeight: 1 }}>{headline}</div>

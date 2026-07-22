@@ -99,6 +99,10 @@ export default function CyclingHero({
         ...(kcalStat ? [kcalStat] : []),
       ];
 
+  // A completed session stays open until it's been rated (manual RPE), so an
+  // unrated ride nudges the user to tap it; once rated it collapses on the next load.
+  const awaitingRating = isDone && planSessionId != null && perceivedEffort == null;
+
   const breakdownIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: RIDE }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
 
   const bigNote = isDone && durDelta ? (
@@ -125,7 +129,7 @@ export default function CyclingHero({
       sport="cycling"
       eyebrow={<><BikeGlyph size={15} /> Ride</>}
       status={isDone ? <HeroDone /> : <HeroWhen>{label}</HeroWhen>}
-      defaultOpen={!isDone}
+      defaultOpen={!isDone || awaitingRating}
       summary={<HeroHeadline big={big} bigNote={bigNote} sub={session.description ?? null} stats={stats} />}
       foot={foot}
     >

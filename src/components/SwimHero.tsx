@@ -68,6 +68,9 @@ export default function SwimHero({
         ...(kcalStat ? [kcalStat] : []),
       ];
 
+  // Completed swims stay open until rated (manual RPE), then collapse next load.
+  const awaitingRating = isDone && planSessionId != null && perceivedEffort == null;
+
   const breakdownIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: SWIM }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
 
   const foot = segments.length > 0 ? (
@@ -81,7 +84,7 @@ export default function SwimHero({
       sport="swimming"
       eyebrow={<><SwimGlyph size={15} /> Swim</>}
       status={isDone ? <HeroDone /> : <HeroWhen>{label}</HeroWhen>}
-      defaultOpen={!isDone}
+      defaultOpen={!isDone || awaitingRating}
       summary={<HeroHeadline big={big} sub={session.description ?? null} stats={stats} />}
       foot={foot}
     >
