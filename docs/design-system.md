@@ -47,7 +47,8 @@ Build with these before writing new UI — a change here updates every surface.
 | Component | File | What it is |
 |---|---|---|
 | `SessionRow` | `components/SessionRow.tsx` | shared plan/dashboard session row dispatcher (→ Run/Cycling/Strength/Yoga rows) |
-| `SessionHero` | `_dashboard/SessionHero.tsx` | the big session card (today + recently-completed + race result); `isRace`, `collapseSplits`, `defaultOpen` props |
+| `HeroShell` | `components/HeroShell.tsx` | **the session-hero card shell** (tinted band header + 4px sport rail + tinted footer for accordions, per-sport tints from the `--color-*`/`--color-*-soft` tokens). All five sport heroes render through it — restyle here, not per-hero. Exports `HeroHeadline`/`HeroStatRow`/`HeroDone`/`HeroWhen` |
+| `SessionHero` | `_dashboard/SessionHero.tsx` | the big run session card (today + recently-completed + race result) on `HeroShell`; `isRace`, `collapseSplits`, `defaultOpen` props |
 | `HeroAccordion` | `components/session-ui.tsx` | `<details>`-based collapsible (title/meta/chevron) — used for Session breakdown, Splits, Adjust |
 | `CompareTable` | `components/session-ui.tsx` | plan-vs-actual metric table (`buildRunCompare` builds rows) |
 | `WorkoutDetail` | `components/session-ui.tsx` | per-km / per-segment splits list |

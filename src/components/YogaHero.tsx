@@ -1,29 +1,30 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { humanHMM } from './session-ui';
+import { humanHMM, HeroAccordion } from './session-ui';
+import { HeroShell, HeroDone, HeroWhen } from './HeroShell';
 import { YogaGlyph } from './glyphs';
-import { COFFEE, FERN, BONE } from '@/lib/colors';
+import { YOGA } from '@/lib/colors';
 import { type YogaPose, YogaDetailTable } from './YogaRow';
 import EffortScale from './EffortScale';
 import { startPlannedSession } from '@/app/(app)/strength/actions';
 
-// Dashboard hero for a yoga session — mirrors StrengthHero (coloured header,
-// title + descriptor, a "Session detail" accordion with the poses) and, like
-// strength, a Start pill that preloads the planned flow into the active-session
-// player. When done it shows the ✓ + a manual RPE scale (completion still comes
-// from a matched Strava activity).
+// Dashboard hero for a yoga session, on the shared HeroShell (tinted band + rail,
+// mirroring StrengthHero): a "Yoga · <focus>" eyebrow, a Start pill in the band, a
+// duration · poses headline, the coach note as the "Why" callout, and the pose
+// table in a "Session detail" accordion on the tinted footer. When done it shows
+// the ✓ + a manual RPE scale (completion still comes from a matched Strava
+// activity).
 export default function YogaHero({
-  label, focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null, kcal = null,
+  label = 'Today', focus, duration, note, poses, done = false, planSessionId = null, perceivedEffort = null, kcal = null,
 }: {
-  label: string; focus: string | null; duration: string | null;
+  label?: string; focus: string | null; duration: string | null;
   note: string | null; poses: YogaPose[]; done?: boolean;
   planSessionId?: string | null;      // enables Start (when planned) + the RPE scale (when done)
   perceivedEffort?: number | null;
   kcal?: string | null;   // per-session calorie label (est/actual)
 }) {
-  const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const router = useRouter();
 
@@ -35,64 +36,50 @@ export default function YogaHero({
     });
   }
 
+  const dur = humanHMM(duration);
+  const headline = [dur, poses.length ? `${poses.length} poses` : null].filter(Boolean).join(' · ') || 'Yoga';
+
+  const startPill = planSessionId ? (
+    <span
+      role="button" tabIndex={0}
+      onClick={e => { e.preventDefault(); e.stopPropagation(); if (!pending) go(); }}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (!pending) go(); } }}
+      className="shrink-0 inline-flex items-center gap-[6px] text-[12.5px] font-bold text-white cursor-pointer"
+      style={{ background: YOGA, padding: '7px 15px', borderRadius: '22px', opacity: pending ? 0.6 : 1 }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+      {pending ? 'Loading…' : 'Start'}
+    </span>
+  ) : null;
+
+  const detailIcon = <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" style={{ color: YOGA }}><path d="M3 6h18M3 12h18M3 18h18" /></svg>;
+
   return (
-    <div className="border border-fog rounded-[18px] overflow-hidden bg-paper mb-[18px]">
-      {/* Header bar — ember when planned, fern when completed */}
-      <div className="flex items-center justify-between px-[18px] sm:px-[26px] py-[12px]" style={{ background: done ? FERN : COFFEE, color: BONE }}>
-        <span className="font-display font-semibold text-[18px] uppercase tracking-[.05em] leading-none">{label}</span>
-        {done ? (
-          <span className="flex items-center gap-[7px] font-mono text-[13px]">
-            ✓ Completed
-            <svg width="13" height="13" viewBox="0 0 24 24" fill={BONE} role="img" aria-label="Strava">
-              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-            </svg>
-          </span>
-        ) : planSessionId ? (
-          <span
-            role="button" tabIndex={0}
-            onClick={() => { if (!pending) go(); }}
-            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!pending) go(); } }}
-            className="shrink-0 inline-flex items-center gap-[6px] text-[13px] font-bold cursor-pointer"
-            style={{ background: BONE, color: COFFEE, padding: '7px 16px', borderRadius: '20px', opacity: pending ? 0.6 : 1 }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-            {pending ? 'Loading…' : 'Start'}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="px-[18px] py-[18px] sm:p-[22px_26px]">
-        <div className="flex justify-between items-start gap-4 sm:gap-6">
-          <div className="min-w-0">
-            <h3 className="font-display font-semibold text-[22px] sm:text-[30px] mt-[1px] mb-[5px] leading-tight flex items-center gap-[10px]">
-              <span style={{ color: COFFEE }}><YogaGlyph size={24} /></span>{focus ?? 'Yoga'}
-            </h3>
-            {note && <div className="text-[15px] text-stone">{note}</div>}
-            {done && planSessionId && (
-              <div className="mt-[8px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>
-            )}
-          </div>
-          <div className="shrink-0 text-right">
-            <div className="font-display font-semibold text-[24px] sm:text-[30px] leading-none text-ink">{humanHMM(duration) ?? '—'}</div>
-            <div className="font-mono text-[14px] text-stone mt-[3px]">{poses.length} poses</div>
-            {kcal && <div className="font-mono text-[13px] text-stone mt-[1px]">{kcal}</div>}
-          </div>
+    <HeroShell
+      sport="yoga"
+      eyebrow={<><YogaGlyph size={15} /> Yoga{focus ? ` · ${focus}` : ''}</>}
+      status={done ? <HeroDone /> : <span className="flex items-center gap-[10px]"><HeroWhen>{label}</HeroWhen>{startPill}</span>}
+      defaultOpen
+      summary={
+        <div className="flex items-end justify-between gap-4">
+          <div className="font-display font-bold tabular-nums" style={{ fontSize: 'clamp(24px, 6vw, 30px)', lineHeight: 1 }}>{headline}</div>
+          {kcal && <div className="text-[12px] font-semibold text-stone shrink-0">{kcal}</div>}
         </div>
-
-        <div className="mt-[18px]">
-          <button type="button" onClick={() => setOpen(o => !o)} className="flex items-center justify-between w-full min-h-[40px] cursor-pointer select-none">
-            <span className="text-[14px] font-semibold text-stone">Session detail</span>
-            <span className="font-mono text-[15px] text-stone leading-none"
-              style={{ display: 'inline-block', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}>▾</span>
-          </button>
-
-          {open && (
-            <div className="mt-[10px] -mx-[18px] sm:-mx-[26px] border-l-2 border-fog pl-[18px] pr-[18px] sm:pl-[26px] sm:pr-[26px]">
-              <YogaDetailTable poses={poses} />
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+      }
+      foot={poses.length > 0 ? (
+        <HeroAccordion title="Session detail" meta={`${poses.length} poses`} icon={detailIcon}>
+          <YogaDetailTable poses={poses} />
+        </HeroAccordion>
+      ) : null}
+    >
+      {note && (
+        <p className="text-[13px] leading-snug border-l-[3px] pl-[14px] text-ink" style={{ borderColor: YOGA }}>
+          <span className="font-bold" style={{ color: YOGA }}>Why · </span>{note}
+        </p>
+      )}
+      {done && planSessionId && (
+        <div className="mt-[10px]"><EffortScale sessionId={planSessionId} value={perceivedEffort} /></div>
+      )}
+    </HeroShell>
   );
 }
