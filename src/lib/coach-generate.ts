@@ -71,6 +71,22 @@ const SCHEMA = {
 
 interface Block { type: string; text?: string }
 
+// A model very occasionally fills a required field with a stub — the literal word
+// "placeholder", "TODO", "lorem ipsum", a "[body]" marker — instead of real prose.
+// The empty-string guard alone won't catch it (a non-empty stub is truthy and sails
+// through), so callers reject implausibly short OR obvious-filler output and
+// regenerate rather than persist and deliver garbage. This is exactly what once
+// shipped the single word "placeholder" as an evening review — and, worse, wiped the
+// coach's rolling memory when that same stub was written back as the updated summary.
+const FILLER_RE = /^(placeholder|lorem ipsum\b.*|todo|tbd|n\/?a|body|headline|text|null|undefined|\.\.\.|\[[^\]]*\])[.!]?$/i;
+function isDegenerate(s: string, minLen: number): boolean {
+  const t = s.trim();
+  return t.length < minLen || FILLER_RE.test(t);
+}
+// Headlines are one line; bodies are multi-sentence. Real output clears these easily.
+const MIN_HEADLINE = 8;
+const MIN_BODY = 40;
+
 // One place for the Claude Messages request + parse. Uses the shared timedFetch
 // with a bounded timeout so a stalled API aborts cleanly before the platform kills
 // the function (the coach routes set maxDuration = 60). No retry — re-running a
@@ -271,10 +287,19 @@ export async function generateEveningReview(
   if (ranked.length && review.leadCauseIndex !== 0) {
     review = await generateReviewProse(ctx, memory, recentMessages, ranked, true);
   }
-
-  if (!review.headline || !review.bodyMd) throw new Error('Coach returned an empty headline or body');
-  // Never wipe memory on a thin response — fall back to the prior summary.
-  return { headline: review.headline, bodyMd: review.bodyMd, updatedContext: review.updatedContext || memory };
+  // Guard against a degenerate stub (e.g. the model emitting "placeholder" as the
+  // body): regenerate once so a single bad roll self-heals within this run instead
+  // of persisting and being delivered.
+  if (isDegenerate(review.headline, MIN_HEADLINE) || isDegenerate(review.bodyMd, MIN_BODY)) {
+    review = await generateReviewProse(ctx, memory, recentMessages, ranked, true);
+  }
+  if (isDegenerate(review.headline, MIN_HEADLINE) || isDegenerate(review.bodyMd, MIN_BODY)) {
+    throw new Error('Coach returned an empty or degenerate headline or body');
+  }
+  // Never overwrite memory on a thin/filler response — fall back to the prior summary
+  // (a stub here previously clobbered the whole rolling context).
+  const updatedContext = isDegenerate(review.updatedContext, MIN_BODY) ? memory : review.updatedContext;
+  return { headline: review.headline, bodyMd: review.bodyMd, updatedContext };
 }
 
 // ── Morning briefing (PB-campaign wave 1) ─────────────────────
@@ -331,11 +356,20 @@ export async function generateMorningBriefing(
     `── Your recent messages, incl. last night (do NOT repeat what you've already said here) ──\n${formatRecentMessages(recentMessages)}\n\n` +
     `── Plan briefing (JSON) ──\n${JSON.stringify(ctx)}`;
 
-  const parsed = await callClaudeJson(MORNING_SYSTEM, MORNING_SCHEMA, userContent, 3000, 'morning briefing');
-  const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
-  const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
-  if (!headline || !bodyMd) throw new Error('Morning briefing returned an empty headline or body');
-  return { headline, bodyMd };
+  const attempt = async (): Promise<MorningBriefing> => {
+    const parsed = await callClaudeJson(MORNING_SYSTEM, MORNING_SCHEMA, userContent, 3000, 'morning briefing');
+    return {
+      headline: typeof parsed.headline === 'string' ? parsed.headline.trim() : '',
+      bodyMd: typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '',
+    };
+  };
+  // Regenerate once on an empty/degenerate stub before giving up (see isDegenerate).
+  let out = await attempt();
+  if (isDegenerate(out.headline, MIN_HEADLINE) || isDegenerate(out.bodyMd, MIN_BODY)) out = await attempt();
+  if (isDegenerate(out.headline, MIN_HEADLINE) || isDegenerate(out.bodyMd, MIN_BODY)) {
+    throw new Error('Morning briefing returned an empty or degenerate headline or body');
+  }
+  return out;
 }
 
 // ── Race debrief (manual "Analyse this race" button) ──────────
@@ -368,7 +402,9 @@ export async function generateRaceAnalysis(input: Record<string, unknown>): Prom
   const parsed = await callClaudeJson(RACE_SYSTEM, RACE_SCHEMA, userContent, 3000, 'race analysis');
   const headline = typeof parsed.headline === 'string' ? parsed.headline.trim() : '';
   const bodyMd = typeof parsed.body_md === 'string' ? parsed.body_md.trim() : '';
-  if (!headline || !bodyMd) throw new Error('Race analysis returned an empty headline or body');
+  if (isDegenerate(headline, MIN_HEADLINE) || isDegenerate(bodyMd, MIN_BODY)) {
+    throw new Error('Race analysis returned an empty or degenerate headline or body');
+  }
   return { headline, bodyMd };
 }
 
