@@ -20,6 +20,11 @@ import {
 import { upsertDailyNote } from '@/data/daily-notes';
 import { replaceDayAvailability, type AvailabilityRow, type AvailabilityKind } from '@/data/availability';
 import { regenerateCoachReview } from '@/lib/coach-dispatch';
+import {
+  addExercise, MUSCLE_GROUPS, MOVEMENT_PATTERNS, SESSION_INTENTS, REPS_TYPES, WEIGHT_TYPES, FREQUENCIES,
+  type AddExerciseInput,
+} from '@/data/exercises';
+import type { MuscleGroup, MovementPattern, SessionIntent, RepsType } from '@/data/strength';
 import { currentUserId, runWithUser } from '@/lib/scope';
 import { secondsToPace } from '@/lib/plan-structure';
 import { todayISO } from '@/lib/dates';
@@ -243,6 +248,45 @@ export const WRITE_TOOL_DEFS: ToolDef[] = [
       },
     },
   },
+  {
+    name: 'add_exercise',
+    description:
+      'Add a new exercise to the shared strength/mobility catalog (the library the session builder and coach draw from). ' +
+      'GLOBAL: it becomes available to every athlete immediately — the catalog is not per-user. The id is auto-assigned. ' +
+      'Required: name, muscle_group, movement_pattern, supported_intents, reps_type, sets, reps_value. ' +
+      "For reps_type 'reps', reps_value is a rep count and secs_per_rep is the per-rep tempo (defaults to 3s); " +
+      "for reps_type 'secs', reps_value is the hold length in seconds and secs_per_rep is ignored. " +
+      "Loaded move: set weight_type ('dumbbells' or 'barbell') + weight_kg (the working default), and strength_reps_min/" +
+      'strength_reps_max + strength_weight_kg for its heavier strength-intent target. Bodyweight/band move: leave those null. ' +
+      'duration_seconds (the builder time-budget estimate) is auto-computed from sets/reps/rest when omitted. ' +
+      'is_single_leg = performed one side at a time. Rejects a duplicate name or an unknown enum value. Returns { id, name }.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Display name, unique in the catalog (e.g. "Bent-knee calf raise").' },
+        muscle_group: { type: 'string', enum: [...MUSCLE_GROUPS], description: 'Primary muscle group.' },
+        additional_muscle_groups: { type: 'array', items: { type: 'string', enum: [...MUSCLE_GROUPS] }, description: 'Secondary groups worked (optional, default []).' },
+        movement_pattern: { type: 'string', enum: [...MOVEMENT_PATTERNS], description: 'How the move loads: e.g. single_leg, hinge, squat, core, activation, mobility.' },
+        supported_intents: { type: 'array', items: { type: 'string', enum: [...SESSION_INTENTS] }, description: "Which session types may select it: strength/maintain/balanced for training moves, mobility/yoga for stretches & flows. Non-empty." },
+        reps_type: { type: 'string', enum: [...REPS_TYPES], description: "'reps' for counted reps, 'secs' for a timed hold." },
+        sets: { type: 'integer', description: 'Default number of sets (> 0).' },
+        reps_value: { type: 'integer', description: "Reps per set (reps_type 'reps'), or hold length in seconds (reps_type 'secs'). > 0." },
+        weight_kg: { type: ['number', 'null'], description: 'Working default load in kg (null for bodyweight/band).' },
+        weight_type: { type: ['string', 'null'], enum: [...WEIGHT_TYPES, null], description: "Equipment for the load: 'dumbbells' or 'barbell' (null for bodyweight/band)." },
+        strength_reps_min: { type: ['integer', 'null'], description: 'Lower rep bound for the heavier strength-intent target (null if not a loaded strength move).' },
+        strength_reps_max: { type: ['integer', 'null'], description: 'Upper rep bound for the strength-intent target.' },
+        strength_weight_kg: { type: ['number', 'null'], description: 'Load for the strength-intent target (usually above weight_kg).' },
+        secs_per_rep: { type: ['integer', 'null'], description: "Per-rep tempo in seconds (reps_type 'reps' only; defaults to 3). Ignored for holds." },
+        rest_per_set: { type: ['integer', 'null'], description: 'Rest between sets in seconds (defaults 45 for reps, 30 for holds).' },
+        duration_seconds: { type: ['integer', 'null'], description: 'Total time-budget estimate; auto-computed from sets/reps/rest when omitted.' },
+        cue: { type: 'string', description: 'Short coaching cue shown in the session (optional).' },
+        frequency: { type: ['string', 'null'], enum: [...FREQUENCIES, null], description: "How often it's suitable: 'daily' / '3x_weekly' / 'weekly' (defaults 3x_weekly)." },
+        is_single_leg: { type: 'boolean', description: 'Performed one side at a time (default false).' },
+        youtube_url: { type: ['string', 'null'], description: 'Optional demo video URL.' },
+      },
+      required: ['name', 'muscle_group', 'movement_pattern', 'supported_intents', 'reps_type', 'sets', 'reps_value'],
+    },
+  },
 ];
 
 export const WRITE_TOOL_NAMES = new Set(WRITE_TOOL_DEFS.map(t => t.name));
@@ -407,6 +451,42 @@ export async function callTool(name: string, args: Record<string, unknown>): Pro
         ok: true, status: 'regenerating', kind, for_date: date,
         note: `Regenerating the ${kind} review for ${date} — it will arrive on your Telegram and dashboard shortly (usually under a minute).`,
       };
+    }
+    case 'add_exercise': {
+      const s = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+      const n = (v: unknown): number | null | undefined =>
+        v == null ? (v === null ? null : undefined) : (typeof v === 'number' ? v : undefined);
+      const arr = (v: unknown): string[] | undefined => (Array.isArray(v) ? v.map(String) : undefined);
+      // Required-field presence is checked here; the enum/range validation and defaults
+      // live in addExercise() so the data layer is the single gate.
+      const name = s(args.name);
+      if (!name) bad('name is required');
+      if (typeof args.sets !== 'number') bad('sets must be a number');
+      if (typeof args.reps_value !== 'number') bad('reps_value must be a number');
+      const input: AddExerciseInput = {
+        name,
+        muscleGroup: (s(args.muscle_group) ?? '') as MuscleGroup,
+        movementPattern: (s(args.movement_pattern) ?? '') as MovementPattern,
+        supportedIntents: (arr(args.supported_intents) ?? []) as SessionIntent[],
+        repsType: (s(args.reps_type) ?? '') as RepsType,
+        sets: args.sets,
+        repsValue: args.reps_value,
+        additionalGroups: arr(args.additional_muscle_groups) as MuscleGroup[] | undefined,
+        weightKg: n(args.weight_kg),
+        weightType: (s(args.weight_type) as 'barbell' | 'dumbbells' | undefined) ?? (args.weight_type === null ? null : undefined),
+        strengthRepsMin: n(args.strength_reps_min),
+        strengthRepsMax: n(args.strength_reps_max),
+        strengthWeightKg: n(args.strength_weight_kg),
+        secsPerRep: n(args.secs_per_rep),
+        restPerSet: n(args.rest_per_set),
+        durationSeconds: n(args.duration_seconds),
+        cue: s(args.cue),
+        frequency: (s(args.frequency) as 'daily' | '3x_weekly' | 'weekly' | undefined) ?? (args.frequency === null ? null : undefined),
+        isSingleLeg: typeof args.is_single_leg === 'boolean' ? args.is_single_leg : undefined,
+        youtubeUrl: s(args.youtube_url) ?? (args.youtube_url === null ? null : undefined),
+      };
+      const added = await addExercise(input);
+      return { ok: true, ...added, note: `Added "${added.name}" to the catalog as exercise ${added.id}.` };
     }
 
     default:

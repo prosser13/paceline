@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import StrengthClient, { type HistoryItem } from './StrengthClient';
-import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getExerciseCatalog } from '@/data/exercises';
 import { listStrengthHistory } from '@/data/strength-sessions';
 import { loadBuilderStateMaps, listRecentProgressionEvents } from '@/data/strength-progression';
 import { getStrengthContext } from '@/data/strength-context';
@@ -14,15 +14,16 @@ type HistoryRow = {
 };
 
 export default async function StrengthPage() {
-  const [raw, stateMaps, context, niggles, events] = await Promise.all([
+  const [raw, stateMaps, context, niggles, events, catalog] = await Promise.all([
     listStrengthHistory(6) as Promise<HistoryRow[]>,
     loadBuilderStateMaps(),
     getStrengthContext(),
     listActiveNiggles(),
     listRecentProgressionEvents(6),
+    getExerciseCatalog(),
   ]);
 
-  const exName = new Map(STRENGTH_EXERCISES.map(e => [e.id, e.name] as const));
+  const exName = new Map(catalog.map(e => [e.id, e.name] as const));
   const KIND_VERB: Record<string, string> = {
     reps_up: 'reps up to', weight_up: 'load up to', reps_down: 'eased to', weight_down: 'load down to',
   };
@@ -55,7 +56,7 @@ export default async function StrengthPage() {
 
   return (
     <div className="px-4 py-4 sm:px-[26px] sm:py-[22px] max-w-[760px]">
-      <StrengthClient exercises={STRENGTH_EXERCISES} history={history} stateMaps={stateMaps} context={context} niggles={niggles} progress={progress} />
+      <StrengthClient exercises={catalog} history={history} stateMaps={stateMaps} context={context} niggles={niggles} progress={progress} />
     </div>
   );
 }

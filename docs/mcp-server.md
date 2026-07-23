@@ -24,7 +24,8 @@ The `TOOL_DEFS` / `WRITE_TOOL_DEFS` arrays are the source of truth; they map 1:1
   `get_races`.
 - **Write (`WRITE_TOOL_DEFS`, only when the connection has write scope):** `apply_plan_change`,
   `add_plan_session`, `delete_plan_session`, `set_session_effort`, `set_daily_note`, `set_availability`,
-  `set_race_target`, `set_threshold_pace`, `regenerate_coach_review`.
+  `set_race_target`, `set_threshold_pace`, `regenerate_coach_review`, `add_exercise` (adds to the
+  **global** exercise catalog — affects every athlete; see [`exercise-catalog.md`](exercise-catalog.md)).
 - `WRITE_TOOL_NAMES` gates both advertisement (`tools/list` hides write tools without write scope) and
   invocation (`tools/call` refuses a write tool on a read-only connection). Adding a tool = add a def
   (and, if mutating, add it to `WRITE_TOOL_DEFS`) and a `callTool` branch.
