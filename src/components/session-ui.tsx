@@ -191,7 +191,13 @@ export function syntheticStructure(
     distance_km: Number(session.distance_km) || 0,
     pace_min: pace,
     pace_max: session.target_pace_end ?? pace,
-    zone: INTENSITY[intensity]?.zone ?? 'Z2',
+    // Only stamp a zone when there's no authored target pace. normalizeStructure
+    // gives a segment's zone precedence over its authored pace (a zone shows the
+    // whole zone window), so stamping the intensity's zone here would widen a
+    // specific target like 5:30–5:55 to the whole zone band (e.g. Z1 4:55–5:55).
+    // With no zone, the authored pace renders verbatim and the zone chip/colour is
+    // still derived from the pace range.
+    zone: pace ? undefined : (INTENSITY[intensity]?.zone ?? 'Z2'),
   }];
 }
 
