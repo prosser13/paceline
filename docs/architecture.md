@@ -264,9 +264,10 @@ fuel/fluid columns (the two sanctioned violations).
 `plan_sessions`/`completed_workouts` cluster rather than owning a table.
 
 **Not a data layer:** `strength.ts`, `strength-injuries.ts`, `strength-context-rules.ts`,
-`strength-progression-rules.ts` are pure rule modules; `strength-exercises.ts` is **generated** (from
-the sibling `racehouseai` Supabase project via `scripts/pull-exercises.mjs`, which only runs on the
-author's Windows machine); `races/*` is curated editorial content keyed by `plans.slug`; `sessions.ts`
+`strength-progression-rules.ts` are pure rule modules; the **exercise catalog** is the
+`public.exercises` table read at runtime via `exercises.ts` (`getExerciseCatalog`, `exercises` tag;
+`addExercise` + the `add_exercise` MCP tool write it — see `docs/exercise-catalog.md`), no longer a
+generated constant; `races/*` is curated editorial content keyed by `plans.slug`; `sessions.ts`
 is legacy constants — its `calcScheduledDate` (hardcoded `PLAN_START_DATE`) is still load-bearing for
 the admin CMS only.
 
@@ -322,9 +323,10 @@ reasoning about live schema, query the DB — don't trust the repo files alone.
 the `gen-*` plan generators delete-and-reinsert whole plans, and `gen-malaga.mjs` hardcodes zone/threshold
 tables that drift from the DB (read them from the DB before any rerun). Live ones: `setup-worktree.mjs`
 (worktree bootstrap), `coach-mcp-server.mjs` (Claude Desktop bridge; needs `PLAN_AGENT_TOKEN`),
-`seed-user.mjs` (new-tenant baseline), `pull-exercises.mjs` (generates `strength-exercises.ts`),
-`gen-malaga.mjs`/`gen-supplementary.mjs` (future Málaga plan). Completed one-offs have been moved to
-`scripts/archive/` (dragon/beth generators, the exercise-id backfill).
+`seed-user.mjs` (new-tenant baseline), `gen-malaga.mjs`/`gen-supplementary.mjs` (future Málaga plan).
+Completed one-offs have been moved to `scripts/archive/` (dragon/beth generators, the exercise-id
+backfill). (The exercise catalog is now the `public.exercises` table read at runtime — the
+`pull-exercises.mjs` generator is gone; see `docs/exercise-catalog.md`.)
 
 ---
 
@@ -381,7 +383,8 @@ to their `user_id`).
 - Session rows take `compact`, `emphasis`, `today`, `next`, `done`, `completed` props and are **shared**
   between the dashboard and the plan page — a change to a row updates both surfaces.
 - Docs hygiene: living docs are this file, `improvement-backlog.md`, `mcp-server.md` (MCP + OAuth +
-  read modes), `rtss.md` (TSS reference), `plan-agent.md` (agent contract),
+  read modes), `exercise-catalog.md` (the `public.exercises` catalog + how to add a move),
+  `rtss.md` (TSS reference), `plan-agent.md` (agent contract),
   `threshold-auto-suggestion.md` (feature rules), `coach-briefing-roadmap.md` (planned coach-briefing
   signals), `ui-map.md` / `prediction-models.md` / `design-system.md`. Completed one-off plans live in
   `docs/archive/`.

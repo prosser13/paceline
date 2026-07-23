@@ -1,7 +1,7 @@
 // Reads + writes for `strength_sessions` and `strength_session_exercises` — a
 // user's logged strength workouts. One home for user-scoped access so per-user
-// scoping later lands here. (The exercise library itself lives in
-// src/data/strength-exercises.ts and is static, not per-user.)
+// scoping later lands here. (The exercise catalog itself is global, not per-user —
+// read from public.exercises via src/data/exercises.ts.)
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';

@@ -23,7 +23,8 @@ import {
   getThresholdPace, listPaceZones, getHrConfig, listHrZones,
   getPowerConfig, listPowerZones,
 } from '@/data/zones';
-import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getExerciseCatalog } from '@/data/exercises';
+import type { MuscleGroup, RepsType } from '@/data/strength';
 import { getStrengthCoachSummary } from '@/data/strength-progression';
 import { listActiveNiggles } from '@/data/strength-niggles';
 import { getPendingThresholdSuggestion } from '@/data/threshold-suggestion';
@@ -76,11 +77,18 @@ const SESSION_SCHEMAS = {
 } as const;
 
 // Compact catalog — enough to author a strength entry (id + sensible defaults)
-// without loading the full library. Built once at module load.
-const EXERCISE_CATALOG = STRENGTH_EXERCISES.map(e => ({
-  id: e.id, name: e.name, group: e.group, reps_type: e.repsType,
-  sets: e.sets, reps: e.repsValue, weight_kg: e.weightKg, weight_type: e.weightType,
-}));
+// without loading the full library. Read from the DB catalog per request.
+interface ExerciseCatalogEntry {
+  id: number; name: string; group: MuscleGroup; reps_type: RepsType;
+  sets: number | null; reps: number | null; weight_kg: number | null;
+  weight_type: 'barbell' | 'dumbbells' | null;
+}
+async function compactExerciseCatalog(): Promise<ExerciseCatalogEntry[]> {
+  return (await getExerciseCatalog()).map(e => ({
+    id: e.id, name: e.name, group: e.group, reps_type: e.repsType,
+    sets: e.sets, reps: e.repsValue, weight_kg: e.weightKg, weight_type: e.weightType,
+  }));
+}
 
 // How far forward the editable schedule reaches, and how far back adherence looks.
 const UPCOMING_DAYS = 14;
@@ -140,7 +148,7 @@ export interface PlanContext {
   log_nudge: string | null;                      // ONE consolidated "please log X" line for the evening review
   reference: {                                   // static — how to author edits (no need to search the code)
     session_schemas: typeof SESSION_SCHEMAS;
-    exercise_catalog: typeof EXERCISE_CATALOG;
+    exercise_catalog: ExerciseCatalogEntry[];
   };
 }
 
@@ -374,7 +382,7 @@ export async function getPlanContext(asOf?: string, opts?: { throughToday?: bool
     rpe_overreach: detectRpeOverreach(recent),
     fuel_guidance: fuelGuidance,
     log_nudge: logNudge,
-    reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: EXERCISE_CATALOG },
+    reference: { session_schemas: SESSION_SCHEMAS, exercise_catalog: await compactExerciseCatalog() },
   };
 }
 

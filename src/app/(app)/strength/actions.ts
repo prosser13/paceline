@@ -12,7 +12,8 @@ import { insertNiggle, setNiggleActiveRow, listActiveNiggles } from '@/data/stre
 import { getExerciseEffect, type NiggleArea, type NiggleSeverity } from '@/data/strength-injuries';
 import { getStrengthContext } from '@/data/strength-context';
 import { resolveIntentConfig, type SessionIntent, type Duration } from '@/data/strength';
-import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getExerciseCatalog, getExerciseById } from '@/data/exercises';
+import { cache } from 'react';
 import { revalidatePath } from 'next/cache';
 
 // Resolve a planned exercise name to a library id. Planned sessions store
@@ -21,20 +22,23 @@ import { revalidatePath } from 'next/cache';
 // no progression. So we match exact first, then on a normalised form that strips
 // equipment/qualifier words (so "Overhead press" ↔ "Dumbbell overhead press").
 // 0 = genuinely not in the library.
-const EXERCISE_ID_BY_NAME = new Map(STRENGTH_EXERCISES.map(e => [e.name.toLowerCase(), e.id]));
-
 const normName = (s: string): string =>
   s.toLowerCase()
     .replace(/\([^)]*\)/g, ' ')                                          // drop "(band)", "(weighted)"
     .replace(/\b(dumbbell|barbell|band|bodyweight|unweighted|weighted|bilateral|resistance|with|the|a)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ').trim();
-// Normalised map — first writer wins so a strength/weighted variant isn't
+
+// Name → library-id lookups, built from the DB catalog (request-cached). The
+// normalised map is first-writer-wins so a strength/weighted variant isn't
 // overwritten by a lighter namesake.
-const EXERCISE_ID_BY_NORM = (() => {
-  const m = new Map<string, number>();
-  for (const e of STRENGTH_EXERCISES) { const n = normName(e.name); if (n && !m.has(n)) m.set(n, e.id); }
-  return m;
-})();
+interface NameIndex { byName: Map<string, number>; byNorm: Map<string, number> }
+const getNameIndex = cache(async (): Promise<NameIndex> => {
+  const catalog = await getExerciseCatalog();
+  const byName = new Map(catalog.map(e => [e.name.toLowerCase(), e.id]));
+  const byNorm = new Map<string, number>();
+  for (const e of catalog) { const n = normName(e.name); if (n && !byNorm.has(n)) byNorm.set(n, e.id); }
+  return { byName, byNorm };
+});
 
 // Explicit aliases for plan names that are a different *exercise name* for a
 // library entry (not just an equipment-word variant), so they still prompt +
@@ -50,12 +54,12 @@ const EXERCISE_ALIASES: Record<string, number> = {
   'bicycle crunch': 44,                // Supine Curl Up
 };
 
-function resolveExerciseId(name: string): number {
+function resolveExerciseId(name: string, idx: NameIndex): number {
   const raw = String(name ?? '').toLowerCase().trim();
   if (!raw) return 0;
-  return EXERCISE_ID_BY_NAME.get(raw)
+  return idx.byName.get(raw)
     ?? EXERCISE_ALIASES[raw]
-    ?? EXERCISE_ID_BY_NORM.get(normName(raw))
+    ?? idx.byNorm.get(normName(raw))
     ?? 0;
 }
 
@@ -97,8 +101,6 @@ export async function saveSession(
   return { ok: true, shortId: sess.short_id };
 }
 
-const LIB_BY_ID = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
-
 // Step 3 (load only): copy a planned STRENGTH plan_session's prescription into a
 // live strength session and return its short_id. The seeded structure is the
 // starting point; we layer the user's progression state, the auto-regulation
@@ -110,6 +112,9 @@ export async function startPlannedSession(
   await requireUser();
   const ps = await getPlanSessionPrescription(planSessionId);
   if (!ps) return { ok: false, error: 'Planned session not found' };
+
+  // Catalog lookups (name → id, id → Exercise), read once for this action.
+  const [idx, libById] = await Promise.all([getNameIndex(), getExerciseById()]);
 
   const parts = String(ps.estimated_duration ?? '0:40').split(':').map(Number);
   const mins = (parts[0] || 0) * 60 + (parts[1] || 0);
@@ -125,8 +130,8 @@ export async function startPlannedSession(
     const poses: SaveSessionExercise[] = structure.map(e => {
       const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
       const exerciseId = Number.isFinite(fromStruct) && fromStruct > 0
-        ? fromStruct : resolveExerciseId(String(e.name ?? ''));
-      const lib = LIB_BY_ID.get(exerciseId);
+        ? fromStruct : resolveExerciseId(String(e.name ?? ''), idx);
+      const lib = libById.get(exerciseId);
       return {
         exerciseId, exerciseName: String(e.name),
         repsType: e.reps_type ?? lib?.repsType ?? 'secs',
@@ -153,8 +158,8 @@ export async function startPlannedSession(
     const fromStruct = e.exercise_id != null ? Number(e.exercise_id) : NaN;
     const exerciseId = Number.isFinite(fromStruct) && fromStruct > 0
       ? fromStruct
-      : resolveExerciseId(String(e.name ?? ''));
-    const lib = LIB_BY_ID.get(exerciseId);
+      : resolveExerciseId(String(e.name ?? ''), idx);
+    const lib = libById.get(exerciseId);
 
     // Drop exercises an active niggle excludes.
     if (lib) {

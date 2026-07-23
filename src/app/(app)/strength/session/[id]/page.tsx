@@ -1,6 +1,6 @@
 export const dynamic = 'force-dynamic';
 import { notFound } from 'next/navigation';
-import { STRENGTH_EXERCISES } from '@/data/strength-exercises';
+import { getExerciseById } from '@/data/exercises';
 import { progressable, usesSingleDumbbell, timerElapsedSecs } from '@/data/strength';
 import { getStrengthSessionByShortId, listSessionExercises } from '@/data/strength-sessions';
 import ActiveSessionClient, { type ActiveItem } from './ActiveSessionClient';
@@ -13,7 +13,7 @@ export default async function ActiveSessionPage({ params }: { params: Promise<{ 
 
   const rows = await listSessionExercises(sess.id);
 
-  const lib = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
+  const lib = await getExerciseById();
   const items: ActiveItem[] = rows.map(r => {
     const ex = lib.get(r.exercise_id);
     return {

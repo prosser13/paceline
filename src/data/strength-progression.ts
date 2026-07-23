@@ -5,7 +5,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { currentUserId } from '@/lib/scope';
-import { STRENGTH_EXERCISES } from './strength-exercises';
+import { getExerciseById } from './exercises';
 import { progressable, type ExerciseStateLite, type SessionIntent } from './strength';
 import {
   applyProgression, resolveTrack, DEFAULT_TUNING,
@@ -221,12 +221,12 @@ export async function getStrengthCoachSummary() {
 }
 
 // ── the engine ───────────────────────────────────────────────
-const LIB = new Map(STRENGTH_EXERCISES.map(e => [e.id, e]));
 
 // Run the double-progression engine over a completed session. Idempotent: if
 // it has already produced events, it does nothing on a re-run.
 export async function evaluateProgressionAfterSession(sessionId: string): Promise<void> {
   const userId = await currentUserId();
+  const LIB = await getExerciseById();
   const { data: session } = await supabaseAdmin
     .from('strength_sessions').select('id, intent, modifier').eq('user_id', userId).eq('id', sessionId).maybeSingle();
   if (!session) return;
@@ -309,6 +309,7 @@ export async function promoteOverride(sessionExerciseId: string): Promise<void> 
     .from('strength_sessions').select('intent').eq('user_id', userId).eq('id', row.session_id).maybeSingle();
   const si = stateIntentFor(session?.intent ?? 'maintain');
   if (!si) return;
+  const LIB = await getExerciseById();
   const ex = LIB.get(row.exercise_id);
   if (!ex || !progressable(ex)) return;
 
